@@ -1,15 +1,10 @@
 # ==============================================================================
 # config.py - Trading Data Pipeline Configuration
 # ==============================================================================
-# COMPLETE VERSION with all required variables
-# 
-# CHANGELOG:
-# - ADDED: FOREX_ENABLED, CRYPTO_ENABLED, INDICES_ENABLED, COMMODITIES_ENABLED flags
-# - ADDED: DATA_CACHE_PATH and CACHE_SUBDIRS for data_manager.py
-# - ADDED: DATABASE_PATH for database operations
-# - ADDED: DEFAULT_INITIAL_CASH and DEFAULT_COMMISSION for backtesting
-# - RESTORED: INDEX_WATCHLIST and COMMODITY_WATCHLIST (commented but defined)
-# - FIXED: All references now properly defined
+# UPDATED: 
+# - Enabled INDICES for local Kaggle data
+# - Added INDEX_WATCHLIST with proper symbols
+# - Crypto now prefers local files over CCXT (CCXT is fallback)
 # ==============================================================================
 
 import os
@@ -59,8 +54,8 @@ DEFAULT_COMMISSION = 0.001  # 0.1%
 # ASSET CLASS ENABLE/DISABLE FLAGS
 # ==============================================================================
 FOREX_ENABLED = True        # Local files from E:/TradingData/forex
-CRYPTO_ENABLED = True       # CCXT (Binance -> Hyperliquid)
-INDICES_ENABLED = False     # Disabled - awaiting IBKR integration
+CRYPTO_ENABLED = True       # Local files FIRST, then CCXT fallback
+INDICES_ENABLED = True      # ENABLED - Local Kaggle files from E:/TradingData/indices
 COMMODITIES_ENABLED = False # Disabled - awaiting futures data source
 
 # ==============================================================================
@@ -103,7 +98,7 @@ FOREX_COLUMNS = {
 }
 
 # ==============================================================================
-# CRYPTO WATCHLIST - ACTIVE
+# CRYPTO WATCHLIST - ACTIVE (Local files first, CCXT fallback)
 # ==============================================================================
 CRYPTO_WATCHLIST = [
     'BTC-USD',
@@ -124,18 +119,20 @@ CRYPTO_SYMBOL_MAP = {
 }
 
 # ==============================================================================
-# INDICES WATCHLIST - DISABLED (preserved for future IBKR integration)
+# INDICES WATCHLIST - NOW ENABLED (Local Kaggle files)
 # ==============================================================================
 INDEX_WATCHLIST = [
-    # '^GSPC',   # S&P 500
-    # '^DJI',    # Dow Jones Industrial Average
-    # '^IXIC',   # NASDAQ Composite
-    # '^RUT',    # Russell 2000
-    # '^VIX',    # CBOE Volatility Index
-    # '^FTSE',   # FTSE 100 (UK)
-    # '^GDAXI',  # DAX (Germany)
-    # '^N225',   # Nikkei 225 (Japan)
+    'SPX',     # S&P 500 (matches ^GSPC, SP500, SPX500 in filenames)
+    'NDX',     # NASDAQ 100 (matches ^IXIC, NASDAQ, NDX100 in filenames)
+    'DJI',     # Dow Jones (matches ^DJI, DJIA, DOW in filenames)
 ]
+
+# Index symbol mapping for different file naming conventions
+INDEX_SYMBOL_MAP = {
+    'SPX': ['^GSPC', 'SP500', 'SPX500', 'S&P500', 'SPY'],
+    'NDX': ['^IXIC', 'NASDAQ', 'NDX100', 'NASDAQ100', 'QQQ'],
+    'DJI': ['^DJI', 'DJIA', 'DOW', 'DOW30', 'DIA'],
+}
 
 # ==============================================================================
 # COMMODITIES WATCHLIST - DISABLED (preserved for future use)
@@ -201,10 +198,10 @@ COMMODITY_ALLOWED_TIMEFRAMES = ['1hour', '4hour', '1day', '1week', '1month']
 # ==============================================================================
 # DATA SOURCE PRIORITIES
 # ==============================================================================
-FOREX_SOURCES = ['local']       # Local files only - no yfinance fallback
-CRYPTO_SOURCES = ['ccxt']       # CCXT only - no yfinance fallback
-INDEX_SOURCES = ['yfinance']    # Would use yfinance if re-enabled
-COMMODITY_SOURCES = ['yfinance'] # Would use yfinance if re-enabled
+FOREX_SOURCES = ['local']           # Local files only
+CRYPTO_SOURCES = ['local', 'ccxt']  # Local first, CCXT fallback
+INDEX_SOURCES = ['local']           # Local Kaggle files
+COMMODITY_SOURCES = ['yfinance']    # Would use yfinance if re-enabled
 
 # ==============================================================================
 # CACHE CONFIGURATION
@@ -215,8 +212,8 @@ CACHE_DIR = DATA_CACHE_PATH / 'cache'
 # Cache subdirectories by asset type
 CACHE_SUBDIRS = {
     'forex': str(DATA_CACHE_PATH / 'forex'),
-    'crypto': str(CACHE_DIR / 'crypto'),
-    'indices': str(CACHE_DIR / 'indices'),
+    'crypto': str(DATA_CACHE_PATH / 'crypto'),
+    'indices': str(DATA_CACHE_PATH / 'indices'),
     'commodities': str(CACHE_DIR / 'commodities'),
     'raw': str(CACHE_DIR / 'raw')
 }
@@ -228,6 +225,7 @@ for cache_path in CACHE_SUBDIRS.values():
 # Convenience aliases
 FOREX_CACHE_DIR = CACHE_SUBDIRS['forex']
 CRYPTO_CACHE_DIR = CACHE_SUBDIRS['crypto']
+INDICES_CACHE_DIR = CACHE_SUBDIRS['indices']
 
 # ==============================================================================
 # FOREX CONFIGURATION - LOCAL FILES ONLY
@@ -236,7 +234,7 @@ FOREX_BASE_PATH = "E:/TradingData/forex"
 FOREX_BASE_TIMEFRAME = '1min'  # Base timeframe in local files
 
 # ==============================================================================
-# CRYPTO CONFIGURATION - CCXT ONLY
+# CRYPTO CONFIGURATION - LOCAL FILES FIRST, CCXT FALLBACK
 # ==============================================================================
 CRYPTO_EXCHANGE_PRIORITY = ['binance', 'hyperliquid']
 
@@ -244,7 +242,7 @@ CRYPTO_EXCHANGE_PRIORITY = ['binance', 'hyperliquid']
 BINANCE_ENABLED = True
 HYPERLIQUID_ENABLED = True
 
-# API credentials (optional for public data)
+# API credentials (optional - only needed if no local files)
 BINANCE_API_KEY = os.getenv('BINANCE_API_KEY', '')
 BINANCE_API_SECRET = os.getenv('BINANCE_API_SECRET', '')
 HYPERLIQUID_API_KEY = os.getenv('HYPERLIQUID_API_KEY', '')
@@ -299,6 +297,12 @@ def validate_config():
     if FOREX_ENABLED and not Path(FOREX_BASE_PATH).exists():
         warnings.append(f"Forex data directory not found: {FOREX_BASE_PATH}")
     
+    if CRYPTO_ENABLED and not Path(CACHE_SUBDIRS['crypto']).exists():
+        warnings.append(f"Crypto data directory not found: {CACHE_SUBDIRS['crypto']}")
+    
+    if INDICES_ENABLED and not Path(CACHE_SUBDIRS['indices']).exists():
+        warnings.append(f"Indices data directory not found: {CACHE_SUBDIRS['indices']}")
+    
     # Verify cache directories were created
     if not Path(DATA_CACHE_PATH).exists():
         errors.append(f"Data cache path does not exist: {DATA_CACHE_PATH}")
@@ -312,7 +316,7 @@ def validate_config():
         try:
             import ccxt
         except ImportError:
-            warnings.append("CCXT not installed. Run: pip install ccxt")
+            warnings.append("CCXT not installed (crypto will use local files only). Run: pip install ccxt")
     
     if errors:
         print("❌ Configuration Errors:")
@@ -336,14 +340,15 @@ def print_config_summary():
     
     print(f"\nActive Asset Classes:")
     print(f"  {'✅' if FOREX_ENABLED else '⏸️ '} Forex:       {len(FOREX_WATCHLIST)} pairs (local files)")
-    print(f"  {'✅' if CRYPTO_ENABLED else '⏸️ '} Crypto:      {len(CRYPTO_WATCHLIST)} currencies (CCXT)")
-    print(f"  {'✅' if INDICES_ENABLED else '⏸️ '} Indices:     {len(INDEX_WATCHLIST)} indices (disabled)")
+    print(f"  {'✅' if CRYPTO_ENABLED else '⏸️ '} Crypto:      {len(CRYPTO_WATCHLIST)} currencies (local → CCXT)")
+    print(f"  {'✅' if INDICES_ENABLED else '⏸️ '} Indices:     {len(INDEX_WATCHLIST)} indices (local Kaggle)")
     print(f"  {'✅' if COMMODITIES_ENABLED else '⏸️ '} Commodities: {len(COMMODITY_WATCHLIST)} commodities (disabled)")
     
     print(f"\nData Paths:")
-    print(f"  Forex data:  {FOREX_BASE_PATH}")
-    print(f"  Cache:       {DATA_CACHE_PATH}")
-    print(f"  Database:    {DATABASE_PATH}")
+    print(f"  Forex data:   {FOREX_BASE_PATH}")
+    print(f"  Crypto data:  {CACHE_SUBDIRS['crypto']}")
+    print(f"  Indices data: {CACHE_SUBDIRS['indices']}")
+    print(f"  Database:     {DATABASE_PATH}")
     
     print(f"\nAPI Status:")
     print(f"  Claude API:  {'✅ Configured' if CLAUDE_API_KEY else '❌ Not configured'}")
