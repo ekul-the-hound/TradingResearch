@@ -177,6 +177,48 @@ Combine RSI oversold with MACD crossover
 Only enter on pullback to 20 EMA
 Wait for confirmation candle before entry
 Use higher timeframe for trend, lower for entry
+
+# Advanced Entry Ideas
+Enter only after price rejects from support/resistance
+Enter on bullish/bearish engulfing candles
+Enter on pin bar / hammer / shooting star patterns
+Enter after consolidation breakout (low ADX then high ADX)
+Enter on volume spike with trend
+Use limit orders at EMA for better entries
+
+# Advanced Exit Ideas
+Exit on RSI divergence
+Exit on volume climax (spike against position)
+Exit when ADX drops below 20 (trend weakening)
+Exit at Fibonacci extension levels (1.618, 2.618)
+Move stop to break-even after 1 ATR profit
+Use chandelier exit (highest high - ATR multiple)
+
+# Risk Management
+Maximum 3 trades per day
+No trading on Fridays (avoid weekend risk)
+Reduce size during high volatility (VIX proxy)
+Correlation filter (don't trade correlated pairs same time)
+Maximum drawdown circuit breaker
+
+# Regime Adaptations
+Different parameters for trending vs ranging markets
+Increase trade frequency in high ADX environments
+Use mean reversion in low ADX, trend following in high ADX
+Tighter stops in high volatility
+Wider stops and targets in low volatility
+
+# Multi-Timeframe
+4H trend + 1H entry signals
+Daily bias + 4H execution
+Weekly support/resistance + daily entries
+Confirm signal on 2 timeframes before entry
+
+# Pattern-Based
+Trade only at round numbers (psychological levels)
+Trade only at previous day high/low
+Trade only after false breakout (failure test)
+Enter after 3 consecutive same-color candles
 """
 
 

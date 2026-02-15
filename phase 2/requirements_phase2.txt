@@ -1,0 +1,16 @@
+# Phase 2: Optimization Engine — Dependencies
+# Install: pip install -r requirements_phase2.txt
+
+# Core
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+joblib>=1.3.0
+
+# Module 4: NSGA-II (pymoo/pymoo)
+pymoo>=0.6.0
+
+# Phase 1 deps (for integration)
+mlflow>=2.10.0
+quantstats>=0.0.62

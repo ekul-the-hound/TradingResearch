@@ -1,0 +1,24 @@
+# =============================================================================
+# Phase 1: Foundation Completion — Dependencies
+# =============================================================================
+# Install: pip install -r requirements_phase1.txt
+# =============================================================================
+
+# Core
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+
+# Module 1: Lineage Tracking (mlflow/mlflow)
+mlflow>=2.10.0
+
+# Module 2: Overfitting Detection
+# pypbo reimplemented from Bailey et al. paper (no external dep)
+quantstats>=0.0.62
+statsmodels>=0.14.0
+joblib>=1.3.0
+
+# Optional: visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0

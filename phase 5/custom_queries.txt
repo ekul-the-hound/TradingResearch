@@ -1,0 +1,15 @@
+# ==============================================================================
+# Custom Search Queries
+# ==============================================================================
+# Add one query per line. Lines starting with # are comments.
+# These get appended to the built-in queries in discovery_config.py
+#
+# Format: just the raw search query string
+# Source type and bias will default to "general" / "unknown"
+#
+# Examples:
+# turtle trading strategy backtest python
+# Keltner channel breakout strategy systematic
+# Hurst exponent mean reversion forex
+# ==============================================================================
+
