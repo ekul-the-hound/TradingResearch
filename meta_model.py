@@ -153,7 +153,7 @@ class MetaModel:
         
         elif self.model_type == 'xgboost':
             try:
-                from xgboost import XGBClassifier
+                from xgboost import XGBClassifier  # type: ignore
                 return XGBClassifier(
                     n_estimators=100,
                     max_depth=5,
@@ -284,9 +284,9 @@ class MetaModel:
         self.training_metrics = metrics
         
         # Print results
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"TRAINING RESULTS:")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         print(f"  Accuracy:    {accuracy:.3f}")
         print(f"  Precision:   {precision:.3f}")
         print(f"  Recall:      {recall:.3f}")
@@ -502,19 +502,19 @@ class MetaModel:
         print("="*70)
         
         for pred in predictions:
-            print(f"\n📊 {pred.strategy_name}")
+            print(f"\n[STATS] {pred.strategy_name}")
             print("-"*70)
             print(f"  Survival Probability:  {pred.survival_probability*100:>6.1f}%")
             print(f"  Overfitting Risk:      {pred.overfitting_risk*100:>6.1f}%")
             print(f"  Confidence:            {pred.confidence*100:>6.1f}%")
             
-            rec_icon = "✅" if pred.recommendation == 'APPROVE' else "⚠️" if pred.recommendation == 'CAUTION' else "❌"
+            rec_icon = "[OK]" if pred.recommendation == 'APPROVE' else "[WARN]" if pred.recommendation == 'CAUTION' else "[FAIL]"
             print(f"  Recommendation:        {rec_icon} {pred.recommendation}")
             
             if pred.risk_factors:
                 print(f"  Risk Factors:")
                 for factor in pred.risk_factors:
-                    print(f"    • {factor}")
+                    print(f"    - {factor}")
         
         print("\n" + "="*70)
 

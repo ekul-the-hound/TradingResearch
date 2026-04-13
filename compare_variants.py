@@ -155,7 +155,7 @@ def compare_variants(show_individual=True):
     """Main comparison function"""
     
     print("\n" + "="*80)
-    print("📊 VARIANT COMPARISON REPORT")
+    print("[STATS] VARIANT COMPARISON REPORT")
     print("="*80)
     print(f"  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*80)
@@ -164,16 +164,16 @@ def compare_variants(show_individual=True):
     results = load_all_results()
     
     if not results:
-        print("❌ No backtest results found in database.")
+        print("[FAIL] No backtest results found in database.")
         print("   Run: python run_backtests.py")
         print("   Then: python run_variant_backtests.py")
         return
     
-    print(f"\n📂 Loaded {len(results)} backtest results from database")
+    print(f"\n[FOLDER] Loaded {len(results)} backtest results from database")
     
     # Group by variant
     grouped = group_by_variant(results)
-    print(f"📋 Found {len(grouped)} unique strategies/variants")
+    print(f"[LIST] Found {len(grouped)} unique strategies/variants")
     
     # Calculate stats for each variant
     variant_stats = {}
@@ -183,9 +183,9 @@ def compare_variants(show_individual=True):
             variant_stats[key] = stats
     
     # Display comparison table
-    print(f"\n{'─'*80}")
+    print(f"\n{'-'*80}")
     print("VARIANT RANKINGS (by Average Return)")
-    print(f"{'─'*80}\n")
+    print(f"{'-'*80}\n")
     
     display_comparison_table(variant_stats)
     
@@ -194,9 +194,9 @@ def compare_variants(show_individual=True):
     
     if ranked:
         winner = ranked[0]
-        print(f"\n{'─'*80}")
-        print(f"🏆 BEST PERFORMER: {winner['strategy_name']}")
-        print(f"{'─'*80}")
+        print(f"\n{'-'*80}")
+        print(f"[TROPHY] BEST PERFORMER: {winner['strategy_name']}")
+        print(f"{'-'*80}")
         print(f"   Average Return:  {winner['avg_return']:+.2f}%")
         print(f"   Average Sharpe:  {winner['avg_sharpe']:.2f}" if winner['avg_sharpe'] else "   Average Sharpe:  N/A")
         print(f"   Win Rate:        {winner['avg_win_rate']:.1f}%" if winner['avg_win_rate'] else "   Win Rate:        N/A")
@@ -205,9 +205,9 @@ def compare_variants(show_individual=True):
     
     # Show top individual results
     if show_individual:
-        print(f"\n{'─'*80}")
+        print(f"\n{'-'*80}")
         print("TOP 10 INDIVIDUAL BACKTEST RESULTS")
-        print(f"{'─'*80}\n")
+        print(f"{'-'*80}\n")
         
         top_results = get_best_individual_results(results, top_n=10)
         
@@ -227,19 +227,19 @@ def compare_variants(show_individual=True):
         print(tabulate(table_data, headers=headers, tablefmt='grid'))
     
     # Recommendation
-    print(f"\n{'─'*80}")
-    print("💡 RECOMMENDATIONS")
-    print(f"{'─'*80}")
+    print(f"\n{'-'*80}")
+    print("[TIP] RECOMMENDATIONS")
+    print(f"{'-'*80}")
     
     if ranked and ranked[0]['avg_return'] > 0:
-        print(f"   ✅ {ranked[0]['strategy_name']} shows positive average returns")
-        print(f"   → Consider testing on out-of-sample data")
-        print(f"   → Review individual results on best-performing assets")
+        print(f"   [OK] {ranked[0]['strategy_name']} shows positive average returns")
+        print(f"   -> Consider testing on out-of-sample data")
+        print(f"   -> Review individual results on best-performing assets")
     else:
-        print(f"   ⚠️  No variants showing positive average returns")
-        print(f"   → Consider adding more modifications to mutation_config.py")
-        print(f"   → Try different base strategy approaches")
-        print(f"   → Run mutation agent again with new ideas")
+        print(f"   [WARN]  No variants showing positive average returns")
+        print(f"   -> Consider adding more modifications to mutation_config.py")
+        print(f"   -> Try different base strategy approaches")
+        print(f"   -> Run mutation agent again with new ideas")
     
     print(f"\n{'='*80}")
     print("NEXT STEPS:")
@@ -260,7 +260,7 @@ def analyze_with_claude(variant_stats, ranked):
     """Send results to Claude for deeper analysis"""
     
     print("\n" + "-"*70)
-    print("🤖 CLAUDE AI ANALYSIS")
+    print("[AI] CLAUDE AI ANALYSIS")
     print("-"*70)
     print("This will send your results to Claude for deeper analysis.")
     print("Estimated cost: ~$0.15-0.25")
@@ -312,7 +312,7 @@ Be specific and actionable in your analysis."""
         print("="*70 + "\n")
         
     except Exception as e:
-        print(f"❌ API error: {e}")
+        print(f"[FAIL] API error: {e}")
 
 
 # ==============================================================================

@@ -975,7 +975,7 @@ def test_statistical_analysis():
         
         print(f"\n    Importing StatisticalAnalysis...")
         analyzer = StatisticalAnalysis()
-        print(f"      ✓ StatisticalAnalysis imported")
+        print(f"      [OK] StatisticalAnalysis imported")
         
         # Check methods exist
         methods = [
@@ -989,9 +989,9 @@ def test_statistical_analysis():
         
         for method in methods:
             if hasattr(analyzer, method):
-                print(f"      ✓ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      ✗ Method '{method}' not found")
+                print(f"      [FAIL] Method '{method}' not found")
                 return False, f"Missing method: {method}"
         
         # Test with sample data
@@ -1001,19 +1001,19 @@ def test_statistical_analysis():
         
         # Test serial dependence
         serial = analyzer.test_serial_dependence(returns)
-        print(f"      ✓ Serial dependence: lag1={serial.autocorr_lag1:.4f}, dependent={serial.has_serial_dependence}")
+        print(f"      [OK] Serial dependence: lag1={serial.autocorr_lag1:.4f}, dependent={serial.has_serial_dependence}")
         
         # Test distribution
         dist = analyzer.analyze_distribution(returns)
-        print(f"      ✓ Distribution: skew={dist.skewness:.3f}, kurtosis={dist.kurtosis:.3f}")
+        print(f"      [OK] Distribution: skew={dist.skewness:.3f}, kurtosis={dist.kurtosis:.3f}")
         
         # Test VaR
         var = analyzer.calculate_var(returns)
-        print(f"      ✓ VaR: historical={var.historical_var:.3f}, CVaR={var.cvar_expected_shortfall:.3f}")
+        print(f"      [OK] VaR: historical={var.historical_var:.3f}, CVaR={var.cvar_expected_shortfall:.3f}")
         
         # Test GARCH (may not fit with arch library)
         garch = analyzer.fit_garch(returns)
-        print(f"      ✓ GARCH: persistence={garch.persistence:.3f}, fit={garch.model_fit}")
+        print(f"      [OK] GARCH: persistence={garch.persistence:.3f}, fit={garch.model_fit}")
         
         return True, ""
         
@@ -1033,11 +1033,11 @@ def test_ftmo_pass_rate():
         
         print(f"\n    Importing FTMOComplianceChecker...")
         checker = FTMOComplianceChecker()
-        print(f"      ✓ FTMOComplianceChecker imported")
+        print(f"      [OK] FTMOComplianceChecker imported")
         
         # Check simulate_pass_rate method exists
         if hasattr(checker, 'simulate_pass_rate'):
-            print(f"      ✓ Method 'simulate_pass_rate' found")
+            print(f"      [OK] Method 'simulate_pass_rate' found")
         else:
             return False, "Missing method: simulate_pass_rate"
         
@@ -1056,10 +1056,10 @@ def test_ftmo_pass_rate():
         
         # Test basic validation
         result = checker.validate(sample_trades, account_size=10000, phase='challenge')
-        print(f"      ✓ Validation: passed={result.passed}, return={result.final_return_pct:.1f}%")
+        print(f"      [OK] Validation: passed={result.passed}, return={result.final_return_pct:.1f}%")
         
         # Note: Full simulation skipped to save time
-        print(f"      ✓ simulate_pass_rate method available (full test skipped for speed)")
+        print(f"      [OK] simulate_pass_rate method available (full test skipped for speed)")
         
         return True, ""
         
@@ -1080,7 +1080,7 @@ def test_feature_engineering():
         
         print(f"\n    Importing FeatureEngineer...")
         engineer = FeatureEngineer()
-        print(f"      ✓ FeatureEngineer imported")
+        print(f"      [OK] FeatureEngineer imported")
         
         # Check methods exist
         methods = [
@@ -1092,9 +1092,9 @@ def test_feature_engineering():
         
         for method in methods:
             if hasattr(engineer, method):
-                print(f"      ✓ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      ✗ Method '{method}' not found")
+                print(f"      [FAIL] Method '{method}' not found")
                 return False, f"Missing method: {method}"
         
         # Check StrategyFeatures dataclass
@@ -1102,9 +1102,9 @@ def test_feature_engineering():
         required_fields = ['strategy_name', 'sharpe_ratio', 'skewness', 'var_95_historical', 'ftmo_pass_rate']
         for field in required_fields:
             if field in StrategyFeatures.__annotations__:
-                print(f"      ✓ Field '{field}' found")
+                print(f"      [OK] Field '{field}' found")
             else:
-                print(f"      ⚠️  Field '{field}' not found")
+                print(f"      [WARN]  Field '{field}' not found")
         
         # Test with sample data
         print(f"\n    Testing feature extraction...")
@@ -1122,8 +1122,8 @@ def test_feature_engineering():
         
         features = engineer.build_features(sample_result, trades_df=trades_df, 
                                           run_statistical_analysis=True, run_ftmo_simulation=False)
-        print(f"      ✓ Features built: {features.strategy_name}")
-        print(f"      ✓ Statistical features: skew={features.skewness:.3f}, VaR={features.var_95_historical:.3f}")
+        print(f"      [OK] Features built: {features.strategy_name}")
+        print(f"      [OK] Statistical features: skew={features.skewness:.3f}, VaR={features.var_95_historical:.3f}")
         
         return True, ""
         
@@ -1144,7 +1144,7 @@ def test_portfolio_engine():
         
         print(f"\n    Importing PortfolioEngine...")
         engine = PortfolioEngine()
-        print(f"      ✓ PortfolioEngine imported")
+        print(f"      [OK] PortfolioEngine imported")
         
         # Check methods exist
         methods = [
@@ -1159,9 +1159,9 @@ def test_portfolio_engine():
         
         for method in methods:
             if hasattr(engine, method):
-                print(f"      ✓ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      ✗ Method '{method}' not found")
+                print(f"      [FAIL] Method '{method}' not found")
                 return False, f"Missing method: {method}"
         
         # Test with sample equity curves
@@ -1177,7 +1177,7 @@ def test_portfolio_engine():
         # Test different allocation methods
         for method in ['equal', 'inverse_vol', 'risk_parity']:
             portfolio = engine.build_portfolio(equity_curves, method=method)
-            print(f"      ✓ {method}: Sharpe={portfolio.portfolio_sharpe:.2f}")
+            print(f"      [OK] {method}: Sharpe={portfolio.portfolio_sharpe:.2f}")
         
         return True, ""
         
@@ -1197,21 +1197,21 @@ def test_meta_model():
         print(f"\n    Importing MetaModel and EarlyKillFilter...")
         model = MetaModel()
         killer = EarlyKillFilter()
-        print(f"      ✓ MetaModel imported")
-        print(f"      ✓ EarlyKillFilter imported")
+        print(f"      [OK] MetaModel imported")
+        print(f"      [OK] EarlyKillFilter imported")
         
         # Check MetaModel methods
         methods = ['train', 'predict', 'feature_importance', 'save_model', 'load_model']
         for method in methods:
             if hasattr(model, method):
-                print(f"      ✓ MetaModel method '{method}' found")
+                print(f"      [OK] MetaModel method '{method}' found")
             else:
-                print(f"      ✗ MetaModel method '{method}' not found")
+                print(f"      [FAIL] MetaModel method '{method}' not found")
                 return False, f"Missing method: {method}"
         
         # Check EarlyKillFilter
         if hasattr(killer, 'should_kill'):
-            print(f"      ✓ EarlyKillFilter method 'should_kill' found")
+            print(f"      [OK] EarlyKillFilter method 'should_kill' found")
         else:
             return False, "Missing method: should_kill"
         
@@ -1219,11 +1219,11 @@ def test_meta_model():
         print(f"\n    Testing EarlyKillFilter...")
         bad_strategy = {'total_trades': 10, 'sharpe_ratio': -0.5, 'max_drawdown_pct': 35}
         should_kill, reasons = killer.should_kill(bad_strategy)
-        print(f"      ✓ Bad strategy: kill={should_kill}, reasons={len(reasons)}")
+        print(f"      [OK] Bad strategy: kill={should_kill}, reasons={len(reasons)}")
         
         good_strategy = {'total_trades': 100, 'sharpe_ratio': 1.5, 'max_drawdown_pct': 10, 'total_return_pct': 20}
         should_kill, reasons = killer.should_kill(good_strategy)
-        print(f"      ✓ Good strategy: kill={should_kill}")
+        print(f"      [OK] Good strategy: kill={should_kill}")
         
         return True, ""
         
@@ -1242,7 +1242,7 @@ def test_execution_engine():
         
         print(f"\n    Importing PaperTrader and ExecutionEngine...")
         trader = PaperTrader(initial_capital=100000)
-        print(f"      ✓ PaperTrader imported")
+        print(f"      [OK] PaperTrader imported")
         
         # Check PaperTrader methods
         methods = [
@@ -1257,9 +1257,9 @@ def test_execution_engine():
         
         for method in methods:
             if hasattr(trader, method):
-                print(f"      ✓ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      ✗ Method '{method}' not found")
+                print(f"      [FAIL] Method '{method}' not found")
                 return False, f"Missing method: {method}"
         
         # Test paper trading
@@ -1267,26 +1267,26 @@ def test_execution_engine():
         trader.update_price('EUR-USD', 1.1000)
         
         order = trader.submit_order('EUR-USD', 'BUY', 10000, 'MARKET')
-        print(f"      ✓ Order submitted: status={order.status.value}")
+        print(f"      [OK] Order submitted: status={order.status.value}")
         
         trader.update_price('EUR-USD', 1.1050)
         pos = trader.positions.get('EUR-USD')
         if pos:
-            print(f"      ✓ Position tracked: PnL=${pos.unrealized_pnl:.2f}")
+            print(f"      [OK] Position tracked: PnL=${pos.unrealized_pnl:.2f}")
         
         trader.close_position('EUR-USD')
         summary = trader.get_account_summary()
-        print(f"      ✓ Account summary: equity=${summary['equity']:.2f}")
+        print(f"      [OK] Account summary: equity=${summary['equity']:.2f}")
         
         # Test ExecutionEngine
         print(f"\n    Testing ExecutionEngine...")
         engine = ExecutionEngine(mode='paper', initial_capital=100000)
-        print(f"      ✓ ExecutionEngine imported")
+        print(f"      [OK] ExecutionEngine imported")
         
         if hasattr(engine, 'process_signal'):
-            print(f"      ✓ Method 'process_signal' found")
+            print(f"      [OK] Method 'process_signal' found")
         if hasattr(engine, 'run_backtest_signals'):
-            print(f"      ✓ Method 'run_backtest_signals' found")
+            print(f"      [OK] Method 'run_backtest_signals' found")
         
         return True, ""
         
@@ -1389,38 +1389,38 @@ def main():
 
 
     if len(results) > 15:
-        print(f"\n  📋 WEEK 4 TESTS (16-19):")
+        print(f"\n  [LIST] WEEK 4 TESTS (16-19):")
         for test_name, success in results[15:19]:
-            status = "✅ PASS" if success else "❌ FAIL"
+            status = "[OK] PASS" if success else "[FAIL] FAIL"
             print(f"    {status}  {test_name}")
     
     if len(results) > 19:
-        print(f"\n  🚀 WEEK 5 TESTS (20-25):")
+        print(f"\n  [LAUNCH] WEEK 5 TESTS (20-25):")
         for test_name, success in results[19:25]:
-            status = "✅ PASS" if success else "❌ FAIL"
+            status = "[OK] PASS" if success else "[FAIL] FAIL"
             print(f"    {status}  {test_name}")
     
     # Overall status
     if passed == total:
-        print(f"\n  🎉 ALL TESTS PASSED!")
+        print(f"\n  [DONE] ALL TESTS PASSED!")
         print(f"\n  Your system is fully operational. Available commands:")
-        print(f"    • python run_backtests.py          - Run backtests")
-        print(f"    • python mutate_strategy.py        - Generate variants")
-        print(f"    • python run_variant_backtests.py  - Test variants")
-        print(f"    • python robustness_tests.py       - Robustness testing")
-        print(f"    • python adversarial_reviewer.py   - AI code review")
-        print(f"    • python failures_tracker.py       - Track failures")
-        print(f"    • python dashboard_react.py        - Launch ReactPy dashboard")
+        print(f"    - python run_backtests.py          - Run backtests")
+        print(f"    - python mutate_strategy.py        - Generate variants")
+        print(f"    - python run_variant_backtests.py  - Test variants")
+        print(f"    - python robustness_tests.py       - Robustness testing")
+        print(f"    - python adversarial_reviewer.py   - AI code review")
+        print(f"    - python failures_tracker.py       - Track failures")
+        print(f"    - python dashboard_react.py        - Launch ReactPy dashboard")
         print(f"\n  New Week 5 modules available:")
-        print(f"    • validation_framework.py          - Statistical analysis")
-        print(f"    • feature_engineering.py           - Feature extraction")
-        print(f"    • portfolio_engine.py              - Portfolio allocation")
-        print(f"    • meta_model.py                    - ML survival prediction")
-        print(f"    • execution_engine.py              - Paper trading")
+        print(f"    - validation_framework.py          - Statistical analysis")
+        print(f"    - feature_engineering.py           - Feature extraction")
+        print(f"    - portfolio_engine.py              - Portfolio allocation")
+        print(f"    - meta_model.py                    - ML survival prediction")
+        print(f"    - execution_engine.py              - Paper trading")
     elif passed > total * 0.7:
-        print(f"\n  ⚠️  MOSTLY PASSED - Check failed tests above")
+        print(f"\n  [WARN]  MOSTLY PASSED - Check failed tests above")
     else:
-        print(f"\n  ❌ MULTIPLE FAILURES - Fix issues before proceeding")
+        print(f"\n  [FAIL] MULTIPLE FAILURES - Fix issues before proceeding")
     
     print("\n" + "="*70 + "\n")
 

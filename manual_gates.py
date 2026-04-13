@@ -102,14 +102,14 @@ class ValidationGate:
         print("\n" + "="*70)
         print("🚦 MANUAL VALIDATION GATE")
         print("="*70)
-        print(f"\n📋 Action: {description}")
+        print(f"\n[LIST] Action: {description}")
         
         if estimated_cost > 0:
-            print(f"💰 Estimated cost: ${estimated_cost:.2f}")
+            print(f"[COST] Estimated cost: ${estimated_cost:.2f}")
             print(f"   Session total so far: ${self.total_approved_cost:.2f}")
         
         if details:
-            print(f"\n📝 Details:\n{details}")
+            print(f"\n[NOTE] Details:\n{details}")
         
         print("\n" + "-"*70)
         print("Options:")
@@ -124,20 +124,20 @@ class ValidationGate:
                 response = input("\nYour choice (Y/N/A/Q): ").strip().upper()
             except EOFError:
                 # Non-interactive mode
-                print("⚠️  Non-interactive mode - auto-approving")
+                print("[WARN]  Non-interactive mode - auto-approving")
                 response = 'Y'
             
             if response == 'Y':
                 self._log_decision(description, estimated_cost, "approved")
                 self.total_approved += 1
                 self.total_approved_cost += estimated_cost
-                print("✅ Approved")
+                print("[OK] Approved")
                 return True
             
             elif response == 'N':
                 self._log_decision(description, estimated_cost, "rejected")
                 self.total_blocked += 1
-                print("⏭️  Skipped")
+                print("[SKIP]  Skipped")
                 return False
             
             elif response == 'A':
@@ -145,7 +145,7 @@ class ValidationGate:
                 self.enabled = False
                 self.total_approved += 1
                 self.total_approved_cost += estimated_cost
-                print("✅ Approved - All gates now disabled for this session")
+                print("[OK] Approved - All gates now disabled for this session")
                 return True
             
             elif response == 'Q':
@@ -154,7 +154,7 @@ class ValidationGate:
                 raise KeyboardInterrupt("User quit at validation gate")
             
             else:
-                print("❌ Invalid choice. Please enter Y, N, A, or Q")
+                print("[FAIL] Invalid choice. Please enter Y, N, A, or Q")
     
     def approve_batch(
         self,
@@ -186,7 +186,7 @@ class ValidationGate:
             preview = show_items[:10]
             details += f"\n\nPreview (first {len(preview)}):\n"
             for item in preview:
-                details += f"  • {item}\n"
+                details += f"  - {item}\n"
             if len(show_items) > 10:
                 details += f"  ... and {len(show_items) - 10} more"
         
@@ -219,7 +219,7 @@ class ValidationGate:
         ret = result.get('total_return_pct', 0)
         
         if sharpe >= threshold:
-            print(f"✅ Gate passed: Sharpe {sharpe:.2f} >= {threshold}")
+            print(f"[OK] Gate passed: Sharpe {sharpe:.2f} >= {threshold}")
             return True
         
         print("\n" + "="*70)
@@ -249,7 +249,7 @@ class ValidationGate:
                 with open(self.log_file, 'a') as f:
                     f.write(f"{record['timestamp']} | {decision} | ${cost:.2f} | {description}\n")
             except Exception as e:
-                print(f"⚠️  Could not write to log: {e}")
+                print(f"[WARN]  Could not write to log: {e}")
     
     def get_session_summary(self) -> dict:
         """Get summary of this session's gate decisions"""
@@ -271,7 +271,7 @@ class ValidationGate:
         summary = self.get_session_summary()
         
         print("\n" + "="*70)
-        print("📊 VALIDATION GATE SESSION SUMMARY")
+        print("[STATS] VALIDATION GATE SESSION SUMMARY")
         print("="*70)
         print(f"  Duration:        {summary['session_duration_minutes']:.1f} minutes")
         print(f"  Total gates:     {summary['total_gates']}")
@@ -372,17 +372,17 @@ if __name__ == "__main__":
     # Test 1: Basic approval
     print("\nTest 1: Basic approval gate")
     if gate.approve("Test operation 1"):
-        print("  → Operation 1 would run")
+        print("  -> Operation 1 would run")
     
     # Test 2: Cost gate
     print("\nTest 2: Cost gate ($0.25)")
     if gate.approve("Claude API call", estimated_cost=0.25):
-        print("  → Claude call would run")
+        print("  -> Claude call would run")
     
     # Test 3: Auto-approve (under threshold)
     print("\nTest 3: Auto-approve (under $0.01)")
     if gate.approve("Tiny operation", estimated_cost=0.005):
-        print("  → Auto-approved (under threshold)")
+        print("  -> Auto-approved (under threshold)")
     
     # Test 4: Batch approval
     print("\nTest 4: Batch operation")
@@ -393,7 +393,7 @@ if __name__ == "__main__":
         cost_per_item=0,
         show_items=items
     ):
-        print("  → Batch would run")
+        print("  -> Batch would run")
     
     # Test 5: Decorator
     print("\nTest 5: Decorated function")
@@ -404,10 +404,10 @@ if __name__ == "__main__":
     
     result = test_function()
     if result:
-        print(f"  → {result}")
+        print(f"  -> {result}")
     
     # Print session summary
     gate.print_session_summary()
     
-    print("\n✅ Manual gates working!")
+    print("\n[OK] Manual gates working!")
     print("="*70)

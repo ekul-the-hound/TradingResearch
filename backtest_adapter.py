@@ -7,9 +7,9 @@
 #   - CanonicalResult objects (what all downstream modules consume)
 #
 # Three modes of operation:
-#   1. evaluate_params()   — GA proposes parameter vector → backtest → result
-#   2. evaluate_strategy() — Run existing strategy class → result
-#   3. evaluate_variant()  — Load .py variant file → backtest → result
+#   1. evaluate_params()   -- GA proposes parameter vector -> backtest -> result
+#   2. evaluate_strategy() -- Run existing strategy class -> result
+#   3. evaluate_variant()  -- Load .py variant file -> backtest -> result
 #
 # This is the architectural adapter that closes the loop.
 #
@@ -93,23 +93,23 @@ class BacktestAdapter:
             try:
                 self._mtf = MultiTimeframeBacktester()
                 if self.verbose:
-                    print("✅ BacktestAdapter: Using MultiTimeframeBacktester")
+                    print("[OK] BacktestAdapter: Using MultiTimeframeBacktester")
                 return
             except Exception as e:
                 if self.verbose:
-                    print(f"⚠️  MultiTimeframeBacktester init failed: {e}")
+                    print(f"[WARN]  MultiTimeframeBacktester init failed: {e}")
 
         if StrategyBacktester is not None:
             try:
                 self._simple = StrategyBacktester()
                 if self.verbose:
-                    print("✅ BacktestAdapter: Using StrategyBacktester")
+                    print("[OK] BacktestAdapter: Using StrategyBacktester")
                 return
             except Exception:
                 pass
 
         if self.verbose:
-            print("⚠️  BacktestAdapter: No backtester available (dry-run mode)")
+            print("[WARN]  BacktestAdapter: No backtester available (dry-run mode)")
 
     # ------------------------------------------------------------------
     # MODE 1: Evaluate a parameter vector (for GA/optimizer)
@@ -129,7 +129,7 @@ class BacktestAdapter:
         runs your backtester, returns a CanonicalResult.
 
         Args:
-            param_vector: Dict of parameter names → values.
+            param_vector: Dict of parameter names -> values.
                           e.g. {"fast_period": 10, "slow_period": 50}
             strategy_class: Backtrader strategy class (e.g. SimpleMovingAverageCrossover)
             symbol: Asset to test (defaults to first in default_symbols)
@@ -237,7 +237,7 @@ class BacktestAdapter:
             spec.loader.exec_module(module)
         except Exception as e:
             if self.verbose:
-                print(f"❌ Failed to import {path}: {e}")
+                print(f"[FAIL] Failed to import {path}: {e}")
             return CanonicalResult(strategy_id=path.stem, strategy_name="IMPORT_FAILED")
 
         # Find the strategy class (first bt.Strategy subclass)
@@ -273,7 +273,7 @@ class BacktestAdapter:
 
         Usage:
             obj_fn = adapter.as_objective_function(SimpleMovingAverageCrossover)
-            # optimization_pipeline.py calls: obj_fn(param_dict) → result_dict
+            # optimization_pipeline.py calls: obj_fn(param_dict) -> result_dict
         """
         def _objective(param_vector: Dict[str, Any]) -> Dict[str, float]:
             cr = self.evaluate_params(param_vector, strategy_class, symbol, timeframe)
@@ -314,7 +314,7 @@ class BacktestAdapter:
                 return result
             except Exception as e:
                 if self.verbose:
-                    print(f"   ❌ Backtest failed ({symbol} {timeframe}): {e}")
+                    print(f"   [FAIL] Backtest failed ({symbol} {timeframe}): {e}")
                 return None
 
         # Simple backtester fallback (uses yfinance, no timeframe/forex support)
@@ -332,10 +332,10 @@ class BacktestAdapter:
                 return result
             except Exception as e:
                 if self.verbose:
-                    print(f"   ❌ Simple backtest failed: {e}")
+                    print(f"   [FAIL] Simple backtest failed: {e}")
                 return None
 
-        # No backtester — return None (CanonicalResult handles gracefully)
+        # No backtester -- return None (CanonicalResult handles gracefully)
         return None
 
     # ------------------------------------------------------------------

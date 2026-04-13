@@ -7,17 +7,17 @@
 # Each step receives CanonicalResult objects and passes them to the next.
 #
 # Steps:
-#   1. Discovery       — find strategy ideas (optional, requires SearXNG)
-#   2. Backtest+Filter — run through backtester, filter by Sharpe/DD/trades
-#   3. Optimize        — surrogate-assisted GA to find best parameters
-#   4. Validate        — Monte Carlo, bootstrap, walk-forward, adversarial
-#   5. Risk            — capacity, tail risk, kill switch thresholds
-#   6. Diversify       — correlation filter, remove redundant strategies
-#   7. Split           — top pool → mutation, rest → shadow trading
-#   8. Re-validate     — run mutation winners through validation again
-#   9. Drift monitor   — set up drift detection baselines
-#  10. Learning loop   — configure retraining scheduler
-#  11. Analytics       — generate lineage analytics report
+#   1. Discovery       -- find strategy ideas (optional, requires SearXNG)
+#   2. Backtest+Filter -- run through backtester, filter by Sharpe/DD/trades
+#   3. Optimize        -- surrogate-assisted GA to find best parameters
+#   4. Validate        -- Monte Carlo, bootstrap, walk-forward, adversarial
+#   5. Risk            -- capacity, tail risk, kill switch thresholds
+#   6. Diversify       -- correlation filter, remove redundant strategies
+#   7. Split           -- top pool -> mutation, rest -> shadow trading
+#   8. Re-validate     -- run mutation winners through validation again
+#   9. Drift monitor   -- set up drift detection baselines
+#  10. Learning loop   -- configure retraining scheduler
+#  11. Analytics       -- generate lineage analytics report
 #
 # Usage:
 #     python run_pipeline.py                    # Full pipeline
@@ -25,7 +25,7 @@
 #     python run_pipeline.py --to-step 6        # Stop after step 6
 #     python run_pipeline.py --strategies-dir strategies/variants  # Use existing variants
 #
-# Each step can also be run independently — the orchestrator just chains them.
+# Each step can also be run independently -- the orchestrator just chains them.
 # ==============================================================================
 
 import sys
@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-# ── Ensure project root is in path ────────────────────────────────────────────
+# -- Ensure project root is in path --------------------------------------------
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -54,35 +54,35 @@ class PipelineConfig:
     """Central config for the entire pipeline run."""
 
     def __init__(self):
-        # ── Step 2: Backtest & Filter ─────────────────────────────────
+        # -- Step 2: Backtest & Filter ---------------------------------
         self.symbols = ["EUR-USD", "GBP-USD", "USD-JPY"]
         self.timeframes = ["1hour"]
         self.min_sharpe = 0.5
         self.min_trades = 20
         self.max_drawdown = 30.0     # percent
 
-        # ── Step 3: Optimization ──────────────────────────────────────
+        # -- Step 3: Optimization --------------------------------------
         self.ga_generations = 20
         self.ga_population = 50
         self.surrogate_retrain_every = 10
 
-        # ── Step 4: Validation ────────────────────────────────────────
+        # -- Step 4: Validation ----------------------------------------
         self.monte_carlo_runs = 100
         self.bootstrap_samples = 100
         self.walk_forward_folds = 5
 
-        # ── Step 5: Risk ──────────────────────────────────────────────
+        # -- Step 5: Risk ----------------------------------------------
         self.max_capacity_aum = 1_000_000
         self.kill_switch_max_dd = 20.0
 
-        # ── Step 6: Diversification ───────────────────────────────────
+        # -- Step 6: Diversification -----------------------------------
         self.max_correlation = 0.5
 
-        # ── Step 7: Split ─────────────────────────────────────────────
+        # -- Step 7: Split ---------------------------------------------
         self.top_pool_size = 10
         self.variants_per_strategy = 15
 
-        # ── Output ────────────────────────────────────────────────────
+        # -- Output ----------------------------------------------------
         self.output_dir = PROJECT_ROOT / "pipeline_output"
         self.verbose = True
 
@@ -108,7 +108,7 @@ class Pipeline:
         """Run the pipeline from step N to step M."""
         start = time.time()
         self._log(f"\n{'='*70}")
-        self._log(f"  TRADINGLAB PIPELINE — Steps {from_step} to {to_step}")
+        self._log(f"  TRADINGLAB PIPELINE -- Steps {from_step} to {to_step}")
         self._log(f"  Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         self._log(f"{'='*70}\n")
 
@@ -132,18 +132,18 @@ class Pipeline:
             if step_num > to_step:
                 break
 
-            self._log(f"\n{'─'*70}")
+            self._log(f"\n{'-'*70}")
             self._log(f"  STEP {step_num}: {name}")
-            self._log(f"{'─'*70}")
+            self._log(f"{'-'*70}")
 
             t0 = time.time()
             try:
                 fn()
                 elapsed = time.time() - t0
                 self._step_times[name] = elapsed
-                self._log(f"  ✅ Step {step_num} complete ({elapsed:.1f}s)")
+                self._log(f"  [OK] Step {step_num} complete ({elapsed:.1f}s)")
             except Exception as e:
-                self._log(f"  ❌ Step {step_num} failed: {e}")
+                self._log(f"  [FAIL] Step {step_num} failed: {e}")
                 traceback.print_exc()
                 self._step_times[name] = time.time() - t0
                 break
@@ -160,18 +160,18 @@ class Pipeline:
     def step_1_discovery(self):
         """
         Scrape strategy ideas. Requires SearXNG + Ollama.
-        Skip if not available — user can provide strategies manually.
+        Skip if not available -- user can provide strategies manually.
         """
         try:
             from discovery_pipeline import DiscoveryPipeline
             dp = DiscoveryPipeline()
             dp.run()
-            self._log("  📡 Discovery pipeline completed")
+            self._log("  [SIGNAL] Discovery pipeline completed")
         except ImportError:
-            self._log("  ⏭️  Discovery not available (requires SearXNG + Ollama)")
+            self._log("  [SKIP]  Discovery not available (requires SearXNG + Ollama)")
             self._log("     Place strategy .py files in strategies/variants/ to continue")
         except Exception as e:
-            self._log(f"  ⚠️  Discovery failed: {e} — continuing with existing strategies")
+            self._log(f"  [WARN]  Discovery failed: {e} -- continuing with existing strategies")
 
     # ==================================================================
     # STEP 2: Backtest & Filter
@@ -190,14 +190,14 @@ class Pipeline:
         # Collect strategy classes to test
         strategies = self._collect_strategies()
         if not strategies:
-            self._log("  ⚠️  No strategies found. Add .py files to strategies/variants/")
+            self._log("  [WARN]  No strategies found. Add .py files to strategies/variants/")
             self._results["step2_candidates"] = []
             return
 
         # Run backtests
         all_results: List[CanonicalResult] = []
         for name, cls in strategies:
-            self._log(f"  🔄 Backtesting {name}...")
+            self._log(f"  [CYCLE] Backtesting {name}...")
             results = adapter.evaluate_strategy(
                 strategy_class=cls,
                 symbols=cfg.symbols,
@@ -205,7 +205,7 @@ class Pipeline:
             )
             all_results.extend(results)
 
-        self._log(f"  📊 Ran {len(all_results)} backtests across {len(strategies)} strategies")
+        self._log(f"  [STATS] Ran {len(all_results)} backtests across {len(strategies)} strategies")
 
         # Filter
         survivors = []
@@ -221,13 +221,13 @@ class Pipeline:
             fp = FilteringPipeline()
             filter_input = [cr.to_filter_dict() for cr in all_results]
             filtered_ids = fp.filter(filter_input)
-            self._log(f"  🔬 FilteringPipeline: {len(filtered_ids)} passed")
+            self._log(f"  [TEST] FilteringPipeline: {len(filtered_ids)} passed")
         except ImportError:
             pass
 
         self._results["step2_all"] = all_results
         self._results["step2_candidates"] = survivors
-        self._log(f"  ✂️  {len(all_results)} → {len(survivors)} candidates after filtering")
+        self._log(f"  [CUT]  {len(all_results)} -> {len(survivors)} candidates after filtering")
 
     # ==================================================================
     # STEP 3: Optimize
@@ -238,7 +238,7 @@ class Pipeline:
         """
         candidates = self._results.get("step2_candidates", [])
         if not candidates:
-            self._log("  ⏭️  No candidates to optimize")
+            self._log("  [SKIP]  No candidates to optimize")
             return
 
         try:
@@ -253,7 +253,7 @@ class Pipeline:
 
             optimized = []
             for strat_name, crs in by_strategy.items():
-                self._log(f"  🧬 Optimizing {strat_name} ({len(crs)} base results)...")
+                self._log(f"  [DNA] Optimizing {strat_name} ({len(crs)} base results)...")
 
                 # Feed existing results to surrogate
                 sm = SurrogateModel()
@@ -265,10 +265,10 @@ class Pipeline:
                 optimized.extend(crs)  # Keep original results for now
 
             self._results["step3_optimized"] = optimized
-            self._log(f"  🏆 {len(optimized)} strategies after optimization")
+            self._log(f"  [TROPHY] {len(optimized)} strategies after optimization")
 
         except ImportError as e:
-            self._log(f"  ⚠️  Optimization modules not available: {e}")
+            self._log(f"  [WARN]  Optimization modules not available: {e}")
             self._results["step3_optimized"] = candidates
 
     # ==================================================================
@@ -279,7 +279,7 @@ class Pipeline:
         candidates = self._results.get("step3_optimized",
                      self._results.get("step2_candidates", []))
         if not candidates:
-            self._log("  ⏭️  No candidates to validate")
+            self._log("  [SKIP]  No candidates to validate")
             return
 
         validated = []
@@ -289,7 +289,7 @@ class Pipeline:
 
             for cr in candidates:
                 if cr.returns is not None and len(cr.returns) > 30:
-                    self._log(f"  🔬 Validating {cr.strategy_id}...")
+                    self._log(f"  [TEST] Validating {cr.strategy_id}...")
                     # Monte Carlo
                     mc = vf.monte_carlo_simulation(cr.returns, n_simulations=self.config.monte_carlo_runs)
                     # Bootstrap
@@ -302,14 +302,14 @@ class Pipeline:
                     validated.append(cr)
 
         except ImportError:
-            self._log("  ⚠️  validation_framework not available, passing all")
+            self._log("  [WARN]  validation_framework not available, passing all")
             validated = candidates
         except Exception as e:
-            self._log(f"  ⚠️  Validation error: {e}")
+            self._log(f"  [WARN]  Validation error: {e}")
             validated = candidates
 
         self._results["step4_validated"] = validated
-        self._log(f"  ✅ {len(validated)} validated")
+        self._log(f"  [OK] {len(validated)} validated")
 
     # ==================================================================
     # STEP 5: Risk Analysis
@@ -338,7 +338,7 @@ class Pipeline:
                 pass
 
         self._results["step5_risk_assessed"] = candidates
-        self._log(f"  ✅ Risk analysis complete for {len(candidates)} strategies")
+        self._log(f"  [OK] Risk analysis complete for {len(candidates)} strategies")
 
     # ==================================================================
     # STEP 6: Diversification Filter
@@ -366,14 +366,14 @@ class Pipeline:
             else:
                 diversified = candidates
         except ImportError:
-            self._log("  ⚠️  diversification_filter not available")
+            self._log("  [WARN]  diversification_filter not available")
             diversified = candidates
 
         self._results["step6_diversified"] = diversified
-        self._log(f"  ✂️  {len(candidates)} → {len(diversified)} after diversification")
+        self._log(f"  [CUT]  {len(candidates)} -> {len(diversified)} after diversification")
 
     # ==================================================================
-    # STEP 7: Split — Top Pool + Mutation / Validation Pool
+    # STEP 7: Split -- Top Pool + Mutation / Validation Pool
     # ==================================================================
     def step_7_split(self):
         """
@@ -391,19 +391,19 @@ class Pipeline:
         self._results["step7_top_pool"] = top_pool
         self._results["step7_validation_pool"] = validation_pool
 
-        self._log(f"  🏆 Top pool: {len(top_pool)} strategies")
-        self._log(f"  📋 Validation pool: {len(validation_pool)} strategies")
+        self._log(f"  [TROPHY] Top pool: {len(top_pool)} strategies")
+        self._log(f"  [LIST] Validation pool: {len(validation_pool)} strategies")
 
-        # Mutation — use existing mutation agent if available
+        # Mutation -- use existing mutation agent if available
         mutations = []
         try:
             from mutate_strategy import generate_variants
             for cr in top_pool:
-                self._log(f"  🧬 Generating {self.config.variants_per_strategy} variants of {cr.strategy_id}...")
-                # The mutation agent writes .py files — we just note them
+                self._log(f"  [DNA] Generating {self.config.variants_per_strategy} variants of {cr.strategy_id}...")
+                # The mutation agent writes .py files -- we just note them
                 mutations.append(cr.strategy_id)
         except ImportError:
-            self._log("  ⚠️  mutate_strategy not available for auto-mutation")
+            self._log("  [WARN]  mutate_strategy not available for auto-mutation")
             self._log("     Run manually: python mutate_strategy.py")
 
         # Shadow trading setup for validation pool
@@ -431,12 +431,12 @@ class Pipeline:
 
         variants_dir = PROJECT_ROOT / "strategies" / "variants"
         if not variants_dir.exists():
-            self._log("  ⏭️  No variants directory found")
+            self._log("  [SKIP]  No variants directory found")
             self._results["step8_validated_mutations"] = []
             return
 
         variant_files = list(variants_dir.glob("*.py"))
-        self._log(f"  📂 Found {len(variant_files)} variant files")
+        self._log(f"  [FOLDER] Found {len(variant_files)} variant files")
 
         validated = []
         for vf in variant_files[:50]:  # Cap at 50 for sanity
@@ -445,7 +445,7 @@ class Pipeline:
                 validated.append(cr)
 
         self._results["step8_validated_mutations"] = validated
-        self._log(f"  ✅ {len(validated)} mutation variants passed validation")
+        self._log(f"  [OK] {len(validated)} mutation variants passed validation")
 
     # ==================================================================
     # STEP 9: Drift Detection Baselines
@@ -464,11 +464,11 @@ class Pipeline:
                 if cr.returns is not None and len(cr.returns) > 20:
                     dd = DriftDetector(reference_returns=cr.returns, config=DriftConfig())
                     baselines[cr.strategy_id] = dd
-                    self._log(f"  📐 Baseline set for {cr.strategy_id}")
+                    self._log(f"  [MATH] Baseline set for {cr.strategy_id}")
 
             self._results["step9_drift_baselines"] = baselines
         except ImportError:
-            self._log("  ⚠️  drift_detector not available")
+            self._log("  [WARN]  drift_detector not available")
 
     # ==================================================================
     # STEP 10: Learning Loop Setup
@@ -505,7 +505,7 @@ class Pipeline:
 
             tracker.save()
             self._results["step10_experiment_id"] = exp_id
-            self._log(f"  📝 Logged {len(all_strats)} strategies to experiment tracker")
+            self._log(f"  [NOTE] Logged {len(all_strats)} strategies to experiment tracker")
 
             # Set up learning loop
             loop = LearningLoop(LoopConfig(
@@ -518,10 +518,10 @@ class Pipeline:
                     backtest_sharpe=cr.sharpe_ratio or 0,
                 )
             self._results["step10_learning_loop"] = loop
-            self._log(f"  🔄 Learning loop configured with {len(all_strats)} strategies")
+            self._log(f"  [CYCLE] Learning loop configured with {len(all_strats)} strategies")
 
         except ImportError as e:
-            self._log(f"  ⚠️  Learning modules not available: {e}")
+            self._log(f"  [WARN]  Learning modules not available: {e}")
 
     # ==================================================================
     # STEP 11: Analytics Report
@@ -556,15 +556,35 @@ class Pipeline:
             self._results["step11_report"] = report
 
         except ImportError as e:
-            self._log(f"  ⚠️  Analytics modules not available: {e}")
+            self._log(f"  [WARN]  Analytics modules not available: {e}")
 
     # ==================================================================
     # HELPERS
     # ==================================================================
     def _collect_strategies(self):
-        """Find all strategy classes to test."""
+        """Find all strategy classes to test.
+        
+        Searches:
+          1. Base strategy (simple_strategy.py)
+          2. Mutation variants (strategies/variants/)
+          3. Discovered strategies (discovered_strategies/)
+          4. Auto-exported from strategy_inbox (discovery.db -> .py files)
+        """
         import backtrader as bt
         strategies = []
+
+        # 0. Auto-export from discovery DB if strategy_inbox is available
+        try:
+            from strategy_inbox import StrategyInbox
+            inbox = StrategyInbox()
+            exported = inbox.export_for_pipeline(
+                output_dir=str(PROJECT_ROOT / "discovered_strategies"))
+            if exported > 0:
+                self._log(f"  [IN] Exported {exported} strategies from discovery DB")
+        except ImportError:
+            pass
+        except Exception as e:
+            self._log(f"  [WARN]  Strategy export failed: {e}")
 
         # 1. Base strategy
         try:
@@ -573,22 +593,39 @@ class Pipeline:
         except ImportError:
             pass
 
-        # 2. Variant files
+        # 2. Variant files (from mutation agent)
         variants_dir = PROJECT_ROOT / "strategies" / "variants"
         if variants_dir.exists():
-            for f in sorted(variants_dir.glob("*.py")):
-                try:
-                    spec = importlib.util.spec_from_file_location(f.stem, f)
-                    mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod)
-                    for attr_name in dir(mod):
-                        attr = getattr(mod, attr_name)
-                        if isinstance(attr, type) and issubclass(attr, bt.Strategy) and attr is not bt.Strategy:
-                            strategies.append((f"{f.stem}.{attr_name}", attr))
-                            break
-                except Exception:
-                    continue
+            strategies.extend(self._load_strategies_from_dir(variants_dir, bt))
 
+        # 3. Discovered strategies (from discovery pipeline + manual entries)
+        discovered_dir = PROJECT_ROOT / "discovered_strategies"
+        if discovered_dir.exists():
+            strategies.extend(self._load_strategies_from_dir(discovered_dir, bt))
+
+        self._log(f"  [LIST] Found {len(strategies)} total strategies to test")
+        return strategies
+
+    def _load_strategies_from_dir(self, directory, bt_module):
+        """Load all bt.Strategy subclasses from .py files in a directory."""
+        strategies = []
+        for f in sorted(directory.glob("*.py")):
+            if f.name.startswith("__"):
+                continue
+            try:
+                spec = importlib.util.spec_from_file_location(f.stem, f)
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                for attr_name in dir(mod):
+                    attr = getattr(mod, attr_name)
+                    if (isinstance(attr, type) and
+                        issubclass(attr, bt_module.Strategy) and
+                        attr is not bt_module.Strategy):
+                        strategies.append((f"{f.stem}.{attr_name}", attr))
+                        break
+            except Exception as e:
+                self._log(f"  [WARN]  Failed to load {f.name}: {e}")
+                continue
         return strategies
 
     def _print_summary(self, total_elapsed: float):
@@ -597,7 +634,7 @@ class Pipeline:
         self._log(f"{'='*70}")
         for step_name, elapsed in self._step_times.items():
             self._log(f"  {step_name:30s} {elapsed:8.1f}s")
-        self._log(f"  {'─'*40}")
+        self._log(f"  {'-'*40}")
         self._log(f"  {'Total':30s} {total_elapsed:8.1f}s")
 
         # Strategy counts through pipeline
@@ -614,7 +651,7 @@ class Pipeline:
         self._log(f"\n  Strategy Funnel:")
         for label, count in counts:
             if count > 0:
-                self._log(f"    {label:25s} → {count}")
+                self._log(f"    {label:25s} -> {count}")
         self._log(f"{'='*70}\n")
 
     def _save_state(self):

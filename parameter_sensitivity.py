@@ -51,7 +51,7 @@ try:
     HAS_MATPLOTLIB = True
 except ImportError:
     HAS_MATPLOTLIB = False
-    print("⚠️  matplotlib not installed - heatmap visualization disabled")
+    print("[WARN]  matplotlib not installed - heatmap visualization disabled")
 
 
 @dataclass
@@ -156,7 +156,7 @@ class ParameterSensitivity:
         # Get data once
         data = self.data_manager.get_data(symbol, timeframe, max_bars)
         if data is None or len(data) < 100:
-            print(f"❌ Insufficient data")
+            print(f"[FAIL] Insufficient data")
             return None
         
         returns = []
@@ -283,7 +283,7 @@ class ParameterSensitivity:
         # Get data once
         data = self.data_manager.get_data(symbol, timeframe, max_bars)
         if data is None or len(data) < 100:
-            print(f"❌ Insufficient data")
+            print(f"[FAIL] Insufficient data")
             return None
         
         # Initialize matrices
@@ -450,18 +450,18 @@ class ParameterSensitivity:
     def _print_single_result(self, result: SingleParamResult):
         """Print single parameter result"""
         
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"SINGLE PARAMETER ANALYSIS: {result.param_name}")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         
-        print(f"\n📊 Results:")
+        print(f"\n[STATS] Results:")
         print(f"   Best {result.param_name}: {result.best_param}")
         print(f"   Best return: {result.best_return:+.2f}%")
         print(f"   Best Sharpe: {result.best_sharpe:.2f}")
         print(f"   Stability score: {result.stability_score:.2f} (lower = more stable)")
         
         # Simple ASCII chart
-        print(f"\n📈 Return by {result.param_name}:")
+        print(f"\n[UP] Return by {result.param_name}:")
         max_ret = max(result.returns) if result.returns else 0
         min_ret = min(result.returns) if result.returns else 0
         range_ret = max_ret - min_ret if max_ret != min_ret else 1
@@ -473,42 +473,42 @@ class ParameterSensitivity:
             else:
                 bar_len = 10
             bar = '█' * bar_len
-            marker = ' ←BEST' if val == result.best_param else ''
+            marker = ' <-BEST' if val == result.best_param else ''
             print(f"   {val:>6}: {bar} {ret:+.2f}%{marker}")
         
         # Robustness assessment
-        print(f"\n🎯 Robustness Assessment:")
+        print(f"\n[TARGET] Robustness Assessment:")
         if result.stability_score < 5:
-            print(f"   ✅ ROBUST - Performance changes gradually with parameter")
+            print(f"   [OK] ROBUST - Performance changes gradually with parameter")
         elif result.stability_score < 15:
-            print(f"   ⚠️  MODERATE - Some sensitivity to parameter choice")
+            print(f"   [WARN]  MODERATE - Some sensitivity to parameter choice")
         else:
-            print(f"   ❌ FRAGILE - Performance highly dependent on exact parameter")
+            print(f"   [FAIL] FRAGILE - Performance highly dependent on exact parameter")
         
         print(f"\n{'='*60}")
     
     def _print_two_param_result(self, result: TwoParamResult):
         """Print two parameter result"""
         
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"TWO PARAMETER HEATMAP ANALYSIS")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         
-        print(f"\n📊 Results:")
+        print(f"\n[STATS] Results:")
         print(f"   Best {result.param1_name}: {result.best_params[0]}")
         print(f"   Best {result.param2_name}: {result.best_params[1]}")
         print(f"   Best return: {result.best_return:+.2f}%")
         print(f"   Best Sharpe: {result.best_sharpe:.2f}")
         
-        print(f"\n📈 Robustness Metrics:")
+        print(f"\n[UP] Robustness Metrics:")
         print(f"   Plateau score: {result.plateau_score:.1f}% (higher = more robust)")
         print(f"   Cliff score: {result.cliff_score:.2f} (lower = more robust)")
         
         # Print mini heatmap with ASCII
         print(f"\n🗺️  Return Heatmap (ASCII):")
-        print(f"      {result.param2_name} →")
+        print(f"      {result.param2_name} ->")
         print(f"   {result.param1_name}")
-        print(f"   ↓")
+        print(f"   v")
         
         matrix = result.return_matrix
         min_val = np.min(matrix)
@@ -518,7 +518,7 @@ class ParameterSensitivity:
         symbols = [' ', '░', '▒', '▓', '█']
         
         for i, val1 in enumerate(result.param1_values):
-            row = f"   {val1:>4}│"
+            row = f"   {val1:>4}|"
             for j, val2 in enumerate(result.param2_values):
                 # Normalize to 0-4
                 normalized = (matrix[i, j] - min_val) / range_val
@@ -531,13 +531,13 @@ class ParameterSensitivity:
         print(f"   Range: {min_val:.1f}% to {max_val:.1f}%")
         
         # Robustness assessment
-        print(f"\n🎯 Robustness Assessment:")
+        print(f"\n[TARGET] Robustness Assessment:")
         if result.plateau_score > 20 and result.cliff_score < 10:
-            print(f"   ✅ ROBUST - Wide plateau of good performance")
+            print(f"   [OK] ROBUST - Wide plateau of good performance")
         elif result.plateau_score > 10:
-            print(f"   ⚠️  MODERATE - Some plateau exists, but watch edges")
+            print(f"   [WARN]  MODERATE - Some plateau exists, but watch edges")
         else:
-            print(f"   ❌ FRAGILE - Performance highly dependent on exact parameters")
+            print(f"   [FAIL] FRAGILE - Performance highly dependent on exact parameters")
         
         print(f"\n{'='*60}")
     
@@ -554,7 +554,7 @@ class ParameterSensitivity:
         """
         
         if not HAS_MATPLOTLIB:
-            print("❌ matplotlib not installed. Install with: pip install matplotlib")
+            print("[FAIL] matplotlib not installed. Install with: pip install matplotlib")
             return
         
         if filepath is None:
@@ -600,7 +600,7 @@ class ParameterSensitivity:
         plt.savefig(filepath, dpi=150)
         plt.close()
         
-        print(f"📊 Saved heatmap to {filepath}")
+        print(f"[STATS] Saved heatmap to {filepath}")
 
 
 # ==============================================================================
@@ -667,7 +667,7 @@ if __name__ == "__main__":
                 symbol='EUR-USD'
             )
         elif choice == '2':
-            print("\n⚠️  This will run ~50 backtests")
+            print("\n[WARN]  This will run ~50 backtests")
             confirm = input("Continue? (Y/N): ").strip().upper()
             
             if confirm == 'Y':
@@ -683,6 +683,6 @@ if __name__ == "__main__":
             print("Invalid choice")
             
     except ImportError as e:
-        print(f"❌ Could not import strategy: {e}")
+        print(f"[FAIL] Could not import strategy: {e}")
     
     print("="*70)

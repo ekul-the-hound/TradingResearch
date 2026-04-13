@@ -95,7 +95,7 @@ class ResultsDatabase:
         
         conn.commit()
         conn.close()
-        print(f"✓ Database initialized at {self.db_path}")
+        print(f"[OK] Database initialized at {self.db_path}")
     
     def save_backtest(self, result):
         """Save a backtest result to the database"""

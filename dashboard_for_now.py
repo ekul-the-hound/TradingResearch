@@ -46,7 +46,7 @@ except ImportError:
 
 st.set_page_config(
     page_title="Trading Research Dashboard",
-    page_icon="📊",
+    page_icon="[STATS]",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -591,7 +591,7 @@ def create_asset_timeframe_heatmap(df):
 def render_sidebar():
     """Render sidebar navigation and filters"""
     
-    st.sidebar.title("📊 Trading Research")
+    st.sidebar.title("[STATS] Trading Research")
     st.sidebar.markdown("---")
     
     # Navigation
@@ -604,7 +604,7 @@ def render_sidebar():
     st.sidebar.markdown("---")
     
     # Quick Stats
-    st.sidebar.subheader("📈 Quick Stats")
+    st.sidebar.subheader("[UP] Quick Stats")
     st.sidebar.metric("Best Return", "+15.7%", "+3.2% vs baseline")
     st.sidebar.metric("Best Sharpe", "2.1", "variant_04")
     st.sidebar.metric("Active Variants", "15", "3 promising")
@@ -624,7 +624,7 @@ def render_sidebar():
 def render_overview_page(df):
     """Render overview page"""
     
-    st.title("📊 Dashboard Overview")
+    st.title("[STATS] Dashboard Overview")
     st.markdown("System overview and key metrics")
     
     # Top metrics row
@@ -656,7 +656,7 @@ def render_overview_page(df):
     
     with col2:
         # Quick validation summary
-        st.subheader("✅ Validation Summary")
+        st.subheader("[OK] Validation Summary")
         
         tests = [
             ("Permutation Test", "p=0.023", True),
@@ -667,7 +667,7 @@ def render_overview_page(df):
         ]
         
         for test, value, passed in tests:
-            icon = "✅" if passed else "⚠️"
+            icon = "[OK]" if passed else "[WARN]"
             color = "green" if passed else "orange"
             st.markdown(f"{icon} **{test}**: `{value}`")
     
@@ -734,7 +734,7 @@ def render_strategies_page(df):
     st.markdown("---")
     
     # Results table
-    st.subheader("📋 Results Table")
+    st.subheader("[LIST] Results Table")
     
     if not filtered.empty:
         display_cols = ['strategy_name', 'symbol', 'timeframe', 'total_return_pct', 
@@ -761,7 +761,7 @@ def render_strategies_page(df):
 def render_validation_page():
     """Render validation page"""
     
-    st.title("🛡️ Statistical Validation")
+    st.title("[SHIELD] Statistical Validation")
     st.markdown("Comprehensive statistical tests to validate strategy performance")
     
     # Tabs for different validation methods
@@ -819,7 +819,7 @@ def render_validation_page():
             st.metric("95% CI Upper", f"{ci_upper:.1f}%")
             
             excludes_zero = ci_lower > 0
-            st.metric("Excludes Zero?", "YES ✅" if excludes_zero else "NO ⚠️",
+            st.metric("Excludes Zero?", "YES [OK]" if excludes_zero else "NO [WARN]",
                      delta="Significant" if excludes_zero else "Not significant")
     
     with tab3:
@@ -864,7 +864,7 @@ def render_validation_page():
         with col2:
             st.metric("Real Return", f"{real_value:.1f}%")
             st.metric("p-value", f"{p_value:.3f}")
-            st.metric("Significant?", "YES ✅" if p_value < 0.05 else "NO ⚠️",
+            st.metric("Significant?", "YES [OK]" if p_value < 0.05 else "NO [WARN]",
                      delta="p < 0.05" if p_value < 0.05 else "p >= 0.05",
                      delta_color="normal" if p_value < 0.05 else "inverse")
 
@@ -872,7 +872,7 @@ def render_validation_page():
 def render_robustness_page():
     """Render robustness testing page"""
     
-    st.title("⚡ Robustness Testing")
+    st.title("[ZAP] Robustness Testing")
     st.markdown("Stress tests and sensitivity analysis")
     
     # Tabs
@@ -892,13 +892,13 @@ def render_robustness_page():
             st.markdown("**Latency Sensitivity**")
             st.markdown("- Baseline return: +15.7%")
             st.markdown("- At 500ms delay: +10.1% (-36%)")
-            st.markdown("- ⚠️ Degrades to 80% at ~500ms")
+            st.markdown("- [WARN] Degrades to 80% at ~500ms")
         
         with col2:
             st.markdown("**Slippage Stress**")
             st.markdown("- Baseline return: +15.7%")
             st.markdown("- At 20 bps: +9.3% (-41%)")
-            st.markdown("- ⚠️ Breaks even at ~45 bps")
+            st.markdown("- [WARN] Breaks even at ~45 bps")
     
     with tab2:
         st.subheader("Parameter Sensitivity Heatmap")
@@ -933,14 +933,14 @@ def render_robustness_page():
         with col2:
             st.markdown("**Regime Summary**")
             for _, row in regime_data.iterrows():
-                icon = "🟢" if row['return_pct'] > 0 else "🔴"
+                icon = "[GREEN]" if row['return_pct'] > 0 else "[RED]"
                 st.markdown(f"{icon} **{row['regime']}**: {row['return_pct']:+.1f}% ({row['trades']} trades)")
 
 
 def render_analysis_page():
     """Render detailed analysis page"""
     
-    st.title("📈 Detailed Analysis")
+    st.title("[UP] Detailed Analysis")
     st.markdown("Deep dive into strategy performance")
     
     col1, col2 = st.columns(2)
@@ -1003,12 +1003,12 @@ def render_reports_page():
         st.subheader("Available Reports")
         
         reports = [
-            ("📊 Full Validation Report", "Complete statistical analysis with all tests"),
+            ("[STATS] Full Validation Report", "Complete statistical analysis with all tests"),
             ("🔀 Strategy Comparison", "Side-by-side comparison of all variants"),
-            ("⚡ Robustness Summary", "Stress test results and sensitivity analysis"),
-            ("📈 Regime Analysis", "Performance breakdown by market condition"),
-            ("💰 Cost Analysis", "Trading costs and net return calculations"),
-            ("⚠️ Failure Patterns", "Analysis of losing trades and strategies"),
+            ("[ZAP] Robustness Summary", "Stress test results and sensitivity analysis"),
+            ("[UP] Regime Analysis", "Performance breakdown by market condition"),
+            ("[COST] Cost Analysis", "Trading costs and net return calculations"),
+            ("[WARN] Failure Patterns", "Analysis of losing trades and strategies"),
         ]
         
         for title, desc in reports:
@@ -1022,13 +1022,13 @@ def render_reports_page():
         
         st.markdown("**Export Options**")
         
-        if st.button("📥 Export All Results (CSV)"):
+        if st.button("[IN] Export All Results (CSV)"):
             st.info("In production, this would download results.csv")
         
-        if st.button("📥 Export Summary (JSON)"):
+        if st.button("[IN] Export Summary (JSON)"):
             st.info("In production, this would download summary.json")
         
-        if st.button("📥 Export Charts (PNG)"):
+        if st.button("[IN] Export Charts (PNG)"):
             st.info("In production, this would download chart images")
         
         st.markdown("---")

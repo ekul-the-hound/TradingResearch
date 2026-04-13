@@ -90,7 +90,7 @@ class AdversarialReviewer:
         """
         
         print(f"\n{'='*60}")
-        print(f"🔴 ADVERSARIAL CODE REVIEW")
+        print(f"[RED] ADVERSARIAL CODE REVIEW")
         print(f"{'='*60}")
         print(f"Strategy: {strategy_name}")
         print(f"Sending to Claude for critical analysis...")
@@ -188,7 +188,7 @@ Be HARSH. Your job is to protect the user from losing money on a flawed strategy
             return review
             
         except json.JSONDecodeError as e:
-            print(f"⚠️  Failed to parse Claude response as JSON: {e}")
+            print(f"[WARN]  Failed to parse Claude response as JSON: {e}")
             print(f"Raw response: {response_text[:500]}...")
             
             # Return a default review
@@ -206,7 +206,7 @@ Be HARSH. Your job is to protect the user from losing money on a flawed strategy
             )
             
         except Exception as e:
-            print(f"❌ API error: {e}")
+            print(f"[FAIL] API error: {e}")
             raise
     
     # =========================================================================
@@ -230,7 +230,7 @@ Be HARSH. Your job is to protect the user from losing money on a flawed strategy
         """
         
         print(f"\n{'='*60}")
-        print(f"🔴 ADVERSARIAL RESULTS REVIEW")
+        print(f"[RED] ADVERSARIAL RESULTS REVIEW")
         print(f"{'='*60}")
         print(f"Strategy: {strategy_name}")
         print(f"Sending results to Claude for critical analysis...")
@@ -320,7 +320,7 @@ Be SKEPTICAL. Assume results are too good until proven otherwise."""
             return review
             
         except json.JSONDecodeError as e:
-            print(f"⚠️  Failed to parse response: {e}")
+            print(f"[WARN]  Failed to parse response: {e}")
             return AdversarialReview(
                 timestamp=datetime.now().isoformat(),
                 strategy_name=strategy_name,
@@ -335,7 +335,7 @@ Be SKEPTICAL. Assume results are too good until proven otherwise."""
             )
             
         except Exception as e:
-            print(f"❌ API error: {e}")
+            print(f"[FAIL] API error: {e}")
             raise
     
     # =========================================================================
@@ -365,7 +365,7 @@ Be SKEPTICAL. Assume results are too good until proven otherwise."""
         """
         
         print(f"\n{'='*60}")
-        print(f"🔴 FULL ADVERSARIAL REVIEW")
+        print(f"[RED] FULL ADVERSARIAL REVIEW")
         print(f"{'='*60}")
         print(f"Strategy: {strategy_name}")
         print(f"Conducting comprehensive adversarial analysis...")
@@ -465,12 +465,12 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
             input_tokens = response.usage.input_tokens
             output_tokens = response.usage.output_tokens
             cost = (input_tokens / 1_000_000) * 3 + (output_tokens / 1_000_000) * 15
-            print(f"\n💰 API Cost: ~${cost:.4f}")
+            print(f"\n[COST] API Cost: ~${cost:.4f}")
             
             return review
             
         except json.JSONDecodeError as e:
-            print(f"⚠️  Failed to parse response: {e}")
+            print(f"[WARN]  Failed to parse response: {e}")
             return AdversarialReview(
                 timestamp=datetime.now().isoformat(),
                 strategy_name=strategy_name,
@@ -485,7 +485,7 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
             )
             
         except Exception as e:
-            print(f"❌ API error: {e}")
+            print(f"[FAIL] API error: {e}")
             raise
     
     # =========================================================================
@@ -495,56 +495,56 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
     def _print_review(self, review: AdversarialReview):
         """Print formatted review"""
         
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"ADVERSARIAL REVIEW: {review.strategy_name}")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         
         # Risk score with visual
-        risk_bar = "🔴" * review.overall_risk_score + "⚪" * (10 - review.overall_risk_score)
-        print(f"\n🎯 RISK SCORE: {review.overall_risk_score}/10")
+        risk_bar = "[RED]" * review.overall_risk_score + "[DOT]" * (10 - review.overall_risk_score)
+        print(f"\n[TARGET] RISK SCORE: {review.overall_risk_score}/10")
         print(f"   {risk_bar}")
         
         # Recommendation
         rec_emoji = {
-            "REJECT": "❌",
-            "REVISE": "⚠️",
-            "PROCEED_WITH_CAUTION": "🟡",
-            "APPROVE": "✅"
+            "REJECT": "[FAIL]",
+            "REVISE": "[WARN]",
+            "PROCEED_WITH_CAUTION": "[YELLOW]",
+            "APPROVE": "[OK]"
         }
-        print(f"\n📋 RECOMMENDATION: {rec_emoji.get(review.recommended_action, '❓')} {review.recommended_action}")
+        print(f"\n[LIST] RECOMMENDATION: {rec_emoji.get(review.recommended_action, '❓')} {review.recommended_action}")
         
         # Critical flaws
         if review.critical_flaws:
-            print(f"\n🚨 CRITICAL FLAWS:")
+            print(f"\n[ALERT] CRITICAL FLAWS:")
             for flaw in review.critical_flaws:
-                print(f"   • {flaw}")
+                print(f"   - {flaw}")
         
         # Warnings
         if review.warnings:
-            print(f"\n⚠️  WARNINGS:")
+            print(f"\n[WARN]  WARNINGS:")
             for warning in review.warnings:
-                print(f"   • {warning}")
+                print(f"   - {warning}")
         
         # Overfitting indicators
         if review.overfitting_indicators:
-            print(f"\n📈 OVERFITTING INDICATORS:")
+            print(f"\n[UP] OVERFITTING INDICATORS:")
             for indicator in review.overfitting_indicators:
-                print(f"   • {indicator}")
+                print(f"   - {indicator}")
         
         # Market vulnerabilities
         if review.market_conditions_vulnerable:
-            print(f"\n🌊 VULNERABLE IN:")
+            print(f"\n[WAVE] VULNERABLE IN:")
             for condition in review.market_conditions_vulnerable:
-                print(f"   • {condition}")
+                print(f"   - {condition}")
         
         # Suggestions
         if review.suggestions:
-            print(f"\n💡 SUGGESTIONS:")
+            print(f"\n[TIP] SUGGESTIONS:")
             for suggestion in review.suggestions:
-                print(f"   • {suggestion}")
+                print(f"   - {suggestion}")
         
         # Full analysis
-        print(f"\n📝 FULL ANALYSIS:")
+        print(f"\n[NOTE] FULL ANALYSIS:")
         print(f"   {review.full_analysis}")
         
         print(f"\n{'='*60}")
@@ -577,7 +577,7 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
         with open(filepath, 'w') as f:
             json.dump(reviews_data, f, indent=2)
         
-        print(f"💾 Saved {len(self.reviews)} reviews to {filepath}")
+        print(f"[SAVE] Saved {len(self.reviews)} reviews to {filepath}")
 
 
 # ==============================================================================
@@ -628,11 +628,11 @@ if __name__ == "__main__":
     
     # Check API key
     if not config.CLAUDE_API_KEY:
-        print("❌ No Claude API key configured")
+        print("[FAIL] No Claude API key configured")
         print("   Add your key to BacktestingAgent_API_KEY.txt")
         exit()
     
-    print("✅ Claude API key found")
+    print("[OK] Claude API key found")
     
     # Try to load a strategy
     try:
@@ -641,22 +641,22 @@ if __name__ == "__main__":
             with open(strategy_path, 'r') as f:
                 code = f.read()
             
-            print(f"\n📄 Loaded strategy: {strategy_path.name}")
+            print(f"\n[FILE] Loaded strategy: {strategy_path.name}")
             
             # Ask for confirmation (costs money)
-            print(f"\n⚠️  This will make a Claude API call (~$0.15-0.25)")
+            print(f"\n[WARN]  This will make a Claude API call (~$0.15-0.25)")
             confirm = input("Proceed with adversarial review? (Y/N): ").strip().upper()
             
             if confirm == 'Y':
                 reviewer = AdversarialReviewer()
                 review = reviewer.review_strategy_code(code, "SimpleMovingAverageCrossover")
-                print("\n✅ Adversarial review complete!")
+                print("\n[OK] Adversarial review complete!")
             else:
                 print("Cancelled.")
         else:
-            print(f"⚠️  Strategy file not found: {strategy_path}")
+            print(f"[WARN]  Strategy file not found: {strategy_path}")
             
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
     
     print("="*70)

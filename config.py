@@ -319,17 +319,17 @@ def validate_config():
             warnings.append("CCXT not installed (crypto will use local files only). Run: pip install ccxt")
     
     if errors:
-        print("❌ Configuration Errors:")
+        print("[FAIL] Configuration Errors:")
         for error in errors:
             print(f"  - {error}")
         return False
     
     if warnings:
-        print("⚠️  Configuration Warnings:")
+        print("[WARN]  Configuration Warnings:")
         for warning in warnings:
             print(f"  - {warning}")
     
-    print("✅ Configuration validated successfully")
+    print("[OK] Configuration validated successfully")
     return True
 
 def print_config_summary():
@@ -339,10 +339,10 @@ def print_config_summary():
     print("="*70)
     
     print(f"\nActive Asset Classes:")
-    print(f"  {'✅' if FOREX_ENABLED else '⏸️ '} Forex:       {len(FOREX_WATCHLIST)} pairs (local files)")
-    print(f"  {'✅' if CRYPTO_ENABLED else '⏸️ '} Crypto:      {len(CRYPTO_WATCHLIST)} currencies (local → CCXT)")
-    print(f"  {'✅' if INDICES_ENABLED else '⏸️ '} Indices:     {len(INDEX_WATCHLIST)} indices (local Kaggle)")
-    print(f"  {'✅' if COMMODITIES_ENABLED else '⏸️ '} Commodities: {len(COMMODITY_WATCHLIST)} commodities (disabled)")
+    print(f"  {'[OK]' if FOREX_ENABLED else '⏸️ '} Forex:       {len(FOREX_WATCHLIST)} pairs (local files)")
+    print(f"  {'[OK]' if CRYPTO_ENABLED else '⏸️ '} Crypto:      {len(CRYPTO_WATCHLIST)} currencies (local -> CCXT)")
+    print(f"  {'[OK]' if INDICES_ENABLED else '⏸️ '} Indices:     {len(INDEX_WATCHLIST)} indices (local Kaggle)")
+    print(f"  {'[OK]' if COMMODITIES_ENABLED else '⏸️ '} Commodities: {len(COMMODITY_WATCHLIST)} commodities (disabled)")
     
     print(f"\nData Paths:")
     print(f"  Forex data:   {FOREX_BASE_PATH}")
@@ -351,7 +351,7 @@ def print_config_summary():
     print(f"  Database:     {DATABASE_PATH}")
     
     print(f"\nAPI Status:")
-    print(f"  Claude API:  {'✅ Configured' if CLAUDE_API_KEY else '❌ Not configured'}")
+    print(f"  Claude API:  {'[OK] Configured' if CLAUDE_API_KEY else '[FAIL] Not configured'}")
     
     print("="*70)
 

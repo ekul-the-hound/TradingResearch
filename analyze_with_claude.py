@@ -87,7 +87,7 @@ def analyze_with_claude(results):
     """
     
     if not config.CLAUDE_API_KEY:
-        print("❌ ERROR: No Claude API key found!")
+        print("[FAIL] ERROR: No Claude API key found!")
         print("   Check BacktestingAgent_API_KEY.txt")
         return None
     
@@ -164,7 +164,7 @@ Please provide a comprehensive analysis:
 Be brutally honest. If the strategy is fundamentally flawed, say so clearly."""
 
     # Call Claude API
-    print("\n🤖 Sending results to Claude for analysis...")
+    print("\n[AI] Sending results to Claude for analysis...")
     print("   This may take 10-30 seconds...\n")
     
     try:
@@ -183,7 +183,7 @@ Be brutally honest. If the strategy is fundamentally flawed, say so clearly."""
         return analysis
         
     except Exception as e:
-        print(f"❌ Error calling Claude API: {e}")
+        print(f"[FAIL] Error calling Claude API: {e}")
         return None
 
 def main():
@@ -196,29 +196,29 @@ def main():
     print("="*80)
     
     # Get recent results from database
-    print("\n📊 Loading backtest results from database...")
+    print("\n[STATS] Loading backtest results from database...")
     results = get_recent_backtests(limit=200)  # Get last 200 tests
     
     if not results:
-        print("❌ No backtest results found in database!")
+        print("[FAIL] No backtest results found in database!")
         print("   Run: python run_backtests.py first")
         return
     
-    print(f"✓ Found {len(results)} backtest results")
+    print(f"[OK] Found {len(results)} backtest results")
     
     # Show what will be analyzed
     by_timeframe, by_asset_type = count_by_category(results)
     
     print(f"\nResults breakdown:")
-    print(f"  • Forex:       {len(by_asset_type['Forex'])} tests")
-    print(f"  • Indices:     {len(by_asset_type['Indices'])} tests")
-    print(f"  • Commodities: {len(by_asset_type['Commodities'])} tests")
-    print(f"  • Crypto:      {len(by_asset_type['Crypto'])} tests")
-    print(f"\n  • Timeframes:  {', '.join(f'{tf}({len(r)})' for tf, r in by_timeframe.items())}")
+    print(f"  - Forex:       {len(by_asset_type['Forex'])} tests")
+    print(f"  - Indices:     {len(by_asset_type['Indices'])} tests")
+    print(f"  - Commodities: {len(by_asset_type['Commodities'])} tests")
+    print(f"  - Crypto:      {len(by_asset_type['Crypto'])} tests")
+    print(f"\n  - Timeframes:  {', '.join(f'{tf}({len(r)})' for tf, r in by_timeframe.items())}")
     
     # Estimate cost
     estimated_cost = estimate_cost(len(results))
-    print(f"\n💰 Estimated API cost: ${estimated_cost:.3f}")
+    print(f"\n[COST] Estimated API cost: ${estimated_cost:.3f}")
     print(f"   (Your $5 credit remaining: ~${5 - estimated_cost:.2f} after this)")
     
     # Quick preview of performance
@@ -226,7 +226,7 @@ def main():
     positive = len([r for r in results if r['total_return_pct'] > 0])
     strong = len([r for r in results if r.get('sharpe_ratio') and r['sharpe_ratio'] > 0.5])
     
-    print(f"\n📈 Quick Preview:")
+    print(f"\n[UP] Quick Preview:")
     print(f"   Average Return:       {avg_return:+.2f}%")
     print(f"   Positive Returns:     {positive}/{len(results)} ({positive/len(results)*100:.0f}%)")
     print(f"   Strong (Sharpe>0.5):  {strong}/{len(results)} ({strong/len(results)*100:.0f}%)")
@@ -237,7 +237,7 @@ def main():
     response = input("\nSend these results to Claude for analysis? (Y/N): ").strip().upper()
     
     if response != 'Y':
-        print("\n❌ Analysis cancelled. No API credits used.")
+        print("\n[FAIL] Analysis cancelled. No API credits used.")
         print("   You can run this script again anytime to analyze results.")
         return
     
@@ -246,7 +246,7 @@ def main():
     
     if analysis:
         print("\n" + "="*80)
-        print("🤖 CLAUDE'S ANALYSIS")
+        print("[AI] CLAUDE'S ANALYSIS")
         print("="*80)
         print(analysis)
         print("="*80 + "\n")
@@ -266,10 +266,10 @@ def main():
                 f.write("="*80 + "\n\n")
                 f.write(analysis)
             
-            print(f"\n✓ Analysis saved to: {filename}")
+            print(f"\n[OK] Analysis saved to: {filename}")
     
     else:
-        print("\n❌ Analysis failed. See error messages above.")
+        print("\n[FAIL] Analysis failed. See error messages above.")
         print("   No API credits were used (failed before API call).")
 
 if __name__ == "__main__":

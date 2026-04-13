@@ -121,13 +121,13 @@ class PermutationTester:
         # Get real data
         data = self.data_manager.get_data(symbol, timeframe, max_bars)
         if data is None or len(data) < 100:
-            print(f"❌ Insufficient data for {symbol}")
+            print(f"[FAIL] Insufficient data for {symbol}")
             return None
         
-        print(f"\n📊 Data: {len(data)} bars")
+        print(f"\n[STATS] Data: {len(data)} bars")
         
         # Run on real data
-        print(f"\n🎯 Running on REAL data...")
+        print(f"\n[TARGET] Running on REAL data...")
         real_result = self._run_backtest(
             strategy_class, data, initial_cash, commission, strategy_params
         )
@@ -335,25 +335,25 @@ class PermutationTester:
     def _print_result(self, result: PermutationResult):
         """Print formatted result"""
         
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"PERMUTATION TEST RESULTS")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         
-        print(f"\n📊 {result.metric_name.upper()} Analysis:")
+        print(f"\n[STATS] {result.metric_name.upper()} Analysis:")
         print(f"   Real value:        {result.real_value:.4f}")
         print(f"   Permutation mean:  {result.permutation_mean:.4f}")
         print(f"   Permutation std:   {result.permutation_std:.4f}")
         print(f"   Percentile rank:   {result.percentile_rank:.1f}%")
         
-        print(f"\n📈 Statistical Significance:")
+        print(f"\n[UP] Statistical Significance:")
         print(f"   p-value:           {result.p_value:.4f}")
         print(f"   Alpha:             {result.significance_level}")
         
         if result.is_significant:
-            print(f"\n   ✅ SIGNIFICANT - Strategy beats random at {(1-result.significance_level)*100:.0f}% confidence")
+            print(f"\n   [OK] SIGNIFICANT - Strategy beats random at {(1-result.significance_level)*100:.0f}% confidence")
             print(f"      Your strategy's {result.metric_name} is better than {result.percentile_rank:.1f}% of random shuffles")
         else:
-            print(f"\n   ❌ NOT SIGNIFICANT - Strategy may be overfit")
+            print(f"\n   [FAIL] NOT SIGNIFICANT - Strategy may be overfit")
             print(f"      Your strategy's {result.metric_name} is only better than {result.percentile_rank:.1f}% of random shuffles")
             print(f"      This suggests the results could be due to chance/overfitting")
         
@@ -393,7 +393,7 @@ if __name__ == "__main__":
     try:
         from strategies.simple_strategy import SimpleMovingAverageCrossover
         
-        print("\n⚠️  This will run 100 backtests (may take a few minutes)")
+        print("\n[WARN]  This will run 100 backtests (may take a few minutes)")
         confirm = input("Run permutation test? (Y/N): ").strip().upper()
         
         if confirm == 'Y':
@@ -404,11 +404,11 @@ if __name__ == "__main__":
                 n_permutations=100
             )
             
-            print("\n✅ Permutation test complete!")
+            print("\n[OK] Permutation test complete!")
         else:
             print("Cancelled.")
             
     except ImportError as e:
-        print(f"❌ Could not import strategy: {e}")
+        print(f"[FAIL] Could not import strategy: {e}")
     
     print("="*70)

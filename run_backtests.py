@@ -45,28 +45,28 @@ def main():
     # Forex
     if config.FOREX_ENABLED:
         active_assets.extend(config.FOREX_WATCHLIST)
-        print(f"  ✅ Forex:       {len(config.FOREX_WATCHLIST)} pairs (local files)")
+        print(f"  [OK] Forex:       {len(config.FOREX_WATCHLIST)} pairs (local files)")
     else:
         print(f"  ⏸️  Forex:       DISABLED")
     
     # Crypto
     if config.CRYPTO_ENABLED:
         active_assets.extend(config.CRYPTO_WATCHLIST)
-        print(f"  ✅ Crypto:      {len(config.CRYPTO_WATCHLIST)} currencies (CCXT)")
+        print(f"  [OK] Crypto:      {len(config.CRYPTO_WATCHLIST)} currencies (CCXT)")
     else:
         print(f"  ⏸️  Crypto:      DISABLED")
     
     # Indices (disabled)
     if config.INDICES_ENABLED:
         active_assets.extend(config.INDEX_WATCHLIST)
-        print(f"  ✅ Indices:     {len(config.INDEX_WATCHLIST)} indices")
+        print(f"  [OK] Indices:     {len(config.INDEX_WATCHLIST)} indices")
     else:
         print(f"  ⏸️  Indices:     DISABLED (awaiting IBKR)")
     
     # Commodities (disabled)
     if config.COMMODITIES_ENABLED:
         active_assets.extend(config.COMMODITY_WATCHLIST)
-        print(f"  ✅ Commodities: {len(config.COMMODITY_WATCHLIST)} commodities")
+        print(f"  [OK] Commodities: {len(config.COMMODITY_WATCHLIST)} commodities")
     else:
         print(f"  ⏸️  Commodities: DISABLED (awaiting futures source)")
     
@@ -76,7 +76,7 @@ def main():
     # VALIDATION
     # ========================================================================
     if not active_assets:
-        print("\n❌ No active assets to test!")
+        print("\n[FAIL] No active assets to test!")
         print("   Enable Forex or Crypto in config.py:")
         print("   - Set FOREX_ENABLED = True")
         print("   - Set CRYPTO_ENABLED = True")
@@ -99,10 +99,10 @@ def main():
     response = input("\nProceed with backtests? (Y/N): ").strip().upper()
     
     if response != 'Y':
-        print("❌ Backtests cancelled.")
+        print("[FAIL] Backtests cancelled.")
         return
     
-    print("\n🚀 Starting backtests...\n")
+    print("\n[LAUNCH] Starting backtests...\n")
     
     # ========================================================================
     # RUN BACKTESTS
@@ -165,13 +165,13 @@ def main():
                 print(f"  {r['symbol']:12} {r['timeframe']:6} | "
                       f"Sharpe: {r['sharpe_ratio']:5.2f} | Return: {r['total_return_pct']:+6.2f}%")
     else:
-        print("\n⚠️  No results to summarize")
+        print("\n[WARN]  No results to summarize")
     
     # ========================================================================
     # COMPLETION MESSAGE
     # ========================================================================
     print("\n" + "="*80)
-    print("✅ BACKTESTS COMPLETE!")
+    print("[OK] BACKTESTS COMPLETE!")
     print("="*80)
     print(f"\nResults saved to database: {config.DATABASE_PATH}")
     print(f"\nNext steps:")

@@ -1,2 +1,51 @@
+# ==============================================================================
+# requirements.txt — TradingLab Complete Dependencies
+# ==============================================================================
+# Install: pip install -r requirements.txt
+#
+# Note: Some packages are optional (marked). The system degrades
+# gracefully if they're missing — modules just won't load.
+# ==============================================================================
 
-reflex==0.8.26
+# --- Core ---
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+
+# --- Backtesting ---
+backtrader>=1.9.78
+
+# --- Data Sources ---
+yfinance>=0.2.18
+rarfile>=4.0
+
+# --- Claude API (strategy mutation) ---
+anthropic>=0.18.0
+
+# --- Dashboard (ReactPy) ---
+reactpy[fastapi]>=1.0.0
+uvicorn[standard]>=0.24.0
+plotly>=5.18.0
+fastapi>=0.104.0
+
+# --- Phase 1: Foundation ---
+joblib>=1.3.0
+# quantstats>=0.0.62        # Optional: HTML tearsheets
+# mlflow>=2.8.0              # Optional: experiment tracking
+
+# --- Phase 2: Optimization ---
+# pymoo>=0.6.0               # Optional: NSGA-II multi-objective
+# scikit-learn>=1.3.0        # Optional: surrogate model backends
+
+# --- Phase 4: Live Trading ---
+# ccxt>=4.0.0                # Optional: crypto broker (Binance, Kraken)
+# ib_insync>=0.9.86          # Optional: Interactive Brokers
+
+# --- Phase 5: Discovery ---
+requests>=2.31.0
+# sentence-transformers>=2.2.0  # Optional: FAISS semantic dedup
+# faiss-cpu>=1.7.4              # Optional: vector similarity search
+
+# --- Utilities ---
+tabulate>=0.9.0
+pytz>=2023.3

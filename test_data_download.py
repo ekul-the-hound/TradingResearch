@@ -43,7 +43,7 @@ def test_forex_local():
     # Test all Forex pairs
     for symbol in config.FOREX_WATCHLIST:
         pair_results = {'symbol': symbol, 'timeframes': {}}
-        print(f"\n📊 Testing {symbol}...")
+        print(f"\n[STATS] Testing {symbol}...")
         
         for timeframe in config.FOREX_ALLOWED_TIMEFRAMES:
             results['total_tests'] += 1
@@ -60,16 +60,16 @@ def test_forex_local():
                 if data is not None and len(data) > 0:
                     results['successful'] += 1
                     pair_results['timeframes'][timeframe] = len(data)
-                    print(f"✅ {len(data)} bars")
+                    print(f"[OK] {len(data)} bars")
                 else:
                     results['failed'] += 1
                     pair_results['timeframes'][timeframe] = 0
-                    print(f"❌ No data")
+                    print(f"[FAIL] No data")
             
             except Exception as e:
                 results['failed'] += 1
                 pair_results['timeframes'][timeframe] = 0
-                print(f"❌ Error: {str(e)[:50]}")
+                print(f"[FAIL] Error: {str(e)[:50]}")
         
         results['details'].append(pair_results)
     
@@ -82,7 +82,7 @@ def test_forex_local():
         symbol = pair_result['symbol']
         successful_tfs = sum(1 for v in pair_result['timeframes'].values() if v > 0)
         total_tfs = len(pair_result['timeframes'])
-        status = "✅" if successful_tfs == total_tfs else "⚠️ " if successful_tfs > 0 else "❌"
+        status = "[OK]" if successful_tfs == total_tfs else "[WARN] " if successful_tfs > 0 else "[FAIL]"
         print(f"  {status} {symbol}: {successful_tfs}/{total_tfs} timeframes")
     
     print(f"\n  Overall: {results['successful']}/{results['total_tests']} tests passed")
@@ -110,9 +110,9 @@ def test_crypto_ccxt():
     # Check CCXT availability
     try:
         import ccxt
-        print(f"✅ CCXT version: {ccxt.__version__}")
+        print(f"[OK] CCXT version: {ccxt.__version__}")
     except ImportError:
-        print("❌ CCXT not installed. Run: pip install ccxt")
+        print("[FAIL] CCXT not installed. Run: pip install ccxt")
         return {'error': 'CCXT not installed'}
     
     manager = DataManager()
@@ -128,7 +128,7 @@ def test_crypto_ccxt():
     
     for symbol in config.CRYPTO_WATCHLIST:
         asset_results = {'symbol': symbol, 'timeframes': {}}
-        print(f"\n📊 Testing {symbol}...")
+        print(f"\n[STATS] Testing {symbol}...")
         
         for timeframe in test_timeframes:
             results['total_tests'] += 1
@@ -145,11 +145,11 @@ def test_crypto_ccxt():
                 if data is not None and len(data) > 0:
                     results['successful'] += 1
                     asset_results['timeframes'][timeframe] = len(data)
-                    print(f"✅ {len(data)} bars")
+                    print(f"[OK] {len(data)} bars")
                 else:
                     results['failed'] += 1
                     asset_results['timeframes'][timeframe] = 0
-                    print(f"❌ No data")
+                    print(f"[FAIL] No data")
                 
                 # Rate limit protection
                 time.sleep(0.5)
@@ -157,7 +157,7 @@ def test_crypto_ccxt():
             except Exception as e:
                 results['failed'] += 1
                 asset_results['timeframes'][timeframe] = 0
-                print(f"❌ Error: {str(e)[:50]}")
+                print(f"[FAIL] Error: {str(e)[:50]}")
         
         results['details'].append(asset_results)
     
@@ -170,7 +170,7 @@ def test_crypto_ccxt():
         symbol = asset_result['symbol']
         successful_tfs = sum(1 for v in asset_result['timeframes'].values() if v > 0)
         total_tfs = len(asset_result['timeframes'])
-        status = "✅" if successful_tfs == total_tfs else "⚠️ " if successful_tfs > 0 else "❌"
+        status = "[OK]" if successful_tfs == total_tfs else "[WARN] " if successful_tfs > 0 else "[FAIL]"
         print(f"  {status} {symbol}: {successful_tfs}/{total_tfs} timeframes")
     
     print(f"\n  Overall: {results['successful']}/{results['total_tests']} tests passed")
@@ -192,32 +192,32 @@ def test_disabled_sources():
     results = {'indices': None, 'commodities': None}
     
     # Test Indices
-    print("\n📊 Testing Indices (should return None)...")
+    print("\n[STATS] Testing Indices (should return None)...")
     if not config.INDICES_ENABLED:
         test_symbol = '^GSPC'  # S&P 500
         data = manager.get_data(test_symbol, timeframe='1hour', max_bars=100)
         
         if data is None:
-            print(f"  ✅ {test_symbol}: Correctly returned None (disabled)")
+            print(f"  [OK] {test_symbol}: Correctly returned None (disabled)")
             results['indices'] = 'passed'
         else:
-            print(f"  ❌ {test_symbol}: Should have returned None but got data")
+            print(f"  [FAIL] {test_symbol}: Should have returned None but got data")
             results['indices'] = 'failed'
     else:
         print(f"  ⏸️  Indices are enabled - skipping disabled test")
         results['indices'] = 'skipped'
     
     # Test Commodities
-    print("\n📊 Testing Commodities (should return None)...")
+    print("\n[STATS] Testing Commodities (should return None)...")
     if not config.COMMODITIES_ENABLED:
         test_symbol = 'GC=F'  # Gold
         data = manager.get_data(test_symbol, timeframe='1hour', max_bars=100)
         
         if data is None:
-            print(f"  ✅ {test_symbol}: Correctly returned None (disabled)")
+            print(f"  [OK] {test_symbol}: Correctly returned None (disabled)")
             results['commodities'] = 'passed'
         else:
-            print(f"  ❌ {test_symbol}: Should have returned None but got data")
+            print(f"  [FAIL] {test_symbol}: Should have returned None but got data")
             results['commodities'] = 'failed'
     else:
         print(f"  ⏸️  Commodities are enabled - skipping disabled test")
@@ -265,24 +265,24 @@ def test_cache_system():
     timeframe = '1hour'
     
     # First download (fresh)
-    print(f"\n📊 Testing cache with {test_symbol} ({test_type})...")
+    print(f"\n[STATS] Testing cache with {test_symbol} ({test_type})...")
     print(f"\n   First load (fresh)...", end=" ", flush=True)
     start = time.time()
     data1 = manager.get_data(test_symbol, timeframe=timeframe, max_bars=100, use_cache=False)
     time1 = time.time() - start
     
     if data1 is None:
-        print(f"❌ Failed to get data")
+        print(f"[FAIL] Failed to get data")
         return {'error': 'Failed to get data for cache test'}
     
-    print(f"✅ {len(data1)} bars in {time1:.2f}s")
+    print(f"[OK] {len(data1)} bars in {time1:.2f}s")
     
     # Second download (cached)
     print(f"   Second load (cache)...", end=" ", flush=True)
     start = time.time()
     data2 = manager.get_data(test_symbol, timeframe=timeframe, max_bars=100, use_cache=True)
     time2 = time.time() - start
-    print(f"✅ {len(data2)} bars in {time2:.2f}s")
+    print(f"[OK] {len(data2)} bars in {time2:.2f}s")
     
     # Calculate speedup
     speedup = time1 / time2 if time2 > 0 else float('inf')
@@ -295,12 +295,12 @@ def test_cache_system():
     print(f"  Speedup:      {speedup:.1f}x faster")
     
     if len(data1) == len(data2):
-        print(f"  Data match:   ✅ Same number of bars")
+        print(f"  Data match:   [OK] Same number of bars")
     else:
-        print(f"  Data match:   ⚠️  Different bar counts ({len(data1)} vs {len(data2)})")
+        print(f"  Data match:   [WARN]  Different bar counts ({len(data1)} vs {len(data2)})")
     
     cache_working = speedup > 1.5  # Cache should be at least 1.5x faster
-    print(f"\n  {'✅ Cache working properly!' if cache_working else '⚠️  Cache may not be working optimally'}")
+    print(f"\n  {'[OK] Cache working properly!' if cache_working else '[WARN]  Cache may not be working optimally'}")
     
     return {
         'fresh_time': time1,
@@ -330,7 +330,7 @@ def test_timeframe_resampling():
     manager = DataManager()
     symbol = config.FOREX_WATCHLIST[0]
     
-    print(f"\n📊 Testing resampling for {symbol}...")
+    print(f"\n[STATS] Testing resampling for {symbol}...")
     
     results = {}
     
@@ -339,10 +339,10 @@ def test_timeframe_resampling():
     data_1min = manager.get_data(symbol, timeframe='1min', max_bars=1000, use_cache=False)
     
     if data_1min is None:
-        print(f"❌ Failed to load 1min data")
+        print(f"[FAIL] Failed to load 1min data")
         return {'error': 'Failed to load 1min data'}
     
-    print(f"✅ {len(data_1min)} bars")
+    print(f"[OK] {len(data_1min)} bars")
     results['1min'] = len(data_1min)
     
     # Test each higher timeframe
@@ -365,13 +365,13 @@ def test_timeframe_resampling():
             tolerance = expected_count * 0.2  # 20% tolerance for market hours gaps
             
             if abs(actual_count - expected_count) <= tolerance:
-                print(f"✅ {actual_count} bars (expected ~{expected_count})")
+                print(f"[OK] {actual_count} bars (expected ~{expected_count})")
                 results[timeframe] = {'bars': actual_count, 'status': 'passed'}
             else:
-                print(f"⚠️  {actual_count} bars (expected ~{expected_count})")
+                print(f"[WARN]  {actual_count} bars (expected ~{expected_count})")
                 results[timeframe] = {'bars': actual_count, 'status': 'warning'}
         else:
-            print(f"❌ Failed")
+            print(f"[FAIL] Failed")
             results[timeframe] = {'bars': 0, 'status': 'failed'}
     
     print(f"\n{'='*70}")
@@ -380,10 +380,10 @@ def test_timeframe_resampling():
     
     for tf, result in results.items():
         if isinstance(result, dict):
-            status = "✅" if result['status'] == 'passed' else "⚠️ " if result['status'] == 'warning' else "❌"
+            status = "[OK]" if result['status'] == 'passed' else "[WARN] " if result['status'] == 'warning' else "[FAIL]"
             print(f"  {status} {tf}: {result['bars']} bars")
         else:
-            print(f"  ✅ {tf}: {result} bars (base)")
+            print(f"  [OK] {tf}: {result} bars (base)")
     
     return results
 
@@ -396,16 +396,16 @@ def run_all_tests():
     print("DATA MANAGER COMPREHENSIVE TEST SUITE")
     print("="*70)
     print("\nThis will test:")
-    print("  ✓ Forex data loading (local files)")
-    print("  ✓ Crypto data loading (CCXT)")
-    print("  ✓ Disabled sources (Indices/Commodities)")
-    print("  ✓ Cache system")
-    print("  ✓ Timeframe resampling")
+    print("  [OK] Forex data loading (local files)")
+    print("  [OK] Crypto data loading (CCXT)")
+    print("  [OK] Disabled sources (Indices/Commodities)")
+    print("  [OK] Cache system")
+    print("  [OK] Timeframe resampling")
     print("\nConfiguration:")
-    print(f"  Forex:       {'✅ Enabled' if config.FOREX_ENABLED else '⏸️  Disabled'}")
-    print(f"  Crypto:      {'✅ Enabled' if config.CRYPTO_ENABLED else '⏸️  Disabled'}")
-    print(f"  Indices:     {'⏸️  Disabled' if not config.INDICES_ENABLED else '✅ Enabled'}")
-    print(f"  Commodities: {'⏸️  Disabled' if not config.COMMODITIES_ENABLED else '✅ Enabled'}")
+    print(f"  Forex:       {'[OK] Enabled' if config.FOREX_ENABLED else '⏸️  Disabled'}")
+    print(f"  Crypto:      {'[OK] Enabled' if config.CRYPTO_ENABLED else '⏸️  Disabled'}")
+    print(f"  Indices:     {'⏸️  Disabled' if not config.INDICES_ENABLED else '[OK] Enabled'}")
+    print(f"  Commodities: {'⏸️  Disabled' if not config.COMMODITIES_ENABLED else '[OK] Enabled'}")
     print("="*70)
     
     input("\nPress Enter to start tests...")
@@ -434,7 +434,7 @@ def run_all_tests():
         forex_total = all_results['forex'].get('total_tests', 0)
         total_tests += forex_total
         total_passed += forex_passed
-        status = "✅" if forex_passed == forex_total else "⚠️ " if forex_passed > 0 else "❌"
+        status = "[OK]" if forex_passed == forex_total else "[WARN] " if forex_passed > 0 else "[FAIL]"
         print(f"  {status} Forex:      {forex_passed}/{forex_total} tests")
     else:
         print(f"  ⏸️  Forex:      Skipped")
@@ -445,7 +445,7 @@ def run_all_tests():
         crypto_total = all_results['crypto'].get('total_tests', 0)
         total_tests += crypto_total
         total_passed += crypto_passed
-        status = "✅" if crypto_passed == crypto_total else "⚠️ " if crypto_passed > 0 else "❌"
+        status = "[OK]" if crypto_passed == crypto_total else "[WARN] " if crypto_passed > 0 else "[FAIL]"
         print(f"  {status} Crypto:     {crypto_passed}/{crypto_total} tests")
     else:
         print(f"  ⏸️  Crypto:     Skipped/Error")
@@ -456,7 +456,7 @@ def run_all_tests():
     if disabled_total > 0:
         total_tests += disabled_total
         total_passed += disabled_passed
-        status = "✅" if disabled_passed == disabled_total else "❌"
+        status = "[OK]" if disabled_passed == disabled_total else "[FAIL]"
         print(f"  {status} Disabled:   {disabled_passed}/{disabled_total} tests")
     
     # Cache
@@ -464,7 +464,7 @@ def run_all_tests():
         cache_passed = 1 if all_results['cache'].get('passed', False) else 0
         total_tests += 1
         total_passed += cache_passed
-        status = "✅" if cache_passed else "❌"
+        status = "[OK]" if cache_passed else "[FAIL]"
         print(f"  {status} Cache:      {'Working' if cache_passed else 'Not optimal'}")
     else:
         print(f"  ⏸️  Cache:      Skipped")
@@ -477,7 +477,7 @@ def run_all_tests():
         if resample_total > 0:
             total_tests += resample_total
             total_passed += resample_passed
-            status = "✅" if resample_passed == resample_total else "⚠️ "
+            status = "[OK]" if resample_passed == resample_total else "[WARN] "
             print(f"  {status} Resampling: {resample_passed}/{resample_total} timeframes")
     else:
         print(f"  ⏸️  Resampling: Skipped")
@@ -487,19 +487,19 @@ def run_all_tests():
     if total_tests > 0:
         success_rate = (total_passed / total_tests) * 100
         if success_rate == 100:
-            print(f"🎉 ALL TESTS PASSED!")
+            print(f"[DONE] ALL TESTS PASSED!")
         elif success_rate >= 80:
-            print(f"✅ MOSTLY PASSED: {total_passed}/{total_tests} ({success_rate:.0f}%)")
+            print(f"[OK] MOSTLY PASSED: {total_passed}/{total_tests} ({success_rate:.0f}%)")
         else:
-            print(f"⚠️  SOME ISSUES: {total_passed}/{total_tests} ({success_rate:.0f}%)")
+            print(f"[WARN]  SOME ISSUES: {total_passed}/{total_tests} ({success_rate:.0f}%)")
     else:
         print("⏸️  No tests were run")
     
     print(f"\nNext steps:")
     if total_passed == total_tests and total_tests > 0:
-        print("  ✅ All systems ready!")
-        print("  → Run: python run_backtests.py")
-        print("  → Run: python analyze_with_claude.py")
+        print("  [OK] All systems ready!")
+        print("  -> Run: python run_backtests.py")
+        print("  -> Run: python analyze_with_claude.py")
     else:
         print("  1. Check error messages above")
         print("  2. Verify data files exist in E:/TradingData/forex/")

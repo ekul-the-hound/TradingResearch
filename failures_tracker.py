@@ -98,9 +98,9 @@ class FailuresTracker:
                     self.failures = [
                         FailureRecord(**record) for record in data
                     ]
-                print(f"📂 Loaded {len(self.failures)} failure records")
+                print(f"[FOLDER] Loaded {len(self.failures)} failure records")
             except Exception as e:
-                print(f"⚠️  Could not load failures file: {e}")
+                print(f"[WARN]  Could not load failures file: {e}")
                 self.failures = []
         else:
             self.failures = []
@@ -111,7 +111,7 @@ class FailuresTracker:
             with open(self.failures_file, 'w') as f:
                 json.dump([asdict(f) for f in self.failures], f, indent=2)
         except Exception as e:
-            print(f"⚠️  Could not save failures: {e}")
+            print(f"[WARN]  Could not save failures: {e}")
     
     # =========================================================================
     # LOG FAILURES
@@ -144,7 +144,7 @@ class FailuresTracker:
         """
         
         if failure_type not in self.FAILURE_TYPES:
-            print(f"⚠️  Unknown failure type: {failure_type}")
+            print(f"[WARN]  Unknown failure type: {failure_type}")
             print(f"   Valid types: {list(self.FAILURE_TYPES.keys())}")
         
         record = FailureRecord(
@@ -161,7 +161,7 @@ class FailuresTracker:
         self.failures.append(record)
         self._save_failures()
         
-        print(f"📝 Logged failure: {strategy_name} ({failure_type})")
+        print(f"[NOTE] Logged failure: {strategy_name} ({failure_type})")
         
         return record
     
@@ -465,7 +465,7 @@ class FailuresTracker:
         with open(output_path, 'w') as f:
             f.write(content)
         
-        print(f"📄 Generated {output_path}")
+        print(f"[FILE] Generated {output_path}")
         
         return content
     
@@ -526,29 +526,29 @@ class FailuresTracker:
         print(f"{'='*60}")
         
         if not self.failures:
-            print("\n✅ No failures logged yet!")
+            print("\n[OK] No failures logged yet!")
             print(f"{'='*60}")
             return
         
         summary = self.get_summary()
         
-        print(f"\n📊 Total Failures: {summary['total']}")
+        print(f"\n[STATS] Total Failures: {summary['total']}")
         
-        print(f"\n📈 By Type:")
+        print(f"\n[UP] By Type:")
         for ftype, count in sorted(summary['by_type'].items(), key=lambda x: x[1], reverse=True):
             print(f"   {ftype}: {count}")
         
         print(f"\n📅 Recent Failures:")
         for f in summary['recent']:
-            print(f"   • {f['name']}: {f['type']}")
+            print(f"   - {f['name']}: {f['type']}")
             print(f"     {f['reason']}")
         
         # Things to avoid
         avoid = self._generate_avoid_list()
         if avoid:
-            print(f"\n⚠️  Things to Avoid:")
+            print(f"\n[WARN]  Things to Avoid:")
             for item in avoid:
-                print(f"   • {item}")
+                print(f"   - {item}")
         
         print(f"\n{'='*60}")
 
@@ -591,7 +591,7 @@ if __name__ == "__main__":
     tracker.print_report()
     
     # Example: Log a test failure
-    print("\n📝 Logging a test failure...")
+    print("\n[NOTE] Logging a test failure...")
     tracker.log_failure(
         strategy_name="Test_Strategy_Example",
         failure_type="NEGATIVE_RETURNS",
@@ -606,13 +606,13 @@ if __name__ == "__main__":
     )
     
     # Generate FAILURES.md
-    print("\n📄 Generating FAILURES.md...")
+    print("\n[FILE] Generating FAILURES.md...")
     tracker.generate_failures_md()
     
     # Show mutation context
-    print("\n📋 Mutation Agent Context:")
+    print("\n[LIST] Mutation Agent Context:")
     print(tracker.get_mutation_context())
     
     print("\n" + "="*70)
-    print("✅ Failures tracker working!")
+    print("[OK] Failures tracker working!")
     print("="*70)

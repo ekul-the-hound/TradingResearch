@@ -33,7 +33,7 @@ try:
     BT_AVAILABLE = True
 except ImportError:
     BT_AVAILABLE = False
-    print("⚠️  backtrader not available")
+    print("[WARN]  backtrader not available")
 
 # ==============================================================================
 # PROJECT MODULE IMPORTS
@@ -49,10 +49,10 @@ try:
     from data_manager import DataManager
     from simple_strategy import SimpleMovingAverageCrossover
     PROJECT_AVAILABLE = True
-    print("✅ Project modules loaded")
+    print("[OK] Project modules loaded")
 except ImportError as e:
     PROJECT_AVAILABLE = False
-    print(f"⚠️  Project modules not available: {e}")
+    print(f"[WARN]  Project modules not available: {e}")
 
 # FTMO Compliance
 try:
@@ -231,7 +231,7 @@ def run_backtest(
         return result
     
     try:
-        print(f"\n📊 Loading data for {symbol} {timeframe}...")
+        print(f"\n[STATS] Loading data for {symbol} {timeframe}...")
         dm = DataManager()
         data = dm.get_data(symbol=symbol, timeframe=timeframe, max_bars=max_bars)
         
@@ -259,7 +259,7 @@ def run_backtest(
         # Calculate benchmark (buy & hold)
         result.benchmark_return = ((data['close'].iloc[-1] - data['close'].iloc[0]) / data['close'].iloc[0]) * 100
         
-        print(f"📈 Running backtest on {len(data)} bars...")
+        print(f"[UP] Running backtest on {len(data)} bars...")
         
         # Setup Cerebro
         cerebro = bt.Cerebro()
@@ -358,7 +358,7 @@ def run_backtest(
                 if gross_losses > 0:
                     result.profit_factor = gross_wins / gross_losses
                 
-                print(f"📊 Win rate: {wins}/{len(result.trades)} = {result.win_rate:.1f}%, PF: {result.profit_factor:.2f}")
+                print(f"[STATS] Win rate: {wins}/{len(result.trades)} = {result.win_rate:.1f}%, PF: {result.profit_factor:.2f}")
             else:
                 try:
                     wins = trade_analysis.won.total or 0
@@ -402,7 +402,7 @@ def run_backtest(
             result.avg_trade_pct = np.mean(returns) if returns else 0
             
             # Debug output
-            print(f"📈 Trade returns: min={min(returns):.2f}%, max={max(returns):.2f}%, avg={result.avg_trade_pct:.2f}%")
+            print(f"[UP] Trade returns: min={min(returns):.2f}%, max={max(returns):.2f}%, avg={result.avg_trade_pct:.2f}%")
             
             # Sortino (downside deviation)
             negative_returns = [r for r in returns if r < 0]
@@ -413,7 +413,7 @@ def run_backtest(
                     result.sortino_ratio = max(-5, min(5, raw_sortino))
         
         result.status = "Complete"
-        print(f"✅ Backtest complete: {result.total_return_pct:+.2f}% | {result.total_trades} trades | Sharpe: {result.sharpe_ratio:.2f}")
+        print(f"[OK] Backtest complete: {result.total_return_pct:+.2f}% | {result.total_trades} trades | Sharpe: {result.sharpe_ratio:.2f}")
         
         # Run Monte Carlo
         monte_carlo_data = run_monte_carlo(result.trades, initial_capital=initial_cash)
@@ -424,7 +424,7 @@ def run_backtest(
     except Exception as e:
         result.status = "Error"
         result.error = str(e)
-        print(f"❌ Backtest error: {e}")
+        print(f"[FAIL] Backtest error: {e}")
         import traceback
         traceback.print_exc()
     
@@ -441,10 +441,10 @@ def run_monte_carlo(trades: List[Dict], n_simulations: int = 100, initial_capita
     
     # Check if we have meaningful returns
     if not returns or all(r == 0 for r in returns):
-        print("⚠️  No meaningful trade returns for Monte Carlo")
+        print("[WARN]  No meaningful trade returns for Monte Carlo")
         return {'paths': [], 'finals': [], 'ruin_pct': 0, 'mean_final': initial_capital, 'var_5': initial_capital, 'var_95': initial_capital}
     
-    print(f"📊 Monte Carlo: {len(returns)} trades, avg return: {np.mean(returns)*100:.3f}%, std: {np.std(returns)*100:.3f}%")
+    print(f"[STATS] Monte Carlo: {len(returns)} trades, avg return: {np.mean(returns)*100:.3f}%, std: {np.std(returns)*100:.3f}%")
     
     paths = []
     finals = []
@@ -467,7 +467,7 @@ def run_monte_carlo(trades: List[Dict], n_simulations: int = 100, initial_capita
     ruin_count = sum(1 for final in finals if final <= ruin_threshold)
     ruin_pct = (ruin_count / n_simulations) * 100
     
-    print(f"📊 Monte Carlo results: {ruin_count}/{n_simulations} paths hit ruin ({ruin_pct:.1f}%)")
+    print(f"[STATS] Monte Carlo results: {ruin_count}/{n_simulations} paths hit ruin ({ruin_pct:.1f}%)")
     
     return {
         'paths': paths,
@@ -484,21 +484,21 @@ def run_validation_tests(result: BacktestResult) -> Dict:
     tests = {}
     
     if not result.trades:
-        print("⚠️  No trades for validation tests")
+        print("[WARN]  No trades for validation tests")
         return tests
     
     returns = [t['return_pct'] for t in result.trades]
     
     # Check for meaningful data
     if not returns or len(returns) < 10:
-        print(f"⚠️  Insufficient trades for validation: {len(returns)}")
+        print(f"[WARN]  Insufficient trades for validation: {len(returns)}")
         return tests
     
     if all(r == 0 for r in returns):
-        print("⚠️  All trade returns are zero - validation skipped")
+        print("[WARN]  All trade returns are zero - validation skipped")
         return tests
     
-    print(f"🔬 Running validation on {len(returns)} trades...")
+    print(f"[TEST] Running validation on {len(returns)} trades...")
     
     # Permutation test - tests if strategy is better than random
     np.random.seed(42)
@@ -888,7 +888,7 @@ def TestRow(test, value, passed):
         html.span({'style': {'color': C['text']}}, test),
         html.div({'style': {'display': 'flex', 'alignItems': 'center', 'gap': '12px'}},
             html.span({'style': {'color': C['muted'], 'fontFamily': 'monospace'}}, value),
-            html.span({'style': {'color': C['green'] if passed else C['red']}}, '✓' if passed else '✗')))
+            html.span({'style': {'color': C['green'] if passed else C['red']}}, '[OK]' if passed else '[FAIL]')))
 
 
 # ==============================================================================
@@ -1022,7 +1022,7 @@ def ValidationPage():
                                   'border': f'2px solid {C["green"] if t["passed"] else C["red"]}'}},
                 html.div({'style': {'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center'}},
                     html.span({'style': {'color': C['text'], 'fontWeight': '500'}}, t['test']),
-                    html.span({'style': {'color': C['green'] if t['passed'] else C['red']}}, '✓' if t['passed'] else '✗')),
+                    html.span({'style': {'color': C['green'] if t['passed'] else C['red']}}, '[OK]' if t['passed'] else '[FAIL]')),
                 html.div({'style': {'marginTop': '8px'}},
                     html.span({'style': {'color': C['dim'], 'fontSize': '12px'}}, t['metric'] + ': '),
                     html.span({'style': {'color': C['text'], 'fontFamily': 'monospace'}}, t['value'])),
@@ -1079,7 +1079,7 @@ def RobustnessPage():
                 html.span({'style': {'color': C['text'], 'fontWeight': '500'}}, t['test']),
                 html.div({'style': {'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center', 'marginTop': '8px'}},
                     html.span({'style': {'color': C['muted'], 'fontFamily': 'monospace', 'fontSize': '18px'}}, t['value']),
-                    html.span({'style': {'color': C['green'] if t['passed'] else C['red']}}, '✓ PASS' if t['passed'] else '✗ FAIL')))
+                    html.span({'style': {'color': C['green'] if t['passed'] else C['red']}}, '[OK] PASS' if t['passed'] else '[FAIL] FAIL')))
               for t in robustness_summary]),
         Card('Regime Performance', 'Strategy behavior across market conditions (estimated)',
             html.table({'style': {'width': '100%', 'borderCollapse': 'collapse'}},
@@ -1151,10 +1151,10 @@ def FTMOPage():
                       for h in ['Account', 'Daily DD', 'Total DD', 'Min Days', 'Profit', 'Return', 'Final Equity', 'Status']])),
                 html.tbody(*[html.tr({'style': {'borderBottom': f'1px solid {C["border"]}'}},
                     html.td({'style': {'padding': '12px', 'fontWeight': '500'}}, f"${row['account_size']:,}"),
-                    html.td({'style': {'padding': '12px', 'textAlign': 'center', 'color': C['green'] if row['daily_loss_ok'] else C['red']}}, '✓' if row['daily_loss_ok'] else '✗'),
-                    html.td({'style': {'padding': '12px', 'textAlign': 'center', 'color': C['green'] if row['total_drawdown_ok'] else C['red']}}, '✓' if row['total_drawdown_ok'] else '✗'),
-                    html.td({'style': {'padding': '12px', 'textAlign': 'center', 'color': C['green'] if row['min_days_ok'] else C['red']}}, '✓' if row['min_days_ok'] else '✗'),
-                    html.td({'style': {'padding': '12px', 'textAlign': 'center', 'color': C['green'] if row['profit_target_ok'] else C['red']}}, '✓' if row['profit_target_ok'] else '✗'),
+                    html.td({'style': {'padding': '12px', 'textAlign': 'center', 'color': C['green'] if row['daily_loss_ok'] else C['red']}}, '[OK]' if row['daily_loss_ok'] else '[FAIL]'),
+                    html.td({'style': {'padding': '12px', 'textAlign': 'center', 'color': C['green'] if row['total_drawdown_ok'] else C['red']}}, '[OK]' if row['total_drawdown_ok'] else '[FAIL]'),
+                    html.td({'style': {'padding': '12px', 'textAlign': 'center', 'color': C['green'] if row['min_days_ok'] else C['red']}}, '[OK]' if row['min_days_ok'] else '[FAIL]'),
+                    html.td({'style': {'padding': '12px', 'textAlign': 'center', 'color': C['green'] if row['profit_target_ok'] else C['red']}}, '[OK]' if row['profit_target_ok'] else '[FAIL]'),
                     html.td({'style': {'padding': '12px', 'textAlign': 'right', 'fontFamily': 'monospace', 'color': C['green'] if row['final_return_pct']>0 else C['red']}}, f"{row['final_return_pct']:+.2f}%"),
                     html.td({'style': {'padding': '12px', 'textAlign': 'right', 'fontFamily': 'monospace'}}, f"${row['final_equity']:,.2f}"),
                     html.td({'style': {'padding': '12px', 'textAlign': 'center'}},
@@ -1221,7 +1221,7 @@ def StatisticsPage():
                         html.p({'style': {'color': C['dim'], 'fontSize': '12px', 'margin': '0'}}, 'Status'),
                         html.p({'style': {'color': C['green'] if not stats_data['serial']['has_dependence'] else C['red'], 
                                          'fontSize': '16px', 'margin': '4px 0 0 0', 'fontWeight': 'bold'}}, 
-                               '✓ Independent' if not stats_data['serial']['has_dependence'] else '✗ Dependent')))),
+                               '[OK] Independent' if not stats_data['serial']['has_dependence'] else '[FAIL] Dependent')))),
             Card('Distribution Analysis', 'Skewness & kurtosis',
                 html.div({'style': {'display': 'grid', 'gridTemplateColumns': 'repeat(2, 1fr)', 'gap': '16px'}},
                     html.div({'style': {'backgroundColor': 'rgba(31,41,55,0.5)', 'borderRadius': '8px', 'padding': '12px'}},
@@ -1238,7 +1238,7 @@ def StatisticsPage():
                         html.p({'style': {'color': C['dim'], 'fontSize': '12px', 'margin': '0'}}, 'Normality'),
                         html.p({'style': {'color': C['green'] if stats_data['distribution']['is_normal'] else C['amber'], 
                                          'fontSize': '16px', 'margin': '4px 0 0 0', 'fontWeight': 'bold'}}, 
-                               '✓ Normal' if stats_data['distribution']['is_normal'] else '⚠ Non-Normal'))))),
+                               '[OK] Normal' if stats_data['distribution']['is_normal'] else '[WARN] Non-Normal'))))),
         
         Card('Value at Risk Distribution', 'Return distribution with VaR/CVaR',
             PlotlyChart(var_html, height=250),
@@ -1335,11 +1335,11 @@ def MetaModelPage():
         overfit_risk = max(5, min(90, 100 - survival_prob))
         
         if result.sharpe_ratio > 1.5 and result.total_return_pct > 5:
-            recommendation = ('✓ APPROVE', 'green')
+            recommendation = ('[OK] APPROVE', 'green')
         elif result.sharpe_ratio > 0.5 and result.total_return_pct > 0:
-            recommendation = ('⚠ CAUTION', 'amber')
+            recommendation = ('[WARN] CAUTION', 'amber')
         else:
-            recommendation = ('✗ REJECT', 'red')
+            recommendation = ('[FAIL] REJECT', 'red')
     else:
         survival_prob = 50
         overfit_risk = 50
@@ -1507,7 +1507,7 @@ def ReportsPage():
             *[html.button({'style': {'padding': '16px', 'backgroundColor': 'rgba(31,41,55,0.5)', 'borderRadius': '12px',
                                      'border': 'none', 'textAlign': 'left', 'cursor': 'pointer'}},
                 html.div({'style': {'padding': '8px', 'backgroundColor': 'rgba(55,65,81,0.5)', 'borderRadius': '8px',
-                                    'width': 'fit-content', 'marginBottom': '8px'}}, '📄'),
+                                    'width': 'fit-content', 'marginBottom': '8px'}}, '[FILE]'),
                 html.h4({'style': {'color': C['text'], 'fontWeight': '500', 'margin': '0 0 4px 0', 'fontSize': '14px'}}, title),
                 html.p({'style': {'color': C['dim'], 'fontSize': '12px', 'margin': '0'}}, desc)) for title, desc in reports]))
 
@@ -1534,16 +1534,16 @@ def App():
         set_refresh_key(lambda k: k + 1)
     
     nav = [
-        ('overview', '📊', 'Overview'),
-        ('strategies', '📈', 'Strategies'),
-        ('validation', '🛡️', 'Validation'),
-        ('statistics', '📉', 'Statistics'),
-        ('robustness', '⚡', 'Robustness'),
-        ('ftmo', '🏆', 'FTMO'),
-        ('portfolio', '💼', 'Portfolio'),
-        ('metamodel', '🤖', 'Meta Model'),
+        ('overview', '[STATS]', 'Overview'),
+        ('strategies', '[UP]', 'Strategies'),
+        ('validation', '[SHIELD]', 'Validation'),
+        ('statistics', '[DOWN]', 'Statistics'),
+        ('robustness', '[ZAP]', 'Robustness'),
+        ('ftmo', '[TROPHY]', 'FTMO'),
+        ('portfolio', '[CASE]', 'Portfolio'),
+        ('metamodel', '[AI]', 'Meta Model'),
         ('execution', '▶️', 'Execution'),
-        ('analysis', '🔍', 'Analysis'),
+        ('analysis', '[SEARCH]', 'Analysis'),
         ('reports', '📑', 'Reports'),
     ]
     
@@ -1584,7 +1584,7 @@ def App():
                 html.div({'style': {'display': 'flex', 'alignItems': 'center', 'gap': '12px'}},
                     html.div({'style': {'width': '40px', 'height': '40px', 'borderRadius': '12px',
                                         'background': 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                                        'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center', 'fontSize': '20px'}}, '📈'),
+                                        'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center', 'fontSize': '20px'}}, '[UP]'),
                     html.div(html.h1({'style': {'fontWeight': 'bold', 'color': C['text'], 'margin': '0', 'fontSize': '16px'}}, 'TradingLab'),
                              html.p({'style': {'color': C['dim'], 'fontSize': '12px', 'margin': '0'}}, 'Research Platform')))),
             html.nav({'style': {'flex': '1', 'padding': '12px', 'overflowY': 'auto'}},
@@ -1614,7 +1614,7 @@ def App():
                     html.button({'style': {'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'padding': '8px 16px',
                                            'backgroundColor': 'rgba(31,41,55,1)', 'color': C['muted'],
                                            'border': 'none', 'borderRadius': '8px', 'cursor': 'pointer'},
-                                'onClick': handle_refresh}, '🔄 Refresh'),
+                                'onClick': handle_refresh}, '[CYCLE] Refresh'),
                     html.button({'style': {'display': 'flex', 'alignItems': 'center', 'gap': '8px', 'padding': '8px 16px',
                                            'backgroundColor': '#6366f1', 'color': C['text'],
                                            'border': 'none', 'borderRadius': '8px', 'cursor': 'pointer',
@@ -1639,10 +1639,10 @@ if __name__ == "__main__":
     
     # Run initial backtest on startup
     if PROJECT_AVAILABLE and BT_AVAILABLE:
-        print("\n🚀 Running initial backtest...")
+        print("\n[LAUNCH] Running initial backtest...")
         run_backtest(symbol='EUR-USD', timeframe='1hour', max_bars=10000)
     else:
-        print("\n⚠️  Backtest modules not available - using sample data")
+        print("\n[WARN]  Backtest modules not available - using sample data")
     
     print("\n" + "="*60)
     print("  Open: http://127.0.0.1:8080")

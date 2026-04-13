@@ -458,27 +458,27 @@ class PortfolioEngine:
         print(f"PORTFOLIO REPORT - {result.method.upper()} ALLOCATION")
         print("="*70)
         
-        print("\n📊 WEIGHTS:")
+        print("\n[STATS] WEIGHTS:")
         print("-"*70)
         for name, weight in sorted(result.weights.items(), key=lambda x: -x[1]):
             bar = "█" * int(weight * 50)
             print(f"  {name:<20} {weight*100:>6.1f}%  {bar}")
         
-        print("\n📊 PORTFOLIO METRICS:")
+        print("\n[STATS] PORTFOLIO METRICS:")
         print("-"*70)
         print(f"  Expected Return:      {result.expected_return*100:>8.2f}% annual")
         print(f"  Volatility:           {result.portfolio_volatility*100:>8.2f}% annual")
         print(f"  Sharpe Ratio:         {result.portfolio_sharpe:>8.2f}")
         print(f"  Max Drawdown:         {result.max_drawdown:>8.2f}%")
         
-        print("\n📊 DIVERSIFICATION:")
+        print("\n[STATS] DIVERSIFICATION:")
         print("-"*70)
         print(f"  Diversification Ratio: {result.diversification_ratio:>7.2f}")
         print(f"  Effective N:           {result.effective_n:>7.2f} / {len(result.weights)}")
         print(f"  Avg Correlation:       {result.avg_correlation:>7.2f}")
         print(f"  Max Correlation:       {result.max_correlation:>7.2f}")
         
-        print("\n📊 RISK CONTRIBUTIONS:")
+        print("\n[STATS] RISK CONTRIBUTIONS:")
         print("-"*70)
         for name, contrib in sorted(result.risk_contributions.items(), key=lambda x: -x[1]):
             bar = "█" * int(contrib * 50)

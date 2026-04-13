@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# test_integration.py — Tests for the integration layer
+# test_integration.py -- Tests for the integration layer
 # ==============================================================================
 # These tests verify the 3 integration pieces work correctly WITHOUT
 # needing your data files or Backtrader running. They test:
@@ -25,15 +25,15 @@ _p, _f, _e = 0, 0, []
 def run_test(name, fn):
     global _p, _f
     try:
-        fn(); _p += 1; print(f"  ✅ {name}")
+        fn(); _p += 1; print(f"  [OK] {name}")
     except Exception as ex:
-        _f += 1; _e.append((name, str(ex))); print(f"  ❌ {name}: {ex}")
+        _f += 1; _e.append((name, str(ex))); print(f"  [FAIL] {name}: {ex}")
         traceback.print_exc()
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # CanonicalResult Tests (15)
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def test_cr_01_from_dict():
     raw = {
@@ -154,9 +154,9 @@ def test_cr_15_missing_fields():
     assert cr.sharpe_ratio == 0
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# BacktestAdapter Tests (8) — dry-run mode (no backtester loaded)
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# BacktestAdapter Tests (8) -- dry-run mode (no backtester loaded)
+# ==============================================================================
 
 def test_ba_01_init():
     adapter = BacktestAdapter(verbose=False)
@@ -223,9 +223,9 @@ def test_ba_08_strategy_id_gen():
     assert "fast_period" in cr.strategy_id
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # Pipeline Structure Tests (5)
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def test_pipe_01_config():
     from run_pipeline import PipelineConfig
@@ -302,9 +302,9 @@ def test_pipe_05_canonical_through_steps():
     assert len(p._results.get("step7_top_pool", [])) <= cfg.top_pool_size
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # RUNNER
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 ALL = [
     # CanonicalResult (15)
@@ -348,7 +348,7 @@ if __name__ == "__main__":
         ("Pipeline",          23, 28),
     ]
     for name, lo, hi in mods:
-        print(f"\n{'─'*60}\n  {name}\n{'─'*60}")
+        print(f"\n{'-'*60}\n  {name}\n{'-'*60}")
         for n, fn in ALL[lo:hi]:
             run_test(n, fn)
     print(f"\n  ⏱️  {time.time()-start:.1f}s\n{'='*60}")

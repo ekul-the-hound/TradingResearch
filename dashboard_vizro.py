@@ -108,11 +108,11 @@ overview_page = vm.Page(
             ---
             
             ### Quick Validation Summary
-            - ✅ Permutation Test: p=0.023
-            - ✅ Walk-Forward: Ratio 0.82
-            - ✅ Bootstrap CI: [4.2%, 18.1%]
-            - ✅ Monte Carlo VaR: -8.2%
-            - ⚠️ Slippage Test: -12% @ 20bps
+            - [OK] Permutation Test: p=0.023
+            - [OK] Walk-Forward: Ratio 0.82
+            - [OK] Bootstrap CI: [4.2%, 18.1%]
+            - [OK] Monte Carlo VaR: -8.2%
+            - [WARN] Slippage Test: -12% @ 20bps
             """
         ),
         vm.Graph(
@@ -173,10 +173,10 @@ validation_page = vm.Page(
             
             | Test | Result | Status |
             |------|--------|--------|
-            | Permutation Test | p=0.023 | ✅ Pass |
-            | Walk-Forward | Ratio 0.82 | ✅ Pass |
-            | Bootstrap CI | [4.2%, 18.1%] | ✅ Pass |
-            | Monte Carlo | 2.3% ruin prob | ✅ Pass |
+            | Permutation Test | p=0.023 | [OK] Pass |
+            | Walk-Forward | Ratio 0.82 | [OK] Pass |
+            | Bootstrap CI | [4.2%, 18.1%] | [OK] Pass |
+            | Monte Carlo | 2.3% ruin prob | [OK] Pass |
             """
         ),
         vm.Graph(
@@ -207,10 +207,10 @@ robustness_page = vm.Page(
             Stress tests and sensitivity analysis.
             
             ### Summary
-            - ✅ Latency 500ms: -36% degradation
-            - ⚠️ Slippage 20bps: -41% degradation
-            - ✅ Parameter Stability: ±3%
-            - ⚠️ RANGING regime shows negative returns
+            - [OK] Latency 500ms: -36% degradation
+            - [WARN] Slippage 20bps: -41% degradation
+            - [OK] Parameter Stability: ±3%
+            - [WARN] RANGING regime shows negative returns
             """
         ),
         vm.Graph(

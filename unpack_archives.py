@@ -52,16 +52,16 @@ def unpack_archives(source_dir, create_subfolders=False, delete_after_extract=Fa
                     rar_ref.extractall(extract_path)
             
             extracted_count += 1
-            print(f"✓ Successfully extracted to: {extract_path}")
+            print(f"[OK] Successfully extracted to: {extract_path}")
             
             # Delete archive if requested
             if delete_after_extract:
                 archive.unlink()
-                print(f"  → Deleted archive: {archive.name}")
+                print(f"  -> Deleted archive: {archive.name}")
             
         except Exception as e:
             failed_count += 1
-            print(f"✗ Failed to extract {archive.name}: {str(e)}")
+            print(f"[FAIL] Failed to extract {archive.name}: {str(e)}")
     
     print("-" * 50)
     print(f"\nExtraction complete!")

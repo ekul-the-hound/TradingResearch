@@ -45,12 +45,12 @@ def discover_variants():
     """Find all variant files in the variants directory"""
     
     if not VARIANTS_DIR.exists():
-        print(f"❌ Variants directory not found: {VARIANTS_DIR}")
+        print(f"[FAIL] Variants directory not found: {VARIANTS_DIR}")
         return []
     
     variant_files = sorted(VARIANTS_DIR.glob('variant_*.py'))
     
-    print(f"📂 Found {len(variant_files)} variant files")
+    print(f"[FOLDER] Found {len(variant_files)} variant files")
     
     return variant_files
 
@@ -112,7 +112,7 @@ def run_variant_backtests(quick_mode=False):
     """Run backtests for all variants"""
     
     print("\n" + "="*70)
-    print("🧪 VARIANT BACKTESTER")
+    print("[LAB] VARIANT BACKTESTER")
     print("="*70)
     
     # Discover variants
@@ -126,7 +126,7 @@ def run_variant_backtests(quick_mode=False):
     assets = get_test_assets()
     timeframes = ['1hour', '4hour', '1day'] if quick_mode else TEST_TIMEFRAMES
     
-    print(f"\n📋 Test Configuration:")
+    print(f"\n[LIST] Test Configuration:")
     print(f"   Variants:   {len(variant_files)}")
     print(f"   Assets:     {len(assets)}")
     print(f"   Timeframes: {len(timeframes)}")
@@ -134,7 +134,7 @@ def run_variant_backtests(quick_mode=False):
     print(f"   Total tests overall: {len(variant_files) * len(assets) * len(timeframes)}")
     
     if quick_mode:
-        print(f"\n   ⚡ QUICK MODE: Testing limited timeframes only")
+        print(f"\n   [ZAP] QUICK MODE: Testing limited timeframes only")
     
     print("="*70)
     
@@ -155,15 +155,15 @@ def run_variant_backtests(quick_mode=False):
     for i, filepath in enumerate(variant_files):
         variant_id = filepath.stem  # e.g., "variant_01"
         
-        print(f"\n{'─'*70}")
-        print(f"📊 [{i+1}/{len(variant_files)}] Testing {variant_id}")
-        print(f"{'─'*70}")
+        print(f"\n{'-'*70}")
+        print(f"[STATS] [{i+1}/{len(variant_files)}] Testing {variant_id}")
+        print(f"{'-'*70}")
         
         # Load the variant class
         strategy_class, class_name, error = load_variant_class(filepath)
         
         if error:
-            print(f"   ❌ Failed to load: {error}")
+            print(f"   [FAIL] Failed to load: {error}")
             variant_summary.append({
                 'variant_id': variant_id,
                 'status': 'load_failed',
@@ -171,7 +171,7 @@ def run_variant_backtests(quick_mode=False):
             })
             continue
         
-        print(f"   ✅ Loaded class: {class_name}")
+        print(f"   [OK] Loaded class: {class_name}")
         
         # Run backtests
         try:
@@ -222,7 +222,7 @@ def run_variant_backtests(quick_mode=False):
                 
                 all_results.extend(results)
                 
-                print(f"\n   📈 {class_name}: Avg Return {avg_return:+.2f}%, Best {best_return:+.2f}%")
+                print(f"\n   [UP] {class_name}: Avg Return {avg_return:+.2f}%, Best {best_return:+.2f}%")
             else:
                 variant_summary.append({
                     'variant_id': variant_id,
@@ -232,7 +232,7 @@ def run_variant_backtests(quick_mode=False):
                 })
         
         except Exception as e:
-            print(f"   ❌ Backtest error: {e}")
+            print(f"   [FAIL] Backtest error: {e}")
             traceback.print_exc()
             variant_summary.append({
                 'variant_id': variant_id,
@@ -254,15 +254,15 @@ def run_variant_backtests(quick_mode=False):
     successful_variants.sort(key=lambda x: x.get('avg_return', -999), reverse=True)
     
     if successful_variants:
-        print(f"\n  📊 Variants Ranked by Average Return:")
-        print(f"  {'─'*60}")
+        print(f"\n  [STATS] Variants Ranked by Average Return:")
+        print(f"  {'-'*60}")
         for v in successful_variants[:10]:  # Top 10
             print(f"    {v['variant_id']:12} | {v['class_name']:30} | Avg: {v['avg_return']:+6.2f}%")
     
     # Show failures
     failed_variants = [v for v in variant_summary if v.get('status') != 'success']
     if failed_variants:
-        print(f"\n  ⚠️  Failed Variants: {len(failed_variants)}")
+        print(f"\n  [WARN]  Failed Variants: {len(failed_variants)}")
         for v in failed_variants:
             print(f"    {v['variant_id']}: {v.get('status')} - {v.get('error', 'unknown')[:40]}")
     

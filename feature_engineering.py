@@ -464,35 +464,35 @@ class FeatureEngineer:
         print(f"Period: {features.start_date} to {features.end_date}")
         print("-"*70)
         
-        print("\n📊 PERFORMANCE:")
+        print("\n[STATS] PERFORMANCE:")
         print(f"  Return:        {features.total_return_pct:+.2f}%")
         print(f"  Sharpe:        {features.sharpe_ratio:.2f}" if features.sharpe_ratio else "  Sharpe:        N/A")
         print(f"  Max Drawdown:  {features.max_drawdown_pct:.2f}%")
         print(f"  Win Rate:      {features.win_rate:.1f}%" if features.win_rate else "  Win Rate:      N/A")
         
-        print("\n📊 TRADE ANALYTICS:")
+        print("\n[STATS] TRADE ANALYTICS:")
         print(f"  Total Trades:      {features.total_trades}")
         print(f"  Trades/Day:        {features.trades_per_day:.2f}")
         print(f"  Avg Duration:      {features.avg_trade_duration_bars:.1f} bars")
         print(f"  Time in Market:    {features.time_in_market_pct:.1f}%")
         
-        print("\n📊 STATISTICAL:")
-        print(f"  Serial Dependence: {'⚠️  YES' if features.has_serial_dependence else '✅ NO'}")
+        print("\n[STATS] STATISTICAL:")
+        print(f"  Serial Dependence: {'[WARN]  YES' if features.has_serial_dependence else '[OK] NO'}")
         print(f"  Skewness:          {features.skewness:+.2f}")
         print(f"  Kurtosis:          {features.kurtosis:+.2f}")
         print(f"  VaR (95%):         {features.var_95_historical:.2f}%")
         print(f"  CVaR:              {features.cvar_95:.2f}%")
         
         if features.ftmo_pass_rate is not None:
-            print("\n📊 FTMO:")
+            print("\n[STATS] FTMO:")
             print(f"  Pass Rate:         {features.ftmo_pass_rate*100:.1f}%")
             if features.ftmo_primary_fail_reason:
                 print(f"  Primary Fail:      {features.ftmo_primary_fail_reason}")
         
-        print("\n📊 COST ANALYSIS:")
+        print("\n[STATS] COST ANALYSIS:")
         print(f"  Net Return:        {features.net_return_pct:+.2f}%")
         print(f"  Total Costs:       {features.total_cost_pct:.2f}%")
-        print(f"  Cost Viable:       {'✅ YES' if features.is_cost_viable else '❌ NO'}")
+        print(f"  Cost Viable:       {'[OK] YES' if features.is_cost_viable else '[FAIL] NO'}")
         
         print("="*70 + "\n")
 
@@ -561,5 +561,5 @@ if __name__ == "__main__":
     # Print summary
     engineer.print_feature_summary(features)
     
-    print("✅ Feature engineering module working!")
+    print("[OK] Feature engineering module working!")
     print("="*70)

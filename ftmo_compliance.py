@@ -912,9 +912,9 @@ class FTMOComplianceChecker:
         }
         
         # Print summary
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"RESULTS:")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         print(f"  Pass Rate:           {pass_rate*100:.1f}% ({pass_count}/{n_simulations})")
         print(f"  ")
         print(f"  Failure Breakdown:")
@@ -1179,7 +1179,7 @@ def run_unit_tests():
     
     result = checker.validate(trades_crypto, account_size=10000, phase='challenge')
     
-    # $1000 profit per trade Ã— 4 = $4000 on $10K = 40%
+    # $1000 profit per trade Ã-- 4 = $4000 on $10K = 40%
     assert_true(result.total_fees > 0, f"Crypto fees calculated: ${result.total_fees:.2f}")
     assert_true(result.final_return_pct > 30, f"Crypto return: {result.final_return_pct:.2f}%")
     

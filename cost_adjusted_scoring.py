@@ -350,7 +350,7 @@ class CostAdjustedScorer:
         print(f"{'-'*80}")
         
         for i, adj in enumerate(adjusted[:top_n]):
-            viable = "✅" if adj.is_viable else "❌"
+            viable = "[OK]" if adj.is_viable else "[FAIL]"
             name = adj.strategy_name[:24]
             print(f"{name:<25} {adj.gross_return_pct:>+10.2f} {adj.total_cost_pct:>10.2f} {adj.net_return_pct:>+10.2f} {viable:>8}")
         
@@ -377,7 +377,7 @@ class CostAdjustedScorer:
         lines.append(f"Symbol: {result.symbol} | Timeframe: {result.timeframe}")
         lines.append(f"{'='*60}")
         
-        lines.append(f"\n📊 PERFORMANCE COMPARISON:")
+        lines.append(f"\n[STATS] PERFORMANCE COMPARISON:")
         lines.append(f"   Gross Return:  {result.gross_return_pct:+.2f}%")
         lines.append(f"   Net Return:    {result.net_return_pct:+.2f}%")
         lines.append(f"   Difference:    {result.net_return_pct - result.gross_return_pct:+.2f}%")
@@ -387,27 +387,27 @@ class CostAdjustedScorer:
             if result.net_sharpe:
                 lines.append(f"   Net Sharpe:    {result.net_sharpe:.2f}")
         
-        lines.append(f"\n💰 COST BREAKDOWN:")
+        lines.append(f"\n[COST] COST BREAKDOWN:")
         lines.append(f"   Commission:    {result.commission_cost_pct:.3f}%")
         lines.append(f"   Spread:        {result.spread_cost_pct:.3f}%")
         lines.append(f"   Slippage:      {result.slippage_cost_pct:.3f}%")
         lines.append(f"   Financing:     {result.financing_cost_pct:.3f}%")
-        lines.append(f"   ─────────────────────")
+        lines.append(f"   ---------------------")
         lines.append(f"   TOTAL COSTS:   {result.total_cost_pct:.3f}%")
         
         if result.gross_return_pct > 0:
             lines.append(f"\n   Cost Ratio:    {result.cost_ratio:.1f}% of gross profit")
         
-        lines.append(f"\n📈 TRADE STATISTICS:")
+        lines.append(f"\n[UP] TRADE STATISTICS:")
         lines.append(f"   Total Trades:  {result.total_trades}")
         lines.append(f"   Avg Holding:   {result.avg_holding_period:.1f} bars")
         lines.append(f"   Turnover:      {result.turnover:.4f} trades/bar")
         
-        lines.append(f"\n🎯 VIABILITY ASSESSMENT:")
+        lines.append(f"\n[TARGET] VIABILITY ASSESSMENT:")
         if result.is_viable:
-            lines.append(f"   ✅ VIABLE - {result.viability_reason}")
+            lines.append(f"   [OK] VIABLE - {result.viability_reason}")
         else:
-            lines.append(f"   ❌ NOT VIABLE - {result.viability_reason}")
+            lines.append(f"   [FAIL] NOT VIABLE - {result.viability_reason}")
         
         lines.append(f"\n{'='*60}")
         
@@ -474,7 +474,7 @@ if __name__ == "__main__":
     
     scorer = CostAdjustedScorer()
     
-    print("\n📊 Analyzing sample strategies...")
+    print("\n[STATS] Analyzing sample strategies...")
     
     # Print comparison
     scorer.print_comparison(sample_results)
@@ -483,5 +483,5 @@ if __name__ == "__main__":
     adjusted = scorer.adjust_result(sample_results[0])
     print(scorer.generate_report(adjusted))
     
-    print("\n✅ Cost-adjusted scoring module working!")
+    print("\n[OK] Cost-adjusted scoring module working!")
     print("="*70)

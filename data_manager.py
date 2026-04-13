@@ -33,7 +33,7 @@ try:
     CCXT_AVAILABLE = True
 except ImportError:
     CCXT_AVAILABLE = False
-    print("⚠️  CCXT not installed. Run: pip install ccxt")
+    print("[WARN]  CCXT not installed. Run: pip install ccxt")
 
 
 class DataManager:
@@ -72,14 +72,14 @@ class DataManager:
         if crypto_path.exists():
             self._local_file_cache['crypto'] = self._find_data_files(crypto_path)
             if self._local_file_cache['crypto']:
-                print(f"✅ Found {len(self._local_file_cache['crypto'])} local crypto files")
+                print(f"[OK] Found {len(self._local_file_cache['crypto'])} local crypto files")
         
         # Scan indices directory
         indices_path = Path(config.DATA_CACHE_PATH) / 'indices'
         if indices_path.exists():
             self._local_file_cache['indices'] = self._find_data_files(indices_path)
             if self._local_file_cache['indices']:
-                print(f"✅ Found {len(self._local_file_cache['indices'])} local indices files")
+                print(f"[OK] Found {len(self._local_file_cache['indices'])} local indices files")
     
     def _find_data_files(self, directory):
         """Find all CSV and parquet files in a directory"""
@@ -104,23 +104,23 @@ class DataManager:
                     exchange_config['secret'] = config.BINANCE_API_SECRET
                 
                 self.exchanges['binance'] = ccxt.binanceus(exchange_config)
-                print("✅ Binance US exchange initialized (fallback)")
+                print("[OK] Binance US exchange initialized (fallback)")
             except Exception as e:
-                print(f"⚠️  Failed to initialize Binance US: {e}")
+                print(f"[WARN]  Failed to initialize Binance US: {e}")
         
         # Kraken as backup
         try:
             self.exchanges['kraken'] = ccxt.kraken({'enableRateLimit': True})
-            print("✅ Kraken exchange initialized (fallback)")
+            print("[OK] Kraken exchange initialized (fallback)")
         except Exception as e:
-            print(f"⚠️  Failed to initialize Kraken: {e}")
+            print(f"[WARN]  Failed to initialize Kraken: {e}")
         
         if config.HYPERLIQUID_ENABLED and 'hyperliquid' in config.CRYPTO_EXCHANGE_PRIORITY:
             try:
                 self.exchanges['hyperliquid'] = ccxt.hyperliquid({'enableRateLimit': True})
-                print("✅ Hyperliquid exchange initialized (fallback)")
+                print("[OK] Hyperliquid exchange initialized (fallback)")
             except Exception as e:
-                print(f"⚠️  Failed to initialize Hyperliquid: {e}")
+                print(f"[WARN]  Failed to initialize Hyperliquid: {e}")
     
     def _determine_asset_type(self, symbol):
         """
@@ -212,16 +212,16 @@ class DataManager:
             
             # Fall back to CCXT
             if CCXT_AVAILABLE and self.exchanges:
-                print(f"   📡 No local data, trying CCXT...")
+                print(f"   [SIGNAL] No local data, trying CCXT...")
                 return self._get_crypto_data_ccxt(symbol, timeframe, max_bars, use_cache)
             else:
-                print(f"❌ No local crypto data and CCXT unavailable for {symbol}")
+                print(f"[FAIL] No local crypto data and CCXT unavailable for {symbol}")
                 return None
         
         # ====================================================================
         # UNKNOWN ASSET TYPE
         # ====================================================================
-        print(f"❌ Unknown asset type for {symbol}")
+        print(f"[FAIL] Unknown asset type for {symbol}")
         return None
     
     # ========================================================================
@@ -293,7 +293,7 @@ class DataManager:
                     except UnicodeDecodeError:
                         continue
                 else:
-                    print(f"⚠️  Could not read {filepath} with any encoding")
+                    print(f"[WARN]  Could not read {filepath} with any encoding")
                     return None
             
             # Normalize column names to lowercase
@@ -367,7 +367,7 @@ class DataManager:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
                 else:
-                    print(f"⚠️  Missing column: {col}")
+                    print(f"[WARN]  Missing column: {col}")
                     return None
             
             if 'volume' in df.columns:
@@ -391,7 +391,7 @@ class DataManager:
             return df
         
         except Exception as e:
-            print(f"⚠️  Error loading {filepath}: {e}")
+            print(f"[WARN]  Error loading {filepath}: {e}")
             return None
     
     def _get_local_crypto_data(self, symbol, timeframe, max_bars, use_cache):
@@ -411,7 +411,7 @@ class DataManager:
         if not filepath:
             return None
         
-        print(f"📂 Loading local crypto: {os.path.basename(filepath)}")
+        print(f"[FOLDER] Loading local crypto: {os.path.basename(filepath)}")
         
         # Load and normalize
         df = self._load_and_normalize_csv(filepath)
@@ -419,7 +419,7 @@ class DataManager:
         if df is None or df.empty:
             return None
         
-        print(f"   ✅ Loaded {len(df)} bars from local file")
+        print(f"   [OK] Loaded {len(df)} bars from local file")
         
         # Resample if needed
         if timeframe != '1min':
@@ -451,11 +451,11 @@ class DataManager:
         filepath = self._find_local_file(symbol, 'indices')
         
         if not filepath:
-            print(f"❌ No local file found for {symbol}")
+            print(f"[FAIL] No local file found for {symbol}")
             print(f"   Expected in: {config.DATA_CACHE_PATH}/indices/")
             return None
         
-        print(f"📂 Loading local index: {os.path.basename(filepath)}")
+        print(f"[FOLDER] Loading local index: {os.path.basename(filepath)}")
         
         # Load and normalize
         df = self._load_and_normalize_csv(filepath)
@@ -463,7 +463,7 @@ class DataManager:
         if df is None or df.empty:
             return None
         
-        print(f"   ✅ Loaded {len(df)} bars from local file")
+        print(f"   [OK] Loaded {len(df)} bars from local file")
         
         # Resample if needed
         if timeframe != '1min' and timeframe != '1day':
@@ -497,7 +497,7 @@ class DataManager:
         # Get clean ticker name
         ticker = config.FOREX_TICKERS.get(symbol)
         if not ticker:
-            print(f"❌ Unknown Forex ticker: {symbol}")
+            print(f"[FAIL] Unknown Forex ticker: {symbol}")
             print(f"   Add to config.FOREX_TICKERS: '{symbol}': 'TICKER'")
             return None
         
@@ -513,7 +513,7 @@ class DataManager:
         base_file = os.path.join(config.CACHE_SUBDIRS['forex'], f"{ticker}_1min_merged.csv")
         
         if not os.path.exists(base_file):
-            print(f"❌ Missing data: {symbol} (merged file not found)")
+            print(f"[FAIL] Missing data: {symbol} (merged file not found)")
             print(f"   Expected: {base_file}")
             print(f"   Run: python forex_data_processor.py first")
             return None
@@ -536,7 +536,7 @@ class DataManager:
             resampled = self._resample_data(df, timeframe)
             
             if resampled is None or resampled.empty:
-                print(f"❌ Missing data: {symbol} {timeframe} (resampling failed)")
+                print(f"[FAIL] Missing data: {symbol} {timeframe} (resampling failed)")
                 return None
             
             # Save resampled data to cache
@@ -549,7 +549,7 @@ class DataManager:
             return resampled
         
         except Exception as e:
-            print(f"❌ Missing data: {symbol} {timeframe}")
+            print(f"[FAIL] Missing data: {symbol} {timeframe}")
             print(f"   Error: {e}")
             return None
     
@@ -577,7 +577,7 @@ class DataManager:
         
         rule = resample_rules.get(timeframe)
         if not rule:
-            print(f"⚠️  Unknown timeframe for resampling: {timeframe}")
+            print(f"[WARN]  Unknown timeframe for resampling: {timeframe}")
             return None
         
         # Build aggregation dictionary
@@ -605,7 +605,7 @@ class DataManager:
         """
         Fetch crypto data via CCXT (fallback when no local files)
         
-        Priority: Binance → Kraken → Hyperliquid
+        Priority: Binance -> Kraken -> Hyperliquid
         """
         # Check cache first
         if use_cache:
@@ -634,24 +634,24 @@ class DataManager:
             else:
                 ccxt_symbol = symbol.replace('-USD', '/USDT')
             
-            print(f"📊 Fetching {symbol} ({timeframe}) from {exchange_name.upper()}...")
+            print(f"[STATS] Fetching {symbol} ({timeframe}) from {exchange_name.upper()}...")
             
             try:
                 exchange = self.exchanges[exchange_name]
                 data = self._fetch_ccxt(exchange, ccxt_symbol, timeframe, max_bars)
                 
                 if data is not None and not data.empty:
-                    print(f"  ✅ Retrieved {len(data)} bars from {exchange_name.upper()}")
+                    print(f"  [OK] Retrieved {len(data)} bars from {exchange_name.upper()}")
                     self._save_to_cache(symbol, timeframe, data, exchange=exchange_name)
                     return data
                 else:
                     print(f"  ℹ️  No data from {exchange_name.upper()}, trying next...")
             
             except Exception as e:
-                print(f"  ❌ Error from {exchange_name.upper()}: {str(e)[:100]}")
+                print(f"  [FAIL] Error from {exchange_name.upper()}: {str(e)[:100]}")
                 continue
         
-        print(f"❌ Missing data: {symbol} {timeframe}")
+        print(f"[FAIL] Missing data: {symbol} {timeframe}")
         print(f"   Tried: {', '.join(config.CRYPTO_EXCHANGE_PRIORITY)}")
         return None
     
@@ -708,7 +708,7 @@ class DataManager:
                 df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
                 return df
             except Exception as e:
-                print(f"⚠️  Failed to load cache: {e}")
+                print(f"[WARN]  Failed to load cache: {e}")
         
         return None
     
@@ -719,7 +719,7 @@ class DataManager:
         try:
             data.to_csv(cache_file)
         except Exception as e:
-            print(f"⚠️  Failed to save cache: {e}")
+            print(f"[WARN]  Failed to save cache: {e}")
     
     def clear_cache(self, symbol=None, timeframe=None):
         """Clear cached data"""
@@ -768,31 +768,31 @@ if __name__ == "__main__":
     
     # Test Crypto (local files first)
     if config.CRYPTO_ENABLED and config.CRYPTO_WATCHLIST:
-        print(f"\n📊 Testing Crypto (local files → CCXT fallback):")
+        print(f"\n[STATS] Testing Crypto (local files -> CCXT fallback):")
         for symbol in config.CRYPTO_WATCHLIST[:2]:  # Test first 2
             data = manager.get_data(symbol, '1hour', 100)
             if data is not None:
-                print(f"   ✅ {symbol}: {len(data)} bars")
+                print(f"   [OK] {symbol}: {len(data)} bars")
             else:
-                print(f"   ❌ {symbol}: No data")
+                print(f"   [FAIL] {symbol}: No data")
     
     # Test Indices (local files)
     if config.INDICES_ENABLED and config.INDEX_WATCHLIST:
-        print(f"\n📊 Testing Indices (local files):")
+        print(f"\n[STATS] Testing Indices (local files):")
         for symbol in config.INDEX_WATCHLIST[:2]:  # Test first 2
             data = manager.get_data(symbol, '1day', 100)
             if data is not None:
-                print(f"   ✅ {symbol}: {len(data)} bars")
+                print(f"   [OK] {symbol}: {len(data)} bars")
             else:
-                print(f"   ❌ {symbol}: No data")
+                print(f"   [FAIL] {symbol}: No data")
     
     # Test Forex
     if config.FOREX_ENABLED and config.FOREX_WATCHLIST:
-        print(f"\n📊 Testing Forex:")
+        print(f"\n[STATS] Testing Forex:")
         data = manager.get_data(config.FOREX_WATCHLIST[0], '1hour', 100)
         if data is not None:
-            print(f"   ✅ {config.FOREX_WATCHLIST[0]}: {len(data)} bars")
+            print(f"   [OK] {config.FOREX_WATCHLIST[0]}: {len(data)} bars")
         else:
-            print(f"   ❌ {config.FOREX_WATCHLIST[0]}: No data")
+            print(f"   [FAIL] {config.FOREX_WATCHLIST[0]}: No data")
     
     print("\n" + "="*70)

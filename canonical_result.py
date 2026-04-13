@@ -6,7 +6,7 @@
 # Your backtester produces a dict. This module wraps it into a standard
 # object with computed fields (daily returns, equity curve, etc.) that
 # downstream modules need. No module should ever parse raw backtest
-# output directly — they all go through CanonicalResult.
+# output directly -- they all go through CanonicalResult.
 #
 # Consumed by: every Phase 1-6 module.
 #
@@ -32,14 +32,14 @@ class CanonicalResult:
     Created from your backtester output, consumed by all downstream modules.
     """
 
-    # ── Identity ──────────────────────────────────────────────────────────
+    # -- Identity ----------------------------------------------------------
     strategy_id: str = ""
     strategy_name: str = ""
     symbol: str = ""
     timeframe: str = ""
     strategy_params: Dict[str, Any] = field(default_factory=dict)
 
-    # ── Core metrics (from backtester) ────────────────────────────────────
+    # -- Core metrics (from backtester) ------------------------------------
     total_return_pct: float = 0.0
     sharpe_ratio: float = 0.0
     max_drawdown_pct: float = 0.0
@@ -47,7 +47,7 @@ class CanonicalResult:
     win_rate: Optional[float] = None       # percentage (0-100)
     profit_factor: Optional[float] = None
 
-    # ── Extended metrics ──────────────────────────────────────────────────
+    # -- Extended metrics --------------------------------------------------
     starting_value: float = 10000.0
     ending_value: float = 10000.0
     bars_tested: int = 0
@@ -58,12 +58,12 @@ class CanonicalResult:
     avg_trade_duration_bars: float = 0.0
     time_in_market_pct: float = 0.0
 
-    # ── Computed arrays (built from trade list / equity) ──────────────────
+    # -- Computed arrays (built from trade list / equity) ------------------
     returns: Optional[np.ndarray] = None          # daily returns (decimal)
     equity_curve: Optional[np.ndarray] = None     # equity values over time
     trade_list: List[Dict] = field(default_factory=list)
 
-    # ── Lineage ───────────────────────────────────────────────────────────
+    # -- Lineage -----------------------------------------------------------
     parent_id: Optional[str] = None
     mutation_type: Optional[str] = None
     hypothesis_id: Optional[str] = None

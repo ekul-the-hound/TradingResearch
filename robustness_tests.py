@@ -227,7 +227,7 @@ class RobustnessTests:
         # Get data
         data = self.data_manager.get_data(symbol, timeframe, max_bars)
         if data is None or len(data) < 100:
-            print(f"❌ Insufficient data for {symbol}")
+            print(f"[FAIL] Insufficient data for {symbol}")
             return None
         
         results = {}
@@ -251,7 +251,7 @@ class RobustnessTests:
                 print(f"Return: {ret:+.2f}% | Trades: {trades}")
                 
             except Exception as e:
-                print(f"❌ Error: {e}")
+                print(f"[FAIL] Error: {e}")
                 results[delay] = {'total_return_pct': 0, 'sharpe_ratio': None, 'total_trades': 0}
         
         # Analyze degradation
@@ -277,14 +277,14 @@ class RobustnessTests:
         is_sensitive = (base_return - one_bar_return) / abs(base_return) > 0.2 if base_return != 0 else False
         
         # Print summary
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"LATENCY ANALYSIS:")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         print(f"  Base return (0 delay):    {base_return:+.2f}%")
         print(f"  1-bar delay return:       {one_bar_return:+.2f}%")
         print(f"  Degradation per bar:      {degradation_per_bar:.2f}%")
         print(f"  Max tolerable delay:      {max_tolerable} bars")
-        print(f"  Latency sensitive:        {'⚠️  YES' if is_sensitive else '✅ NO'}")
+        print(f"  Latency sensitive:        {'[WARN]  YES' if is_sensitive else '[OK] NO'}")
         print(f"{'='*60}")
         
         return LatencyTestResult(
@@ -347,7 +347,7 @@ class RobustnessTests:
         # Get data
         data = self.data_manager.get_data(symbol, timeframe, max_bars)
         if data is None or len(data) < 100:
-            print(f"❌ Insufficient data for {symbol}")
+            print(f"[FAIL] Insufficient data for {symbol}")
             return None
         
         results = {}
@@ -372,7 +372,7 @@ class RobustnessTests:
                 print(f"Return: {ret:+.2f}% | Trades: {trades}")
                 
             except Exception as e:
-                print(f"❌ Error: {e}")
+                print(f"[FAIL] Error: {e}")
                 results[multiplier] = {'total_return_pct': 0, 'sharpe_ratio': None, 'total_trades': 0}
         
         # Analyze cost sensitivity
@@ -395,13 +395,13 @@ class RobustnessTests:
         is_sensitive = (base_return - two_x_return) / abs(base_return) > 0.3 if base_return != 0 else False
         
         # Print summary
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"COST SENSITIVITY ANALYSIS:")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         print(f"  Base return (1x cost):    {base_return:+.2f}%")
         print(f"  2x cost return:           {two_x_return:+.2f}%")
         print(f"  Breakeven multiplier:     {breakeven:.2f}x" if breakeven else "  Breakeven multiplier:     N/A (always profitable or unprofitable)")
-        print(f"  Cost sensitive:           {'⚠️  YES' if is_sensitive else '✅ NO'}")
+        print(f"  Cost sensitive:           {'[WARN]  YES' if is_sensitive else '[OK] NO'}")
         print(f"{'='*60}")
         
         return SlippageTestResult(
@@ -454,7 +454,7 @@ class RobustnessTests:
         # Get data
         data = self.data_manager.get_data(symbol, timeframe, max_bars)
         if data is None or len(data) < 100:
-            print(f"❌ Insufficient data for {symbol}")
+            print(f"[FAIL] Insufficient data for {symbol}")
             return None
         
         # Build stress matrix
@@ -487,7 +487,7 @@ class RobustnessTests:
                     })
                     
                 except Exception as e:
-                    print(f"❌ Error: {e}")
+                    print(f"[FAIL] Error: {e}")
                     matrix_data.append({
                         'delay_bars': delay,
                         'cost_multiplier': mult,
@@ -513,23 +513,23 @@ class RobustnessTests:
         survival_rate = (returns > 0).mean() * 100
         
         # Print matrix
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"STRESS MATRIX (Returns %):")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         print(stress_matrix.to_string())
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"SUMMARY:")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         print(f"  Best case:      {best_case:+.2f}%")
         print(f"  Worst case:     {worst_case:+.2f}%")
         print(f"  Survival rate:  {survival_rate:.1f}% scenarios profitable")
         
         if survival_rate >= 80:
-            print(f"  Assessment:     ✅ ROBUST - Strategy survives most stress scenarios")
+            print(f"  Assessment:     [OK] ROBUST - Strategy survives most stress scenarios")
         elif survival_rate >= 50:
-            print(f"  Assessment:     ⚠️  MODERATE - Strategy vulnerable to adverse conditions")
+            print(f"  Assessment:     [WARN]  MODERATE - Strategy vulnerable to adverse conditions")
         else:
-            print(f"  Assessment:     ❌ FRAGILE - Strategy fails under stress")
+            print(f"  Assessment:     [FAIL] FRAGILE - Strategy fails under stress")
         
         print(f"{'='*60}")
         
@@ -640,18 +640,18 @@ class RobustnessTests:
         issues = []
         
         if latency_result:
-            print(f"\n📊 LATENCY SENSITIVITY:")
+            print(f"\n[STATS] LATENCY SENSITIVITY:")
             print(f"   Base return:        {latency_result.base_return:+.2f}%")
             print(f"   Degradation/bar:    {latency_result.degradation_per_bar:.2f}%")
             print(f"   Max safe delay:     {latency_result.max_tolerable_delay} bars")
             if latency_result.is_latency_sensitive:
                 issues.append("Latency sensitive - needs fast execution")
-                print(f"   Status:             ⚠️  SENSITIVE")
+                print(f"   Status:             [WARN]  SENSITIVE")
             else:
-                print(f"   Status:             ✅ ROBUST")
+                print(f"   Status:             [OK] ROBUST")
         
         if slippage_result:
-            print(f"\n💰 COST SENSITIVITY:")
+            print(f"\n[COST] COST SENSITIVITY:")
             print(f"   Base return:        {slippage_result.base_return:+.2f}%")
             if slippage_result.breakeven_multiplier:
                 print(f"   Breakeven at:       {slippage_result.breakeven_multiplier:.2f}x costs")
@@ -659,35 +659,35 @@ class RobustnessTests:
                 print(f"   Breakeven at:       N/A")
             if slippage_result.is_cost_sensitive:
                 issues.append("Cost sensitive - margin erosion risk")
-                print(f"   Status:             ⚠️  SENSITIVE")
+                print(f"   Status:             [WARN]  SENSITIVE")
             else:
-                print(f"   Status:             ✅ ROBUST")
+                print(f"   Status:             [OK] ROBUST")
         
         if combined_result:
-            print(f"\n🔥 STRESS TEST:")
+            print(f"\n[FIRE] STRESS TEST:")
             print(f"   Best scenario:      {combined_result.best_case_return:+.2f}%")
             print(f"   Worst scenario:     {combined_result.worst_case_return:+.2f}%")
             print(f"   Survival rate:      {combined_result.survival_rate:.1f}%")
             if combined_result.survival_rate < 50:
                 issues.append("Fails majority of stress scenarios")
-                print(f"   Status:             ❌ FRAGILE")
+                print(f"   Status:             [FAIL] FRAGILE")
             elif combined_result.survival_rate < 80:
                 issues.append("Vulnerable to adverse conditions")
-                print(f"   Status:             ⚠️  MODERATE")
+                print(f"   Status:             [WARN]  MODERATE")
             else:
-                print(f"   Status:             ✅ ROBUST")
+                print(f"   Status:             [OK] ROBUST")
         
         # Overall assessment
-        print(f"\n{'─'*70}")
+        print(f"\n{'-'*70}")
         print(f"OVERALL ASSESSMENT:")
-        print(f"{'─'*70}")
+        print(f"{'-'*70}")
         
         if not issues:
-            print(f"   ✅ Strategy appears ROBUST under adverse conditions")
+            print(f"   [OK] Strategy appears ROBUST under adverse conditions")
         else:
-            print(f"   ⚠️  Issues found:")
+            print(f"   [WARN]  Issues found:")
             for issue in issues:
-                print(f"      • {issue}")
+                print(f"      - {issue}")
         
         print(f"{'='*70}\n")
 
@@ -734,9 +734,9 @@ if __name__ == "__main__":
     try:
         from strategies.simple_strategy import SimpleMovingAverageCrossover
         strategy_class = SimpleMovingAverageCrossover
-        print("✅ Loaded SimpleMovingAverageCrossover strategy")
+        print("[OK] Loaded SimpleMovingAverageCrossover strategy")
     except ImportError:
-        print("⚠️  Could not import strategy, using built-in test")
+        print("[WARN]  Could not import strategy, using built-in test")
         strategy_class = None
     
     if strategy_class:
@@ -747,8 +747,8 @@ if __name__ == "__main__":
             timeframe='1hour'
         )
         
-        print("\n✅ Robustness tests complete!")
+        print("\n[OK] Robustness tests complete!")
     else:
-        print("\n⚠️  Add strategies/simple_strategy.py to run tests")
+        print("\n[WARN]  Add strategies/simple_strategy.py to run tests")
     
     print("="*70)

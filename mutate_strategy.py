@@ -76,24 +76,24 @@ Generate {num_variants} variant strategies based on the base strategy below. Eac
 
 ### Rule 1: Indicator Names
 Use the CORRECT Backtrader indicator names:
-- ✅ CORRECT: `bt.indicators.OBV(self.data)` 
-- ❌ WRONG: `bt.indicators.OnBalanceVolume()` (does not exist!)
-- ✅ CORRECT: `bt.indicators.RSI(self.data.close, period=14)`
-- ✅ CORRECT: `bt.indicators.ATR(self.data, period=14)`
-- ✅ CORRECT: `bt.indicators.ADX(self.data, period=14)`
-- ✅ CORRECT: `bt.indicators.BollingerBands(self.data.close)`
-- ✅ CORRECT: `bt.indicators.MACD(self.data.close)`
-- ✅ CORRECT: `bt.indicators.Stochastic(self.data)`
+- [OK] CORRECT: `bt.indicators.OBV(self.data)` 
+- [FAIL] WRONG: `bt.indicators.OnBalanceVolume()` (does not exist!)
+- [OK] CORRECT: `bt.indicators.RSI(self.data.close, period=14)`
+- [OK] CORRECT: `bt.indicators.ATR(self.data, period=14)`
+- [OK] CORRECT: `bt.indicators.ADX(self.data, period=14)`
+- [OK] CORRECT: `bt.indicators.BollingerBands(self.data.close)`
+- [OK] CORRECT: `bt.indicators.MACD(self.data.close)`
+- [OK] CORRECT: `bt.indicators.Stochastic(self.data)`
 
 ### Rule 2: Position Price Access (CRITICAL - Prevents NoneType errors)
 ALWAYS check position exists before accessing position.price:
 ```python
-# ✅ CORRECT - Safe position price access
+# [OK] CORRECT - Safe position price access
 if self.position and self.position.size != 0:
     entry_price = self.position.price
     stop_price = entry_price - (2 * self.atr[0])
 
-# ❌ WRONG - Will cause NoneType error when no position
+# [FAIL] WRONG - Will cause NoneType error when no position
 stop_price = self.position.price - (2 * self.atr[0])
 ```
 
@@ -145,13 +145,13 @@ def next(self):
 ### Rule 5: Partial Exits
 For partial position exits, use explicit size:
 ```python
-# ✅ CORRECT - Exit half position
+# [OK] CORRECT - Exit half position
 if self.position.size > 0:
     half_size = self.position.size // 2
     if half_size > 0:
         self.sell(size=half_size)
 
-# ❌ WRONG - Closes entire position
+# [FAIL] WRONG - Closes entire position
 self.close()  # This closes EVERYTHING
 ```
 
@@ -203,13 +203,13 @@ def load_base_strategy(strategy_path=None):
         strategy_path = Path(__file__).parent / 'strategies' / 'simple_strategy.py'
     
     if not strategy_path.exists():
-        print(f"❌ Base strategy not found: {strategy_path}")
+        print(f"[FAIL] Base strategy not found: {strategy_path}")
         return None
     
     with open(strategy_path, 'r') as f:
         code = f.read()
     
-    print(f"✅ Loaded base strategy: {strategy_path.name}")
+    print(f"[OK] Loaded base strategy: {strategy_path.name}")
     return code
 
 
@@ -257,20 +257,20 @@ The base strategy is currently unprofitable on average. Variants should aim to:
 2. Reduce drawdown through better stop losses
 3. Increase profit factor through better exits
 """
-            print(f"✅ Loaded performance data from {row[5]} backtest results")
+            print(f"[OK] Loaded performance data from {row[5]} backtest results")
             return summary
         else:
             return "No backtest results available yet. Generate variants based on general best practices."
     
     except Exception as e:
-        print(f"⚠️  Could not load performance data: {e}")
+        print(f"[WARN]  Could not load performance data: {e}")
         return "No backtest results available yet. Generate variants based on general best practices."
 
 
 def call_mutation_agent(base_code, performance, ideas):
     """Call Claude to generate variants"""
     
-    print(f"\n🤖 Calling Claude to generate {NUM_VARIANTS} variants...")
+    print(f"\n[AI] Calling Claude to generate {NUM_VARIANTS} variants...")
     print(f"   This may take 30-60 seconds...\n")
     
     client = Anthropic(api_key=config.CLAUDE_API_KEY)
@@ -300,7 +300,7 @@ def call_mutation_agent(base_code, performance, ideas):
         output_cost = (output_tokens / 1_000_000) * 15.00
         total_cost = input_cost + output_cost
         
-        print(f"✅ Response received!")
+        print(f"[OK] Response received!")
         print(f"   Input tokens:  {input_tokens:,}")
         print(f"   Output tokens: {output_tokens:,}")
         print(f"   Estimated cost: ${total_cost:.4f}")
@@ -308,7 +308,7 @@ def call_mutation_agent(base_code, performance, ideas):
         return response.content[0].text
     
     except Exception as e:
-        print(f"❌ API call failed: {e}")
+        print(f"[FAIL] API call failed: {e}")
         return None
 
 
@@ -339,7 +339,7 @@ def parse_variants(response_text):
                 'code': code
             })
     
-    print(f"\n🔍 Parsed {len(variants)} variants from response")
+    print(f"\n[SEARCH] Parsed {len(variants)} variants from response")
     
     return variants
 
@@ -363,20 +363,20 @@ def check_common_bugs(code):
     
     # Check for wrong OBV indicator name
     if 'OnBalanceVolume' in code:
-        warnings.append("⚠️  Uses 'OnBalanceVolume' - should be 'OBV'")
+        warnings.append("[WARN]  Uses 'OnBalanceVolume' - should be 'OBV'")
     
     # Check for unsafe position.price access
     if 'self.position.price' in code:
         # Check if there's a guard
         if 'if self.position' not in code and 'if not self.position' not in code:
-            warnings.append("⚠️  Accesses position.price without checking if position exists")
+            warnings.append("[WARN]  Accesses position.price without checking if position exists")
     
     # Check for missing minimum bar check
     if 'def next(self):' in code:
         next_start = code.find('def next(self):')
         next_body = code[next_start:next_start+500]  # Check first 500 chars of next()
         if 'if len(self)' not in next_body and 'if len(self.data)' not in next_body:
-            warnings.append("⚠️  next() may be missing minimum bar check")
+            warnings.append("[WARN]  next() may be missing minimum bar check")
     
     return warnings
 
@@ -419,14 +419,14 @@ def save_variants(variants):
             saved.append(num)
             
             if bug_warnings:
-                print(f"   ⚠️  Saved variant_{num:02d}.py (with warnings)")
+                print(f"   [WARN]  Saved variant_{num:02d}.py (with warnings)")
                 for warn in bug_warnings:
                     print(f"      {warn}")
             else:
-                print(f"   ✅ Saved variant_{num:02d}.py")
+                print(f"   [OK] Saved variant_{num:02d}.py")
         else:
             failed.append({'number': num, 'error': error})
-            print(f"   ❌ variant_{num:02d} failed validation: {error[:50]}...")
+            print(f"   [FAIL] variant_{num:02d} failed validation: {error[:50]}...")
     
     return saved, failed
 
@@ -470,13 +470,13 @@ def generate_variants_summary(variants, saved, failed):
             
             # Truncate docstring for display
             short_doc = docstring.split('\n')[0][:50]
-            print(f"    • variant_{num:02d}.py: {class_name}")
+            print(f"    - variant_{num:02d}.py: {class_name}")
             print(f"      {short_doc}...")
     
     if failed:
-        print(f"\n  ⚠️  Failed variants (syntax errors):")
+        print(f"\n  [WARN]  Failed variants (syntax errors):")
         for f in failed:
-            print(f"    • variant_{f['number']:02d}: {f['error'][:40]}...")
+            print(f"    - variant_{f['number']:02d}: {f['error'][:40]}...")
     
     print(f"\n{'='*70}")
     print("NEXT STEPS:")
@@ -496,27 +496,27 @@ def main():
     """Main mutation agent workflow"""
     
     print("\n" + "="*70)
-    print("🧬 MUTATION AGENT")
+    print("[DNA] MUTATION AGENT")
     print("="*70)
     print(f"  Variants to generate: {NUM_VARIANTS}")
     print(f"  Output directory: {VARIANTS_DIR}")
     print("="*70 + "\n")
     
     # Step 1: Load base strategy
-    print("📂 Step 1: Loading base strategy...")
+    print("[FOLDER] Step 1: Loading base strategy...")
     base_code = load_base_strategy()
     if not base_code:
         return
     
     # Step 2: Get performance data
-    print("\n📊 Step 2: Loading performance data...")
+    print("\n[STATS] Step 2: Loading performance data...")
     performance = get_performance_summary()
     
     # Step 3: Get mutation ideas
-    print("\n💡 Step 3: Loading mutation ideas...")
+    print("\n[TIP] Step 3: Loading mutation ideas...")
     ideas = get_all_ideas()
     idea_count = len([l for l in ideas.split('\n') if l.strip().startswith('-')])
-    print(f"✅ Loaded {idea_count} mutation ideas")
+    print(f"[OK] Loaded {idea_count} mutation ideas")
     
     # Step 4: Confirm with user
     print("\n" + "-"*70)
@@ -536,17 +536,17 @@ def main():
         return
     
     # Step 6: Parse variants
-    print("\n🔍 Step 4: Parsing variants...")
+    print("\n[SEARCH] Step 4: Parsing variants...")
     variants = parse_variants(response)
     
     if not variants:
-        print("❌ No valid variants found in response")
+        print("[FAIL] No valid variants found in response")
         print("\nRaw response (first 500 chars):")
         print(response[:500])
         return
     
     # Step 7: Save variants
-    print("\n💾 Step 5: Saving variants...")
+    print("\n[SAVE] Step 5: Saving variants...")
     saved, failed = save_variants(variants)
     
     # Step 8: Summary

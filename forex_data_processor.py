@@ -86,7 +86,7 @@ class ForexDataProcessor:
         files = self.find_yearly_files(ticker)
         
         if not files:
-            print(f"❌ No files found for {ticker} at {self.base_path}")
+            print(f"[FAIL] No files found for {ticker} at {self.base_path}")
             return None
         
         if verbose:
@@ -123,14 +123,14 @@ class ForexDataProcessor:
                 
                 if verbose:
                     year = os.path.basename(file_path).split('_')[-1].replace('.xlsx', '')
-                    print(f"  ✅ {year}: {len(df):,} rows")
+                    print(f"  [OK] {year}: {len(df):,} rows")
             
             except Exception as e:
-                print(f"  ❌ Failed to load {os.path.basename(file_path)}: {e}")
+                print(f"  [FAIL] Failed to load {os.path.basename(file_path)}: {e}")
                 continue
         
         if not dfs:
-            print(f"❌ No valid data loaded for {ticker}")
+            print(f"[FAIL] No valid data loaded for {ticker}")
             return None
         
         # Concatenate all years
@@ -149,7 +149,7 @@ class ForexDataProcessor:
         merged = merged[['open', 'high', 'low', 'close', 'volume']]
         
         if verbose:
-            print(f"\n  ✅ Merged {ticker}:")
+            print(f"\n  [OK] Merged {ticker}:")
             print(f"     Total rows: {len(merged):,}")
             print(f"     Date range: {merged.index.min()} to {merged.index.max()}")
         
@@ -161,7 +161,7 @@ class ForexDataProcessor:
         """
         filename = os.path.join(self.cache_path, f"{ticker}_1min_merged.csv")
         data.to_csv(filename)
-        print(f"  💾 Saved to: {filename}")
+        print(f"  [SAVE] Saved to: {filename}")
         return filename
     
     def process_all_tickers(self):
@@ -201,9 +201,9 @@ class ForexDataProcessor:
         for ticker, result in results.items():
             if result['success']:
                 successful += 1
-                print(f"  ✅ {ticker:8} | {result['rows']:>10,} rows | {result['start'].date()} to {result['end'].date()}")
+                print(f"  [OK] {ticker:8} | {result['rows']:>10,} rows | {result['start'].date()} to {result['end'].date()}")
             else:
-                print(f"  ❌ {ticker:8} | FAILED")
+                print(f"  [FAIL] {ticker:8} | FAILED")
         
         print(f"\n  Total: {successful}/{len(results)} tickers processed successfully")
         print("="*70 + "\n")
@@ -222,12 +222,12 @@ def main():
     successful = sum(1 for r in results.values() if r.get('success'))
     
     if successful > 0:
-        print("✅ Forex data processing complete!")
+        print("[OK] Forex data processing complete!")
         print("\nNext steps:")
         print("  1. Run: python test_data_download.py")
         print("  2. Run: python run_backtests.py")
     else:
-        print("❌ No data was processed successfully.")
+        print("[FAIL] No data was processed successfully.")
         print("\nTroubleshooting:")
         print(f"  1. Check that .xlsx files exist in: {config.FOREX_BASE_PATH}")
         print("  2. Run: python diagnose_histdata_files.py")

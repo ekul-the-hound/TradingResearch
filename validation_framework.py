@@ -1002,19 +1002,19 @@ class StatisticalAnalysis:
         
         # Serial Dependence
         serial = results['serial_dependence']
-        print("\n📊 SERIAL DEPENDENCE (Autocorrelation)")
+        print("\n[STATS] SERIAL DEPENDENCE (Autocorrelation)")
         print("-"*70)
         print(f"  Lag-1 Autocorr:    {serial.autocorr_lag1:+.4f}")
         print(f"  Lag-5 Autocorr:    {serial.autocorr_lag5:+.4f}")
         print(f"  Ljung-Box Stat:    {serial.ljung_box_stat:.2f}")
         print(f"  Ljung-Box p-value: {serial.ljung_box_pvalue:.4f}")
-        status = "⚠️  DEPENDENT" if serial.has_serial_dependence else "✅ INDEPENDENT"
+        status = "[WARN]  DEPENDENT" if serial.has_serial_dependence else "[OK] INDEPENDENT"
         print(f"  Status:            {status}")
-        print(f"  → {serial.interpretation}")
+        print(f"  -> {serial.interpretation}")
         
         # Distribution
         dist = results['distribution']
-        print("\n📊 DISTRIBUTION ANALYSIS")
+        print("\n[STATS] DISTRIBUTION ANALYSIS")
         print("-"*70)
         print(f"  Mean:              {dist.mean:+.4f}")
         print(f"  Std Dev:           {dist.std:.4f}")
@@ -1022,13 +1022,13 @@ class StatisticalAnalysis:
         print(f"  Excess Kurtosis:   {dist.kurtosis:+.4f}")
         print(f"  Jarque-Bera Stat:  {dist.jarque_bera_stat:.2f}")
         print(f"  JB p-value:        {dist.jarque_bera_pvalue:.4f}")
-        status = "✅ NORMAL" if dist.is_normal else "⚠️  NON-NORMAL"
+        status = "[OK] NORMAL" if dist.is_normal else "[WARN]  NON-NORMAL"
         print(f"  Status:            {status}")
-        print(f"  → {dist.interpretation}")
+        print(f"  -> {dist.interpretation}")
         
         # GARCH
         garch = results['garch']
-        print("\n📊 GARCH VOLATILITY MODEL")
+        print("\n[STATS] GARCH VOLATILITY MODEL")
         print("-"*70)
         if garch.model_fit:
             print(f"  Omega (const):     {garch.omega:.6f}")
@@ -1038,18 +1038,18 @@ class StatisticalAnalysis:
             print(f"  Unconditional Vol: {garch.unconditional_vol:.4f}")
             print(f"  1-Day Forecast:    {garch.forecast_vol_1day:.4f}")
             print(f"  AIC:               {garch.aic:.2f}")
-        print(f"  → {garch.interpretation}")
+        print(f"  -> {garch.interpretation}")
         
         # VaR
         var = results['var']
-        print("\n📊 VALUE AT RISK")
+        print("\n[STATS] VALUE AT RISK")
         print("-"*70)
         print(f"  Confidence Level:  {var.confidence_level*100:.0f}%")
         print(f"  Historical VaR:    {var.historical_var:+.4f}")
         print(f"  Parametric VaR:    {var.parametric_var:+.4f}")
         print(f"  Cornish-Fisher:    {var.cornish_fisher_var:+.4f}")
         print(f"  CVaR (ES):         {var.cvar_expected_shortfall:+.4f}")
-        print(f"  → {var.interpretation}")
+        print(f"  -> {var.interpretation}")
         
         print("\n" + "="*70)
 

@@ -22,16 +22,16 @@ class StrategyBacktester:
         # Initialize Claude API
         if config.CLAUDE_API_KEY:
             self.claude = Anthropic(api_key=config.CLAUDE_API_KEY)
-            print("✓ Claude AI initialized")
+            print("[OK] Claude AI initialized")
         else:
             self.claude = None
-            print("⚠️  Claude AI not initialized (no API key found)")
+            print("[WARN]  Claude AI not initialized (no API key found)")
     
     def download_data_with_retry(self, symbol, start_date, end_date, retries=3):
         """Download data with retry logic"""
         for attempt in range(retries):
             try:
-                print(f"📊 Downloading data for {symbol}... (attempt {attempt + 1}/{retries})")
+                print(f"[STATS] Downloading data for {symbol}... (attempt {attempt + 1}/{retries})")
                 
                 # Create ticker object first
                 ticker = yf.Ticker(symbol)
@@ -42,16 +42,16 @@ class StrategyBacktester:
                 if not data.empty:
                     return data
                 else:
-                    print(f"⚠️  No data returned, retrying...")
+                    print(f"[WARN]  No data returned, retrying...")
                     time.sleep(2)
                     
             except Exception as e:
-                print(f"⚠️  Error: {e}")
+                print(f"[WARN]  Error: {e}")
                 if attempt < retries - 1:
                     print(f"   Retrying in 2 seconds...")
                     time.sleep(2)
                 else:
-                    print(f"❌ Failed after {retries} attempts")
+                    print(f"[FAIL] Failed after {retries} attempts")
                     return None
         
         return None
@@ -75,17 +75,17 @@ class StrategyBacktester:
         data = self.download_data_with_retry(symbol, start_date, end_date)
         
         if data is None or data.empty:
-            print(f"❌ Could not download data for {symbol}")
+            print(f"[FAIL] Could not download data for {symbol}")
             return None
         
         if len(data) < 50:
-            print(f"   ⚠️  Too few bars ({len(data)}), minimum 50 required")
+            print(f"   [WARN]  Too few bars ({len(data)}), minimum 50 required")
             return None
         
         # Rename columns to match backtrader expectations
         data.columns = [col.lower() for col in data.columns]
         
-        print(f"✓ Downloaded {len(data)} days of data")
+        print(f"[OK] Downloaded {len(data)} days of data")
         
         # Create backtrader engine
         cerebro = bt.Cerebro()
@@ -120,13 +120,13 @@ class StrategyBacktester:
         cerebro.addanalyzer(bt.analyzers.Returns, _name='returns')
         
         # Run backtest
-        print(f"🔄 Running backtest...")
+        print(f"[CYCLE] Running backtest...")
         starting_value = cerebro.broker.getvalue()
         
         try:
             results = cerebro.run()
         except Exception as e:
-            print(f"❌ Backtest failed: {e}")
+            print(f"[FAIL] Backtest failed: {e}")
             return None
         
         ending_value = cerebro.broker.getvalue()
@@ -227,7 +227,7 @@ class StrategyBacktester:
         
         # Get Claude's analysis
         if results and self.claude:
-            print("\n🤖 Asking Claude to analyze results...")
+            print("\n[AI] Asking Claude to analyze results...")
             analysis = self.get_claude_analysis(results, strategy_class.__name__)
             print(f"\n{'='*70}")
             print("CLAUDE'S ANALYSIS:")
@@ -235,14 +235,14 @@ class StrategyBacktester:
             print(analysis)
             print(f"{'='*70}\n")
         elif not self.claude:
-            print("\n⚠️  Skipping Claude analysis (API key not configured)")
+            print("\n[WARN]  Skipping Claude analysis (API key not configured)")
         
         return results
     
     def print_summary(self, results):
         """Print summary statistics"""
         if not results:
-            print("\n❌ No results to summarize")
+            print("\n[FAIL] No results to summarize")
             return
         
         print(f"\n{'='*70}")

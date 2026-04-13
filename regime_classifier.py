@@ -466,5 +466,5 @@ if __name__ == "__main__":
             print(regime_df[['close', 'returns', 'adx', 'atr_ratio', 'regime']].head(3))
     
     print("\n" + "="*70)
-    print("✅ Regime classifier working!")
+    print("[OK] Regime classifier working!")
     print("="*70)

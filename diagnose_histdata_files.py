@@ -27,12 +27,12 @@ def diagnose_single_file(filepath):
         # Try reading as Excel
         if filepath.endswith('.xlsx'):
             df = pd.read_excel(filepath, nrows=10, engine='openpyxl')
-            print(f"✅ Successfully read as .xlsx file")
+            print(f"[OK] Successfully read as .xlsx file")
         elif filepath.endswith('.csv'):
             df = pd.read_csv(filepath, nrows=10)
-            print(f"✅ Successfully read as .csv file")
+            print(f"[OK] Successfully read as .csv file")
         else:
-            print(f"❌ Unknown file type: {filepath}")
+            print(f"[FAIL] Unknown file type: {filepath}")
             return False
         
         # Show basic info
@@ -53,10 +53,10 @@ def diagnose_single_file(filepath):
             col_lower = str(col).lower()
             if any(x in col_lower for x in ['date', 'time', 'dt']):
                 datetime_found = True
-                print(f"\n✅ Found datetime-related column: {col}")
+                print(f"\n[OK] Found datetime-related column: {col}")
         
         if not datetime_found and len(df.columns) >= 2:
-            print(f"\n⚠️  No explicit datetime column, but found {len(df.columns)} columns")
+            print(f"\n[WARN]  No explicit datetime column, but found {len(df.columns)} columns")
             print(f"   HistData format often has date in column 0, time in column 1")
             print(f"   Column 0: {df.columns[0]}")
             print(f"   Column 1: {df.columns[1]}")
@@ -69,9 +69,9 @@ def diagnose_single_file(filepath):
                 ohlc_cols.append(col)
         
         if len(ohlc_cols) >= 4:
-            print(f"\n✅ Found OHLC columns: {ohlc_cols}")
+            print(f"\n[OK] Found OHLC columns: {ohlc_cols}")
         else:
-            print(f"\n⚠️  Only found {len(ohlc_cols)} OHLC columns: {ohlc_cols}")
+            print(f"\n[WARN]  Only found {len(ohlc_cols)} OHLC columns: {ohlc_cols}")
             print(f"   Expected columns like: Open, High, Low, Close")
         
         # Check for volume
@@ -79,15 +79,15 @@ def diagnose_single_file(filepath):
         for col in df.columns:
             if 'volume' in str(col).lower():
                 volume_found = True
-                print(f"\n✅ Found volume column: {col}")
+                print(f"\n[OK] Found volume column: {col}")
         
         if not volume_found:
-            print(f"\n⚠️  No volume column found")
+            print(f"\n[WARN]  No volume column found")
         
         return True
     
     except Exception as e:
-        print(f"\n❌ Failed to read file: {e}")
+        print(f"\n[FAIL] Failed to read file: {e}")
         print(f"\nTroubleshooting suggestions:")
         print(f"  1. Verify file is not corrupted")
         print(f"  2. Check file permissions")
@@ -152,7 +152,7 @@ def main():
     print(f"\nSearching for files in: {base_path}")
     
     if not os.path.exists(base_path):
-        print(f"\n❌ Directory not found: {base_path}")
+        print(f"\n[FAIL] Directory not found: {base_path}")
         print("   Please create this directory and add your HistData.com files")
         print("\nTo fix:")
         print(f"   1. Create directory: mkdir {base_path}")
@@ -163,7 +163,7 @@ def main():
     files = find_forex_files(base_path)
     
     if not files:
-        print(f"\n❌ No .xlsx or .csv files found in {base_path}")
+        print(f"\n[FAIL] No .xlsx or .csv files found in {base_path}")
         print("\nExpected files like:")
         print("  - DAT_XLSX_EURUSD_M1_2020.xlsx")
         print("  - DAT_XLSX_GBPUSD_M1_2021.xlsx")
@@ -174,7 +174,7 @@ def main():
         print(f"   3. Extract files to {base_path}")
         return
     
-    print(f"\n✅ Found {len(files)} files")
+    print(f"\n[OK] Found {len(files)} files")
     
     # Show all files found
     print("\nAvailable files:")
@@ -217,14 +217,14 @@ def main():
                 format_counts[format_name] = format_counts.get(format_name, 0) + 1
                 
                 if len(df.columns) >= 4 and confidence > 0.5:
-                    print(f"✅ OK ({len(df.columns)} cols, {format_name})")
+                    print(f"[OK] OK ({len(df.columns)} cols, {format_name})")
                     success_count += 1
                 else:
-                    print(f"⚠️  {len(df.columns)} cols, unknown format")
+                    print(f"[WARN]  {len(df.columns)} cols, unknown format")
                     failed_files.append((filepath, 'unknown_format'))
             
             except Exception as e:
-                print(f"❌ FAILED: {str(e)[:40]}")
+                print(f"[FAIL] FAILED: {str(e)[:40]}")
                 failed_files.append((filepath, str(e)[:100]))
         
         # Summary
@@ -233,17 +233,17 @@ def main():
         print(f"{'='*70}")
         
         # Format distribution
-        print(f"\n📊 Detected Formats:")
+        print(f"\n[STATS] Detected Formats:")
         for format_name, count in sorted(format_counts.items()):
             print(f"  {format_name:15s}: {count} files")
         
         if failed_files:
-            print(f"\n⚠️  {len(failed_files)} files had issues:")
+            print(f"\n[WARN]  {len(failed_files)} files had issues:")
             for filepath, reason in failed_files:
                 print(f"  - {os.path.basename(filepath)}")
                 print(f"    Reason: {reason}")
         else:
-            print(f"\n✅ All files look good!")
+            print(f"\n[OK] All files look good!")
             print(f"\nNext steps:")
             print(f"  1. Run: python test_data_download.py")
             print(f"  2. Verify Forex data loads correctly")
@@ -256,9 +256,9 @@ def main():
             if 1 <= file_num <= len(files):
                 diagnose_single_file(files[file_num - 1])
             else:
-                print(f"❌ Invalid file number. Must be between 1 and {len(files)}")
+                print(f"[FAIL] Invalid file number. Must be between 1 and {len(files)}")
         except ValueError:
-            print("❌ Invalid input. Please enter a number.")
+            print("[FAIL] Invalid input. Please enter a number.")
     
     else:
         print("\n👋 Exiting")
