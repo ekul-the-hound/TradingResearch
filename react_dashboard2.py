@@ -59,7 +59,18 @@ for k,mod,cls in [
     ("BacktestAdapter","backtest_adapter","BacktestAdapter"),("FeatureEngineer","feature_engineering","FeatureEngineer"),
     ("PerformanceAttributor","performance_attribution","PerformanceAttributor"),
 ]: _ld(k,mod,cls)
-TOTAL_MODULES=29
+TOTAL_MODULES=28  # actual count of module loads above
+
+# Print which modules failed to load (helpful for debugging)
+_ALL_MODULE_KEYS = ["LineageTracker","OverfittingDetector","FilteringPipeline","DiversificationFilter",
+    "SurrogateModel","StrategyOptimizer","GeneticEngine","MarketImpactModel","CapacityModel","KillSwitch",
+    "TailRiskAnalyzer","LiquidityStressTest","DriftDetector","ShadowTrader","StrategyLifecycle",
+    "FTMOComplianceChecker","PortfolioEngine","ValidationFramework","RobustnessTests","AdversarialReviewer",
+    "CostAdjustedScorer","ParameterSensitivity","RegimeClassifier","MetaModel","CanonicalResult",
+    "BacktestAdapter","FeatureEngineer","PerformanceAttributor"]
+_FAILED = [k for k in _ALL_MODULE_KEYS if k not in M]
+if _FAILED:
+    print(f"  [WARN] {len(_FAILED)} module(s) failed to load: {', '.join(_FAILED)}")
 
 T={"bg":"#06080d","surface":"#0b0f16","card":"#10151e","elevated":"#181f2e","border":"rgba(255,255,255,0.06)",
    "text":"#eef0f5","muted":"#8b95a8","dim":"#5a6478","faint":"#3d465a","accent":"#818cf8","accent2":"#6366f1",
@@ -156,17 +167,52 @@ def _export_and_run_single(strategy_id, sm):
             # Launch run_single_strategy.py on it
             runner = str(BASE / "run_single_strategy.py")
             if not os.path.exists(runner):
-                sm(f"Exported to {filepath.name} but run_single_strategy.py not found — run manually")
+                sm(f"Exported to {filepath.name} -- run_single_strategy.py not found, run manually: python run_single_strategy.py {filepath}")
                 return
+
+            # Write a status file so the dashboard can track progress
+            status_file = BASE / "backtest_status.json"
+            status_file.write_text(json.dumps({
+                "strategy": strat.get("strategy_name", "?"),
+                "file": str(filepath),
+                "started": datetime.now().isoformat(),
+                "status": "running"
+            }))
+
             subprocess.Popen(
                 [sys.executable, runner, str(filepath), "-y"],
                 cwd=str(BASE),
                 creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
             )
-            sm(f"Exported & testing: {strat.get('strategy_name','?')}")
+            sm(f"Backtesting: {strat.get('strategy_name','?')} -- check new terminal window")
         except Exception as x:
             sm(f"Error: {x}")
     return h
+
+def _get_backtest_status():
+    """Check if a backtest is currently running or recently finished."""
+    sf = BASE / "backtest_status.json"
+    if not sf.exists(): return None
+    try:
+        data = json.loads(sf.read_text())
+        status = data.get("status", "unknown")
+        if status == "complete":
+            # Show completion for 2 minutes then hide
+            finished = datetime.fromisoformat(data.get("finished", ""))
+            since = (datetime.now() - finished).total_seconds()
+            if since > 120: return None
+            data["elapsed"] = int(since)
+            data["display"] = "complete"
+            return data
+        elif status == "running":
+            started = datetime.fromisoformat(data.get("started", ""))
+            elapsed = (datetime.now() - started).total_seconds()
+            if elapsed > 1800: return None  # stale after 30 min
+            data["elapsed"] = int(elapsed)
+            data["display"] = "running"
+            return data
+    except: pass
+    return None
 
 # ======================== UI PRIMITIVES ========================
 def _fig(fig,h=320):
@@ -609,6 +655,30 @@ SUBS={"strategies":"Add strategies, view code, manage library","backtests":"Per-
 @component
 def App():
     pg,spg=hooks.use_state("strategies"); s=D.bts()
+    # Check for running backtest
+    bt_status = _get_backtest_status()
+    status_banner = html.div()
+    if bt_status:
+        elapsed = bt_status.get("elapsed", 0)
+        display = bt_status.get("display", "running")
+        mins = elapsed // 60; secs = elapsed % 60
+        if display == "running":
+            status_banner = html.div({"style":{"padding":"8px 20px","backgroundColor":f"{T['green']}15",
+                "borderBottom":f"1px solid {T['green']}33","display":"flex","alignItems":"center","gap":"10px"}},
+                html.span({"style":{"display":"inline-block","width":"8px","height":"8px","borderRadius":"50%","backgroundColor":T["green"]}}),
+                html.span({"style":{"color":T["green"],"fontSize":"12px","fontWeight":"600"}},
+                    f"Backtesting: {bt_status.get('strategy','?')}"),
+                html.span({"style":{"color":T["dim"],"fontSize":"11px"}},f"({mins}m {secs}s elapsed)"),
+                html.span({"style":{"color":T["muted"],"fontSize":"10px"}},"Check terminal for live progress. Hit Refresh when done."))
+        else:
+            tests = bt_status.get("tests", 0); errors = bt_status.get("errors", 0)
+            status_banner = html.div({"style":{"padding":"8px 20px","backgroundColor":f"{T['cyan']}15",
+                "borderBottom":f"1px solid {T['cyan']}33","display":"flex","alignItems":"center","gap":"10px"}},
+                html.span({"style":{"color":T["cyan"],"fontSize":"12px","fontWeight":"600"}},
+                    f"Backtest complete: {bt_status.get('strategy','?')}"),
+                html.span({"style":{"color":T["muted"],"fontSize":"11px"}},f"{tests} tests, {errors} errors"),
+                html.span({"style":{"color":T["dim"],"fontSize":"10px"}},"Hit Refresh to load new results into charts"))
+
     return html.div({"style":{"display":"flex","minHeight":"100vh","backgroundColor":T["bg"],"color":T["text"],"fontFamily":"'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}},
         html.aside({"style":{"width":"200px","backgroundColor":T["surface"],"borderRight":f"1px solid {T['border']}","display":"flex","flexDirection":"column","position":"fixed","top":"0","left":"0","bottom":"0","zIndex":"10"}},
             html.div({"style":{"padding":"16px 14px","borderBottom":f"1px solid {T['border']}"}},
@@ -622,6 +692,7 @@ def App():
                 *[html.div({"style":{"display":"flex","justifyContent":"space-between","marginBottom":"2px"}},
                     html.span({"style":{"color":T["dim"]}},k),html.span({"style":{"color":T["text"],"fontWeight":"600"}},v)) for k,v in [("Backtests",str(s["total"])),("Modules",f"{len(M)}/{TOTAL_MODULES}"),("Symbols",str(len(s["symbols"])))]])),
         html.div({"style":{"flex":"1","marginLeft":"200px","display":"flex","flexDirection":"column"}},
+            status_banner,
             html.header({"style":{"backgroundColor":f"{T['surface']}ee","backdropFilter":"blur(12px)","borderBottom":f"1px solid {T['border']}","padding":"10px 20px",
                 "display":"flex","justifyContent":"space-between","alignItems":"center","position":"sticky","top":"0","zIndex":"5"}},
                 html.div(html.h2({"style":{"fontSize":"15px","fontWeight":"700","margin":"0"}},dict(NAV).get(pg,"")),

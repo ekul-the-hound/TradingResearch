@@ -184,6 +184,23 @@ def main():
     print(f"  View in dashboard: python react_dashboard2.py")
     print("=" * 60)
     print()
+    
+    # Clear the backtest status file so the dashboard knows we're done
+    status_file = Path(__file__).parent / "backtest_status.json"
+    try:
+        if status_file.exists():
+            import json
+            status_file.write_text(json.dumps({
+                "strategy": class_name,
+                "file": args.strategy_file,
+                "started": start.isoformat(),
+                "finished": datetime.now().isoformat(),
+                "status": "complete",
+                "tests": len(results),
+                "errors": errors,
+            }))
+    except:
+        pass
 
 
 if __name__ == "__main__":
