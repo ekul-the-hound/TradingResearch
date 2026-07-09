@@ -298,7 +298,7 @@ class ResearchDatabase:
         cursor = conn.cursor()
 
         cursor.execute('''
-            INSERT OR REPLACE INTO strategies (
+            INSERT INTO strategies (
                 strategy_id, doc_id, strategy_name, summary, description,
                 generated_code, code_file_path,
                 origin_source, source_url, source_type, source_bias, parent_docs,
@@ -317,6 +317,12 @@ class ResearchDatabase:
                 ?, ?, ?,
                 ?, ?, ?
             )
+            ON CONFLICT(strategy_id) DO UPDATE SET
+                strategy_name=excluded.strategy_name, summary=excluded.summary,
+                description=excluded.description, generated_code=excluded.generated_code,
+                code_file_path=excluded.code_file_path, quality_score=excluded.quality_score
+                -- code_validates, validation_*, is_duplicate, duplicate_of,
+                -- status, created_at intentionally preserved
         ''', (
             strategy_id,
             strategy.get("doc_id"),

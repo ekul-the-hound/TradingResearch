@@ -234,6 +234,7 @@ class BacktestAdapter:
         try:
             spec = importlib.util.spec_from_file_location(path.stem, path)
             module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
             spec.loader.exec_module(module)
         except Exception as e:
             if self.verbose:
@@ -281,7 +282,7 @@ class BacktestAdapter:
                 "sharpe_ratio": cr.sharpe_ratio or 0,
                 "max_drawdown_pct": cr.max_drawdown_pct or 0,
                 "total_trades": float(cr.total_trades),
-                "win_rate": (cr.win_rate or 50) / 100,
+                "win_rate": (cr.win_rate / 100) if cr.win_rate is not None else 0.0,
                 "profit_factor": cr.profit_factor or 0,
                 "total_return_pct": cr.total_return_pct,
             }
@@ -322,7 +323,7 @@ class BacktestAdapter:
             try:
                 result = self._simple.run_backtest(
                     strategy_class=strategy_class,
-                    symbol=symbol.replace("-", "=X") if "-" in symbol else symbol,
+                    symbol=(symbol.replace("-", "") + "=X") if "-" in symbol else symbol,
                     start_date="2020-01-01",
                     end_date="2025-01-01",
                     initial_cash=self.default_initial_cash,
@@ -348,15 +349,16 @@ class BacktestAdapter:
         name: str,
     ) -> CanonicalResult:
         """Aggregate multiple single-asset results into one."""
-        sharpes = [r.sharpe_ratio for r in results if r.sharpe_ratio]
-        dds = [r.max_drawdown_pct for r in results if r.max_drawdown_pct]
+        sharpes = [r.sharpe_ratio for r in results if r.sharpe_ratio is not None]
+        dds = [r.max_drawdown_pct for r in results if r.max_drawdown_pct is not None]
         trades = [r.total_trades for r in results]
         returns = [r.total_return_pct for r in results]
         wrs = [r.win_rate for r in results if r.win_rate is not None]
         pfs = [r.profit_factor for r in results if r.profit_factor is not None]
 
         # Concatenate return arrays
-        all_returns = np.concatenate([r.returns for r in results if r.returns is not None])
+        return_arrays = [r.returns for r in results if r.returns is not None and len(r.returns) > 0]
+        all_returns = np.concatenate(return_arrays) if return_arrays else None
 
         agg = CanonicalResult(
             strategy_id=f"{name}_agg",

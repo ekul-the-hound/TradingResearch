@@ -17,7 +17,7 @@ def load_api_key():
     """Load API key from file, fallback to environment variable"""
     key_file = Path(__file__).parent / 'BacktestingAgent_API_KEY.txt'
     if key_file.exists():
-        with open(key_file, 'r') as f:
+        with open(key_file, 'r', encoding='utf-8') as f:
             key = f.read().strip()
             if key:
                 return key
@@ -339,10 +339,10 @@ def print_config_summary():
     print("="*70)
     
     print(f"\nActive Asset Classes:")
-    print(f"  {'[OK]' if FOREX_ENABLED else '⏸️ '} Forex:       {len(FOREX_WATCHLIST)} pairs (local files)")
-    print(f"  {'[OK]' if CRYPTO_ENABLED else '⏸️ '} Crypto:      {len(CRYPTO_WATCHLIST)} currencies (local -> CCXT)")
-    print(f"  {'[OK]' if INDICES_ENABLED else '⏸️ '} Indices:     {len(INDEX_WATCHLIST)} indices (local Kaggle)")
-    print(f"  {'[OK]' if COMMODITIES_ENABLED else '⏸️ '} Commodities: {len(COMMODITY_WATCHLIST)} commodities (disabled)")
+    print(f"  {'[OK]' if FOREX_ENABLED else '[OFF]'} Forex:       {len(FOREX_WATCHLIST)} pairs (local files)")
+    print(f"  {'[OK]' if CRYPTO_ENABLED else '[OFF]'} Crypto:      {len(CRYPTO_WATCHLIST)} currencies (local -> CCXT)")
+    print(f"  {'[OK]' if INDICES_ENABLED else '[OFF]'} Indices:     {len(INDEX_WATCHLIST)} indices (local Kaggle)")
+    print(f"  {'[OK]' if COMMODITIES_ENABLED else '[OFF]'} Commodities: {len(COMMODITY_WATCHLIST)} commodities (disabled)")
     
     print(f"\nData Paths:")
     print(f"  Forex data:   {FOREX_BASE_PATH}")

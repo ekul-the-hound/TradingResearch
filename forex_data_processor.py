@@ -118,7 +118,8 @@ class ForexDataProcessor:
                 # Ensure numeric columns
                 for col in ['open', 'high', 'low', 'close', 'volume']:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
-                
+                df = df.dropna(subset=['open', 'high', 'low', 'close'])
+
                 dfs.append(df)
                 
                 if verbose:

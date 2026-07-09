@@ -236,14 +236,17 @@ class MetaModel:
         print(f"Features: {len(feature_names)}")
         print(f"Target distribution: {np.bincount(y.astype(int))}")
         
-        # Scale features
-        self.scaler = StandardScaler()
-        X_scaled = self.scaler.fit_transform(X)
-        
-        # Split data
+        # Split FIRST, then fit scaler on train only (no test leakage)
+        _, _counts = np.unique(y, return_counts=True)
+        _strat = y if _counts.min() >= 2 else None
+        if _strat is None:
+            print("[WARN] Minority class < 2 samples -- stratification disabled")
         X_train, X_test, y_train, y_test = train_test_split(
-            X_scaled, y, test_size=test_size, random_state=self.random_state, stratify=y
+            X, y, test_size=test_size, random_state=self.random_state, stratify=_strat
         )
+        self.scaler = StandardScaler()
+        X_train = self.scaler.fit_transform(X_train)
+        X_test = self.scaler.transform(X_test)
         
         # Initialize and train model
         self.model = self._get_model()
@@ -262,7 +265,11 @@ class MetaModel:
         conf_matrix = confusion_matrix(y_test, y_pred)
         
         # Cross-validation
-        cv_scores = cross_val_score(self.model, X_scaled, y, cv=cv_folds)
+        from sklearn.pipeline import make_pipeline
+        from sklearn.base import clone
+        cv_scores = cross_val_score(
+            make_pipeline(StandardScaler(), clone(self.model)), X, y, cv=cv_folds
+        )
         
         # Store state
         self.feature_names = feature_names

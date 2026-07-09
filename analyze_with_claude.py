@@ -21,7 +21,7 @@ def get_recent_backtests(limit=None):
             start_date, end_date, 
             total_return_pct, sharpe_ratio, max_drawdown_pct,
             total_trades, win_rate, profit_factor
-        FROM backtests
+        FROM backtest_results
         ORDER BY timestamp DESC
     """
     
@@ -257,7 +257,7 @@ def main():
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"results/claude_analysis_{timestamp}.txt"
             
-            with open(filename, 'w') as f:
+            with open(filename, 'w', encoding='utf-8') as f:
                 f.write("="*80 + "\n")
                 f.write("CLAUDE AI ANALYSIS\n")
                 f.write("="*80 + "\n")

@@ -79,7 +79,7 @@ class AttributionResult:
             f"  PERFORMANCE ATTRIBUTION",
             f"{'='*60}",
             f"  Total Return:  {self.total_return:.2%}",
-            f"  Alpha:         {self.alpha_return:.2%} (β={self.beta:.3f}, R²={self.r_squared:.3f})",
+            f"  Alpha:         {self.alpha_return:.2%} (beta={self.beta:.3f}, R2={self.r_squared:.3f})",
             f"  Beta Return:   {self.beta_return:.2%}",
             f"  Gross:         {self.gross_return:.2%}",
             f"  Net:           {self.net_return:.2%}",
@@ -93,7 +93,7 @@ class AttributionResult:
         if self.factor_exposures:
             lines.append(f"\n  Factor Exposures:")
             for f, b in sorted(self.factor_exposures.items(), key=lambda x: -abs(x[1])):
-                lines.append(f"    {f:15s} -> β={b:.3f}, return={self.factor_returns.get(f, 0):.2%}")
+                lines.append(f"    {f:15s} -> beta={b:.3f}, return={self.factor_returns.get(f, 0):.2%}")
         return "\n".join(lines)
 
 

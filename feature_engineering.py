@@ -35,6 +35,7 @@ from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import warnings
+from scipy import stats as sp_stats
 
 
 @dataclass
@@ -267,16 +268,21 @@ class FeatureEngineer:
                 kurtosis = dist_result.kurtosis
                 is_normal = dist_result.is_normal
                 
-                # GARCH
-                garch_result = self.statistical_analysis.fit_garch(returns)
-                garch_persistence = garch_result.persistence
-                garch_forecast = garch_result.forecast_vol_1day
-                
-                # VaR
-                var_result = self.statistical_analysis.calculate_var(returns)
-                var_95_hist = var_result.historical_var
-                var_95_cf = var_result.cornish_fisher_var
-                cvar_95 = var_result.cvar_expected_shortfall
+                # GARCH: not implemented in StatisticalAnalysis -- left 0 explicitly
+                # (wire tail_risk / the arch package here if these features are wanted)
+
+                # VaR/CVaR computed directly (was calling nonexistent methods,
+                # which left these features permanently zero via the except below)
+                var_95_hist = float(np.percentile(returns, 5))
+                mu = float(np.mean(returns))
+                sd = float(np.std(returns, ddof=1))
+                z = -1.645
+                s_ = float(sp_stats.skew(returns))
+                k_ = float(sp_stats.kurtosis(returns))
+                z_cf = z + (z**2 - 1) * s_ / 6 + (z**3 - 3*z) * k_ / 24 - (2*z**3 - 5*z) * s_**2 / 36
+                var_95_cf = float(mu + z_cf * sd)
+                tail = returns[returns <= var_95_hist]
+                cvar_95 = float(np.mean(tail)) if len(tail) else var_95_hist
                 
             except Exception as e:
                 warnings.warn(f"Statistical analysis failed: {e}")
@@ -290,7 +296,11 @@ class FeatureEngineer:
         
         if robustness_results:
             if 'latency' in robustness_results:
-                latency_sens = robustness_results['latency'].degradation_per_bar
+                # PROXY ONLY: robustness_tests' latency harness runs an SMA
+                # crossover, NOT this strategy -- a shared proxy value is noise
+                # as a per-strategy feature. Excluded (0.0) until the harness
+                # replays the actual strategy's signals.
+                latency_sens = 0.0
             if 'slippage' in robustness_results:
                 slippage_be = robustness_results['slippage'].breakeven_multiplier
             if 'combined' in robustness_results:

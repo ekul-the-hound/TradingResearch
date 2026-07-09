@@ -261,7 +261,7 @@ def main():
             print("[FAIL] Invalid input. Please enter a number.")
     
     else:
-        print("\n👋 Exiting")
+        print("\nExiting")
 
 if __name__ == "__main__":
     main()

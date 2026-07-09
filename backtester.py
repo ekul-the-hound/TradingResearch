@@ -84,6 +84,9 @@ class StrategyBacktester:
         
         # Rename columns to match backtrader expectations
         data.columns = [col.lower() for col in data.columns]
+        # Strip timezone -- backtrader's date2num mishandles tz-aware indices
+        if getattr(data.index, "tz", None) is not None:
+            data.index = data.index.tz_localize(None)
         
         print(f"[OK] Downloaded {len(data)} days of data")
         
@@ -140,19 +143,28 @@ class StrategyBacktester:
         
         # Calculate metrics
         total_return = ((ending_value - starting_value) / starting_value) * 100
-        total_trades = trades.total.closed if trades.total.closed else 0
+        def _ta_get(node, *keys, default=0):
+            """Safely walk TradeAnalyzer's AutoOrderedDict; return default for missing/empty."""
+            for k in keys:
+                node = node.get(k, None) if hasattr(node, 'get') else None
+                if node is None:
+                    return default
+            return node if isinstance(node, (int, float)) else default
+
+        total_trades = _ta_get(trades, 'total', 'closed')
         
         win_rate = None
         if total_trades > 0:
-            wins = trades.won.total if hasattr(trades, 'won') else 0
+            wins = _ta_get(trades, 'won', 'total')
             win_rate = (wins / total_trades) * 100
-        
+
         profit_factor = None
-        if hasattr(trades, 'won') and hasattr(trades, 'lost'):
-            gross_profit = trades.won.pnl.total if trades.won.pnl.total else 0
-            gross_loss = abs(trades.lost.pnl.total) if trades.lost.pnl.total else 0
-            if gross_loss > 0:
-                profit_factor = gross_profit / gross_loss
+        gross_profit = _ta_get(trades, 'won', 'pnl', 'total', default=0.0)
+        gross_loss = abs(_ta_get(trades, 'lost', 'pnl', 'total', default=0.0))
+        if gross_loss > 0:
+            profit_factor = gross_profit / gross_loss
+        elif gross_profit > 0:
+            profit_factor = 999.0  # all winners, no losers
         
         # Print results
         print(f"\n{'='*70}")
@@ -289,11 +301,11 @@ class StrategyBacktester:
             summary['results'].append({
                 'symbol': r['symbol'],
                 'return_pct': round(r['total_return_pct'], 2),
-                'sharpe': round(r['sharpe_ratio'], 2) if r['sharpe_ratio'] else None,
+                'sharpe': round(r['sharpe_ratio'], 2) if r['sharpe_ratio'] is not None else None,
                 'max_drawdown_pct': round(r['max_drawdown_pct'], 2),
                 'trades': r['total_trades'],
-                'win_rate': round(r['win_rate'], 2) if r['win_rate'] else None,
-                'profit_factor': round(r['profit_factor'], 2) if r['profit_factor'] else None
+                'win_rate': round(r['win_rate'], 2) if r['win_rate'] is not None else None,
+                'profit_factor': round(r['profit_factor'], 2) if r['profit_factor'] is not None else None
             })
         
         # Create prompt for Claude

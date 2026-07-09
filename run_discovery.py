@@ -103,7 +103,7 @@ def run_single_batch(queries_only=False):
             # Only use custom queries
             from discovery_config import CUSTOM_QUERIES_FILE
             if CUSTOM_QUERIES_FILE.exists():
-                with open(CUSTOM_QUERIES_FILE) as f:
+                with open(CUSTOM_QUERIES_FILE, encoding='utf-8') as f:
                     lines = [l.strip() for l in f if l.strip() and not l.startswith("#")]
                 queries = [{"query": q, "source_type": "general", "bias": "unknown"} for q in lines]
                 if not queries:

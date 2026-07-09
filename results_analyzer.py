@@ -16,7 +16,7 @@ class ResultsAnalyzer:
     def get_all_results(self):
         """Get all backtest results as DataFrame"""
         conn = sqlite3.connect(self.db_path)
-        df = pd.read_sql_query("SELECT * FROM backtests", conn)
+        df = pd.read_sql_query("SELECT * FROM backtest_results", conn)
         conn.close()
         return df
     
@@ -27,7 +27,7 @@ class ResultsAnalyzer:
         """
         conn = sqlite3.connect(self.db_path)
         query = f"""
-            SELECT * FROM backtests
+            SELECT * FROM backtest_results
             WHERE sharpe_ratio > {min_sharpe}
             ORDER BY sharpe_ratio DESC
         """
@@ -39,7 +39,7 @@ class ResultsAnalyzer:
         """Get top N performers by metric"""
         conn = sqlite3.connect(self.db_path)
         query = f"""
-            SELECT * FROM backtests
+            SELECT * FROM backtest_results
             ORDER BY {metric} DESC
             LIMIT {n}
         """
@@ -51,7 +51,7 @@ class ResultsAnalyzer:
         """Get worst N performers by metric"""
         conn = sqlite3.connect(self.db_path)
         query = f"""
-            SELECT * FROM backtests
+            SELECT * FROM backtest_results
             ORDER BY {metric} ASC
             LIMIT {n}
         """
@@ -63,7 +63,7 @@ class ResultsAnalyzer:
         """Get all results for a specific timeframe"""
         conn = sqlite3.connect(self.db_path)
         query = """
-            SELECT * FROM backtests
+            SELECT * FROM backtest_results
             WHERE timeframe = ?
             ORDER BY total_return_pct DESC
         """
@@ -75,7 +75,7 @@ class ResultsAnalyzer:
         """Get all results for a specific asset"""
         conn = sqlite3.connect(self.db_path)
         query = """
-            SELECT * FROM backtests
+            SELECT * FROM backtest_results
             WHERE symbol = ?
             ORDER BY total_return_pct DESC
         """
@@ -102,7 +102,7 @@ class ResultsAnalyzer:
         conn = sqlite3.connect(self.db_path)
         placeholders = ','.join('?' * len(assets))
         query = f"""
-            SELECT * FROM backtests
+            SELECT * FROM backtest_results
             WHERE symbol IN ({placeholders})
             ORDER BY total_return_pct DESC
         """
@@ -122,7 +122,7 @@ class ResultsAnalyzer:
                 AVG(max_drawdown_pct) as avg_drawdown,
                 AVG(total_trades) as avg_trades,
                 SUM(CASE WHEN total_return_pct > 0 THEN 1 ELSE 0 END) as positive_count
-            FROM backtests
+            FROM backtest_results
             GROUP BY timeframe
             ORDER BY avg_return DESC
         """
@@ -156,7 +156,7 @@ class ResultsAnalyzer:
         """
         conn = sqlite3.connect(self.db_path)
         query = f"""
-            SELECT * FROM backtests
+            SELECT * FROM backtest_results
             WHERE sharpe_ratio > {min_sharpe}
             AND total_trades >= {min_trades}
             ORDER BY sharpe_ratio DESC
@@ -221,7 +221,7 @@ def main():
         choice = input("\nSelect option (0-9): ").strip()
         
         if choice == '0':
-            print("\n👋 Goodbye!")
+            print("\nGoodbye!")
             break
         
         elif choice == '1':

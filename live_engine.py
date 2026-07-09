@@ -31,7 +31,7 @@ import logging
 import numpy as np
 from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from broker_adapter import BaseBroker, BrokerTick, BrokerOrder, PaperBroker
 
@@ -80,6 +80,7 @@ class StrategySlot:
     last_equity: float = 0.0
     last_tick: Optional[BrokerTick] = None
     is_halted: bool = False
+    halt_until: Optional[datetime] = None
     error_count: int = 0
 
 
@@ -272,40 +273,52 @@ class LiveEngine:
     # ------------------------------------------------------------------
     def _tick(self):
         """Process one poll cycle for all strategies."""
-        for sid, slot in self._slots.items():
+        for sid, slot in list(self._slots.items()):
             if slot.is_halted:
-                continue
+                # Timed halts (HALT_DAY / HALT_WEEK) expire and resume
+                if slot.halt_until is not None and datetime.utcnow() >= slot.halt_until:
+                    slot.is_halted = False
+                    slot.halt_until = None
+                    self._log(f"[OK] Halt expired, resuming {sid}")
+                else:
+                    continue
 
-            # 1. Get price
-            tick = self.broker.get_tick(slot.symbol)
-            if tick is None:
+            # Per-slot error isolation: one strategy's failure must never
+            # blind risk monitoring for the rest of the book
+            try:
+                # 1. Get price
+                tick = self.broker.get_tick(slot.symbol)
+                if tick is None:
+                    slot.error_count += 1
+                    continue
+                slot.last_tick = tick
+                slot.error_count = 0
+
+                # 2. Run signal (if provided)
+                if slot.signal_fn and not slot.is_halted:
+                    signal = slot.signal_fn(tick)
+                    if signal is not None:
+                        side, size = signal
+                        self._execute_signal(slot, side, size, tick)
+
+                # 3. Mark to market
+                if slot.shadow_trader:
+                    slot.shadow_trader.mark_to_market(tick.last)
+
+                # 4. Update monitor
+                if self._monitor:
+                    self._monitor.update(sid, price=tick.last)
+
+                # 5. Drift detection
+                if slot.drift_detector and self.config.enable_drift_detection:
+                    self._check_drift(slot)
+
+                # 6. Kill switch
+                if slot.kill_switch and self.config.enable_kill_switch:
+                    self._check_kill_switch(slot, tick)
+            except Exception as e:
                 slot.error_count += 1
-                continue
-            slot.last_tick = tick
-            slot.error_count = 0
-
-            # 2. Run signal (if provided)
-            if slot.signal_fn and not slot.is_halted:
-                signal = slot.signal_fn(tick)
-                if signal is not None:
-                    side, size = signal
-                    self._execute_signal(slot, side, size, tick)
-
-            # 3. Mark to market
-            if slot.shadow_trader:
-                slot.shadow_trader.mark_to_market(tick.last)
-
-            # 4. Update monitor
-            if self._monitor:
-                self._monitor.update(sid, price=tick.last)
-
-            # 5. Drift detection
-            if slot.drift_detector and self.config.enable_drift_detection:
-                self._check_drift(slot)
-
-            # 6. Kill switch
-            if slot.kill_switch and self.config.enable_kill_switch:
-                self._check_kill_switch(slot, tick)
+                logger.error(f"Slot tick failed [{sid}] ({slot.error_count}): {e}")
 
         # End-of-day processing
         self._check_eod()
@@ -357,9 +370,13 @@ class LiveEngine:
             current_pnl=metrics.total_pnl,
             account_size=slot.shadow_trader.initial_capital,
             drawdown_pct=metrics.max_drawdown * 100,
-            consecutive_losses=metrics.losing_trades,  # Simplified
+            consecutive_losses=getattr(metrics, "consecutive_losses", 0),
             live_sharpe=metrics.sharpe_ratio,
             backtest_sharpe=slot.backtest_sharpe,
+            daily_loss_pct=max(0.0, -(slot.daily_returns[-1] * 100)) if slot.daily_returns else None,
+            weekly_loss_pct=max(0.0, -sum(slot.daily_returns[-5:]) * 100) if slot.daily_returns else None,
+            monthly_loss_pct=max(0.0, -sum(slot.daily_returns[-21:]) * 100) if slot.daily_returns else None,
+            n_observations=len(metrics.daily_returns),
         )
 
         if result.triggered:
@@ -388,26 +405,34 @@ class LiveEngine:
                     pass
 
         elif action in (KillAction.HALT, KillAction.HALT_DAY, KillAction.HALT_WEEK):
-            self._log(f"🛑 HALTING {slot.strategy_id}")
+            self._log(f"[STOP] HALTING {slot.strategy_id} ({action.name})")
             slot.is_halted = True
+            if action == KillAction.HALT_DAY:
+                slot.halt_until = datetime.utcnow() + timedelta(days=1)
+            elif action == KillAction.HALT_WEEK:
+                slot.halt_until = datetime.utcnow() + timedelta(weeks=1)
 
         elif action == KillAction.REDUCE:
             self._log(f"[DOWN] REDUCING {slot.strategy_id}")
             # Close half the position
             pos = self.broker.get_position(slot.symbol)
-            if pos and pos.size > 0 and slot.mode == "live":
+            if pos and abs(pos.size) > 0 and slot.mode == "live":
                 close_side = "sell" if pos.side == "long" else "buy"
                 self.broker.submit_order(close_side, slot.symbol,
-                                         pos.size / 2, "market")
+                                         abs(pos.size) / 2, "market")
 
     # ------------------------------------------------------------------
     # END OF DAY
     # ------------------------------------------------------------------
     def _check_eod(self):
-        """Record daily returns at end of day."""
+        """Record daily returns at end of day (once per calendar day)."""
         now = datetime.utcnow()
-        if now.hour != self.config.eod_hour_utc or now.minute > 1:
+        if now.hour != self.config.eod_hour_utc:
             return
+        today = now.date()
+        if getattr(self, "_last_eod_date", None) == today:
+            return
+        self._last_eod_date = today
 
         for sid, slot in self._slots.items():
             if slot.shadow_trader:

@@ -57,7 +57,7 @@ try:
     REGIME_AVAILABLE = True
 except ImportError:
     REGIME_AVAILABLE = False
-    print("âš ï¸  regime_classifier.py not found - regime analysis disabled")
+    print("[WARN]  regime_classifier.py not found - regime analysis disabled")
     print("   Copy regime_classifier.py to your project to enable")
 
 
@@ -77,23 +77,32 @@ class TradeTracker(bt.Analyzer):
     
     def __init__(self):
         self.trades = []
+        self._open_sizes = {}  # trade.ref -> entry size (trade.size is 0 at close)
     
     def notify_trade(self, trade):
+        if trade.isopen and trade.ref not in self._open_sizes:
+            self._open_sizes[trade.ref] = trade.size
+        
         if trade.isclosed:
-            # Calculate trade return
+            entry_size = self._open_sizes.pop(trade.ref, 0)
+            
+            # Calculate trade return using the captured ENTRY size
             pnl = trade.pnl
-            pnl_pct = (trade.pnl / abs(trade.price * trade.size)) * 100 if trade.price else 0
+            if trade.price and entry_size:
+                pnl_pct = (trade.pnl / abs(trade.price * entry_size)) * 100
+            else:
+                pnl_pct = 0
             
             trade_record = {
                 'entry_date': bt.num2date(trade.dtopen),
                 'exit_date': bt.num2date(trade.dtclose),
                 'entry_price': trade.price,
-                'exit_price': trade.price + (trade.pnl / trade.size) if trade.size else 0,
-                'size': trade.size,
+                'exit_price': trade.price + (trade.pnl / entry_size) if entry_size else 0,
+                'size': entry_size,
                 'pnl': pnl,
                 'return_pct': pnl_pct,
                 'duration_bars': trade.barlen,
-                'is_long': trade.size > 0,
+                'is_long': entry_size > 0,
             }
             
             self.trades.append(trade_record)
@@ -156,7 +165,7 @@ class MultiTimeframeBacktester:
             return True
         
         print("\n" + "="*70)
-        print("ðŸš¦ MANUAL VALIDATION GATE")
+        print("[GATE] MANUAL VALIDATION GATE")
         print("="*70)
         print(f"\nProposed action: {description}")
         
@@ -178,14 +187,14 @@ class MultiTimeframeBacktester:
             if response == 'Y':
                 return True
             elif response == 'N':
-                print("â­ï¸  Skipped")
+                print("[SKIP]  Skipped")
                 return False
             elif response == 'A':
-                print("âœ… Gates disabled for this session")
+                print("[OK] Gates disabled for this session")
                 self.enable_gates = False
                 return True
             elif response == 'Q':
-                print("ðŸ›‘ Aborted by user")
+                print("[STOP] Aborted by user")
                 raise KeyboardInterrupt("User quit at validation gate")
             else:
                 print("Invalid choice. Please enter Y, N, A, or Q")
@@ -233,15 +242,15 @@ class MultiTimeframeBacktester:
                 max_bars=config.CANDLE_LIMITS.get(timeframe, 1000)
             )
         except Exception as e:
-            print(f"   âŒ Data error: {e}")
+            print(f"   [FAIL] Data error: {e}")
             return None
         
         if data is None or data.empty:
-            print(f"   â­ï¸  Skipped (no data)")
+            print(f"   [SKIP]  Skipped (no data)")
             return None
         
         if len(data) < 50:  # Minimum bars for meaningful backtest
-            print(f"   â­ï¸  Skipped (only {len(data)} bars, need 50+)")
+            print(f"   [SKIP]  Skipped (only {len(data)} bars, need 50+)")
             return None
         
         # Clean up the data - rename columns to lowercase
@@ -288,7 +297,9 @@ class MultiTimeframeBacktester:
         cerebro.broker.setcommission(commission=commission)
         
         # Add analyzers
-        cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
+        cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe',
+                            timeframe=bt.TimeFrame.Days, compression=1,
+                            riskfreerate=0.0, annualize=True)
         cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
         cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
         cerebro.addanalyzer(bt.analyzers.Returns, _name='returns')
@@ -303,7 +314,7 @@ class MultiTimeframeBacktester:
         try:
             results = cerebro.run()
         except Exception as e:
-            print(f"   âŒ Backtest failed: {e}")
+            print(f"   [FAIL] Backtest failed: {e}")
             return None
         
         ending_value = cerebro.broker.getvalue()
@@ -361,7 +372,7 @@ class MultiTimeframeBacktester:
             'max_drawdown_pct': drawdown.max.drawdown if hasattr(drawdown, 'max') else 0,
             'total_trades': total_trades,
             'win_rate': win_rate,
-            'profit_factor': profit_factor if profit_factor != float('inf') else None,
+            'profit_factor': min(profit_factor, 999.0) if profit_factor is not None else None,
             'strategy_params': strategy_params or {}
         }
         
@@ -407,7 +418,7 @@ class MultiTimeframeBacktester:
         
         # Print summary
         sharpe_str = f"{result['sharpe_ratio']:.2f}" if result['sharpe_ratio'] else "N/A"
-        print(f"   âœ” {symbol:12} {timeframe:6} | Return: {total_return:+6.2f}% | Sharpe: {sharpe_str:>6} | Trades: {total_trades:3} | Bars: {len(data):4}")
+        print(f"   [OK] {symbol:12} {timeframe:6} | Return: {total_return:+6.2f}% | Sharpe: {sharpe_str:>6} | Trades: {total_trades:3} | Bars: {len(data):4}")
         
         self.tests_run += 1
         
@@ -435,7 +446,7 @@ class MultiTimeframeBacktester:
         """
         
         if not REGIME_AVAILABLE:
-            print("âš ï¸  Regime analysis not available - running standard backtest")
+            print("[WARN]  Regime analysis not available - running standard backtest")
             return self.run_single_backtest(
                 strategy_class, symbol, timeframe,
                 initial_cash, commission, strategy_params
@@ -458,7 +469,7 @@ class MultiTimeframeBacktester:
         # Classify regimes in the data
         data = result.pop('_data', None)
         if data is None:
-            print("âš ï¸  No data for regime classification")
+            print("[WARN]  No data for regime classification")
             return result
         
         data_with_regimes = self.regime_classifier.classify(data)
@@ -530,7 +541,7 @@ class MultiTimeframeBacktester:
         print("="*70)
         
         # Overall performance
-        print("\nðŸ“Š OVERALL PERFORMANCE:")
+        print("\n[STATS] OVERALL PERFORMANCE:")
         print(f"  Total Return:    {result['total_return_pct']:+.2f}%")
         print(f"  Sharpe Ratio:    {result['sharpe_ratio']:.2f}" if result['sharpe_ratio'] else "  Sharpe Ratio:    N/A")
         print(f"  Max Drawdown:    {result['max_drawdown_pct']:.2f}%")
@@ -539,7 +550,7 @@ class MultiTimeframeBacktester:
         
         # Regime distribution
         if 'regime_summary' in result and result['regime_summary']:
-            print("\nðŸ“ˆ MARKET REGIME DISTRIBUTION:")
+            print("\n[CHART] MARKET REGIME DISTRIBUTION:")
             print(f"  {'Regime':<12} {'% of Time':>10} {'Avg Return':>12}")
             print("  " + "-"*40)
             
@@ -549,7 +560,7 @@ class MultiTimeframeBacktester:
         
         # Performance by regime
         if 'regime_stats' in result and result['regime_stats']:
-            print("\nðŸŽ¯ STRATEGY PERFORMANCE BY REGIME:")
+            print("\n[TARGET] STRATEGY PERFORMANCE BY REGIME:")
             print(f"  {'Regime':<12} {'Trades':>8} {'Avg Ret':>10} {'Win Rate':>10} {'Total':>10}")
             print("  " + "-"*55)
             
@@ -559,7 +570,7 @@ class MultiTimeframeBacktester:
                       f"{stats['win_rate']:>9.1f}% {stats['total_return']:>9.2f}%")
             
             # Identify problematic regimes
-            print("\nðŸ’¡ INSIGHTS:")
+            print("\n[TIP] INSIGHTS:")
             
             problem_regimes = []
             strong_regimes = []
@@ -571,16 +582,16 @@ class MultiTimeframeBacktester:
                     strong_regimes.append((regime, stats['avg_return']))
             
             if strong_regimes:
-                print("  âœ… Strategy works well in: " + 
+                print("  [OK] Strategy works well in: " + 
                       ", ".join([f"{r} ({v:+.2f}%/trade)" for r, v in strong_regimes]))
             
             if problem_regimes:
-                print("  âš ï¸  Strategy struggles in: " + 
+                print("  [WARN]  Strategy struggles in: " + 
                       ", ".join([f"{r} ({v:+.2f}%/trade)" for r, v in problem_regimes]))
-                print("     â†’ Consider adding regime filter to avoid these conditions")
+                print("     -> Consider adding regime filter to avoid these conditions")
             
             if not problem_regimes and not strong_regimes:
-                print("  â„¹ï¸  No clear regime preference detected")
+                print("  [i]  No clear regime preference detected")
         
         print("\n" + "="*70)
     
@@ -647,24 +658,30 @@ class MultiTimeframeBacktester:
         start_time = time.time()
         
         # Group assets by type for organized output
-        asset_groups = {
-            'Forex': [a for a in assets if a in config.FOREX_WATCHLIST],
-            'Indices': [a for a in assets if a in config.INDEX_WATCHLIST],
-            'Commodities': [a for a in assets if a in config.COMMODITY_WATCHLIST],
-            'Crypto': [a for a in assets if a in config.CRYPTO_WATCHLIST]
-        }
+        assigned = set()
+        asset_groups = {}
+        for group_name, watchlist in [('Forex', config.FOREX_WATCHLIST),
+                                      ('Indices', config.INDEX_WATCHLIST),
+                                      ('Commodities', config.COMMODITY_WATCHLIST),
+                                      ('Crypto', config.CRYPTO_WATCHLIST)]:
+            group = [a for a in assets if a in watchlist and a not in assigned]
+            assigned.update(group)
+            asset_groups[group_name] = group
+        leftover = [a for a in assets if a not in assigned]
+        if leftover:
+            asset_groups['Other'] = leftover
         
         # Test each asset group
         for group_name, group_assets in asset_groups.items():
             if not group_assets:
                 continue
             
-            print(f"\n{'â”€'*80}")
+            print(f"\n{'-'*80}")
             print(f"Testing {group_name} ({len(group_assets)} assets)")
-            print(f"{'â”€'*80}")
+            print(f"{'-'*80}")
             
             for symbol in group_assets:
-                print(f"\nðŸ“Š {symbol}")
+                print(f"\n[STATS] {symbol}")
                 
                 for timeframe in timeframes:
                     current_test += 1
@@ -885,9 +902,9 @@ if __name__ == "__main__":
     try:
         from strategies.simple_strategy import SimpleMovingAverageCrossover
         strategy_class = SimpleMovingAverageCrossover
-        print("âœ… Loaded SimpleMovingAverageCrossover strategy")
+        print("[OK] Loaded SimpleMovingAverageCrossover strategy")
     except ImportError:
-        print("âš ï¸  Could not import test strategy, creating simple test strategy...")
+        print("[WARN]  Could not import test strategy, creating simple test strategy...")
         
         class SimpleTestStrategy(bt.Strategy):
             params = (('fast', 10), ('slow', 30))
@@ -930,12 +947,12 @@ if __name__ == "__main__":
             
             # Show trades if available
             if 'trades_df' in result and len(result['trades_df']) > 0:
-                print("\nðŸ“ Sample Trades (first 5):")
+                print("\n[NOTE] Sample Trades (first 5):")
                 print(result['trades_df'][['entry_date', 'return_pct', 'regime']].head())
             
-            print("\nâœ… Single backtest with regime analysis working!")
+            print("\n[OK] Single backtest with regime analysis working!")
         else:
-            print("âš ï¸  Backtest returned no results (may need data)")
+            print("[WARN]  Backtest returned no results (may need data)")
     
     print("\n" + "="*70)
     print("BACKTESTER TEST COMPLETE")

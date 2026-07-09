@@ -425,7 +425,7 @@ if __name__ == "__main__":
     n_bars = 1000
     
     # Simulate price data with different regimes
-    dates = pd.date_range(start='2020-01-01', periods=n_bars, freq='1H')
+    dates = pd.date_range(start='2020-01-01', periods=n_bars, freq='1h')
     
     # Create trending and ranging periods
     returns = np.random.normal(0.0001, 0.01, n_bars)

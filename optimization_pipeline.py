@@ -81,7 +81,7 @@ class PipelineResult:
             f"  Generations:       {self.total_generations}",
             f"  Backtests used:    {self.total_backtests}",
             f"  Surrogate evals:   {self.total_surrogate_evals}",
-            f"  Surrogate R²:      {self.surrogate_r2:.4f}",
+            f"  Surrogate R2:      {self.surrogate_r2:.4f}",
             f"  Pareto front:      {len(self.pareto_front)} strategies",
             f"  Final diversity:   {self.final_diversity:.4f}",
             f"  Elapsed:           {self.elapsed_seconds:.1f}s",
@@ -160,13 +160,13 @@ class OptimizationPipeline:
 
         if len(X_train) >= 5:
             m = self.surrogate.fit(X_train, y_train, fp.feature_names)
-            _log(f"  [STATS] Initial surrogate: R²={m.r2:.4f} (CV={m.cv_mean:.4f})")
+            _log(f"  [STATS] Initial surrogate: R2={m.r2:.4f} (CV={m.cv_mean:.4f})")
 
         # Step 3: Evolution loop
         gen = 0
         for gen in range(cfg.n_generations):
             if self._backtests_used >= cfg.backtest_budget:
-                _log(f"\n  🛑 Budget exhausted ({self._backtests_used})")
+                _log(f"\n  [STOP] Budget exhausted ({self._backtests_used})")
                 break
 
             # Predict with surrogate
@@ -174,8 +174,9 @@ class OptimizationPipeline:
                 mu, sigma = self.surrogate.predict(population, return_std=True)
                 self._surrogate_evals += len(population)
             else:
-                mu = np.array([s.get("sharpe_ratio", 0.0) or 0.0
-                               for s in pop_strategies[:len(population)]])
+                mu = np.array([(pop_strategies[i].get("sharpe_ratio") or 0.0)
+                               if i < len(pop_strategies) else 0.0
+                               for i in range(len(population))])
                 sigma = np.ones_like(mu) * 0.5
 
             # Acquisition
@@ -197,12 +198,14 @@ class OptimizationPipeline:
                 strat = pop_strategies[idx] if idx < len(pop_strategies) else {}
                 result = self._run_backtest(strat, returns_dict)
                 if result is not None:
-                    sr = result.get("sharpe_ratio", 0.0)
+                    self._backtests_used += 1
+                    sr = result.get("sharpe_ratio")
+                    if sr is None:
+                        continue  # measurement failed -- never train the surrogate on None
                     X_train = np.vstack([X_train, population[idx:idx+1]])
                     y_train = np.append(y_train, sr)
                     if sr > best_sharpe:
                         best_sharpe = sr
-                    self._backtests_used += 1
 
             # Retrain surrogate
             if (gen + 1) % cfg.surrogate_retrain_every == 0 and len(X_train) >= 5:
@@ -221,20 +224,18 @@ class OptimizationPipeline:
                 combined_f[len(population):] = self.surrogate.predict(children)
                 self._surrogate_evals += len(children)
 
-            population, pop_fitness = self.genetic.survive(
-                combined, combined_f, cfg.pop_size,
-            )
-
-            # Extend strategy list
+            # Extend strategy list to match combined BEFORE selection
             while len(pop_strategies) < len(combined):
                 pop_strategies.append({
                     "name": f"gen{gen}_child_{len(pop_strategies)}",
                     "strategy_id": f"gen{gen}_{len(pop_strategies)}",
-                    "sharpe_ratio": 0.0, "origin": "genetic",
+                    "sharpe_ratio": None, "origin": "genetic",
                 })
+            # Single source of truth for survival: elitist argsort applied to BOTH arrays
             top_idx = np.argsort(-combined_f)[:cfg.pop_size]
-            pop_strategies = [pop_strategies[i] if i < len(pop_strategies)
-                              else {} for i in top_idx]
+            population = combined[top_idx]
+            pop_fitness = combined_f[top_idx]
+            pop_strategies = [pop_strategies[i] for i in top_idx]
 
             self._gen_history.append({
                 "generation": gen,
@@ -249,7 +250,7 @@ class OptimizationPipeline:
                 _log(f"  Gen {gen:3d} | best={np.max(pop_fitness):.3f} "
                      f"mean={np.mean(pop_fitness):.3f} "
                      f"bt={self._backtests_used}/{cfg.backtest_budget} "
-                     f"κ={kappa:.2f}")
+                     f"kappa={kappa:.2f}")
 
             if cfg.checkpoint_dir and (gen + 1) % cfg.checkpoint_every == 0:
                 self._checkpoint(gen, population, X_train, y_train)
@@ -265,9 +266,13 @@ class OptimizationPipeline:
         pareto = self.optimizer.optimize(final_strats, population, n_generations=10)
 
         # Result
-        best = max(final_strats,
-                   key=lambda s: s.get("sharpe_ratio", s.get("predicted_sharpe", 0)),
-                   default=None)
+        def _score(s):
+            for k in ("sharpe_ratio", "predicted_sharpe"):
+                v = s.get(k)
+                if v is not None:
+                    return v
+            return -1e9  # unmeasured sorts last, never crashes max()
+        best = max(final_strats, key=_score, default=None)
 
         result = PipelineResult(
             pareto_front=pareto.pareto_front,
@@ -300,7 +305,11 @@ class OptimizationPipeline:
             if len(r) > 10:
                 sr = float(np.mean(r) / max(np.std(r, ddof=1), 1e-10) * np.sqrt(252))
                 return {**strategy, "sharpe_ratio": sr}
-        return {**strategy, "sharpe_ratio": sharpe + np.random.normal(0, 0.1)}
+        # No real evaluation possible -- do NOT fabricate a label
+        import logging
+        logging.getLogger(__name__).warning(
+            f"No backtest_fn and no returns for '{sid}' -- skipping (not counted against budget)")
+        return None
 
     def _build_training_data(self, strategies, fp):
         X, y = [], []
@@ -333,6 +342,6 @@ class OptimizationPipeline:
             },
             "generation_history": result.generation_history,
         }
-        with open(d / "final_results.json", "w") as f:
+        with open(d / "final_results.json", "w", encoding='utf-8') as f:
             json.dump(data, f, indent=2, default=str)
         print(f"  [OK] Final results -> {d / 'final_results.json'}")

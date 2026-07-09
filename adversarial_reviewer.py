@@ -162,10 +162,10 @@ Be HARSH. Your job is to protect the user from losing money on a flawed strategy
             
             # Parse JSON response
             # Handle potential markdown code blocks
-            if response_text.startswith("```"):
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
+            _start = response_text.find("{")
+            _end = response_text.rfind("}")
+            if _start != -1 and _end > _start:
+                response_text = response_text[_start:_end + 1]
             
             data = json.loads(response_text)
             
@@ -206,8 +206,22 @@ Be HARSH. Your job is to protect the user from losing money on a flawed strategy
             )
             
         except Exception as e:
-            print(f"[FAIL] API error: {e}")
-            raise
+            # Fail-safe direction: an UNREVIEWED strategy is maximum risk.
+            # (Parse failures above degrade to REVISE; infrastructure failures
+            # must not let a strategy through -- and must not abort a batch.)
+            print(f"[FAIL] API error: {e} -- fail-safe: unreviewed = REJECT")
+            return AdversarialReview(
+                timestamp=datetime.now().isoformat(),
+                strategy_name=strategy_name,
+                overall_risk_score=10,
+                critical_flaws=[f"REVIEW FAILED (API error): {e}"],
+                warnings=[],
+                suggestions=["Re-run review once API access is restored"],
+                overfitting_indicators=[],
+                market_conditions_vulnerable=[],
+                recommended_action="REJECT",
+                full_analysis=f"API error prevented review: {e}",
+            )
     
     # =========================================================================
     # REVIEW BACKTEST RESULTS
@@ -294,10 +308,10 @@ Be SKEPTICAL. Assume results are too good until proven otherwise."""
             response_text = response.content[0].text.strip()
             
             # Parse JSON
-            if response_text.startswith("```"):
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
+            _start = response_text.find("{")
+            _end = response_text.rfind("}")
+            if _start != -1 and _end > _start:
+                response_text = response_text[_start:_end + 1]
             
             data = json.loads(response_text)
             
@@ -335,8 +349,22 @@ Be SKEPTICAL. Assume results are too good until proven otherwise."""
             )
             
         except Exception as e:
-            print(f"[FAIL] API error: {e}")
-            raise
+            # Fail-safe direction: an UNREVIEWED strategy is maximum risk.
+            # (Parse failures above degrade to REVISE; infrastructure failures
+            # must not let a strategy through -- and must not abort a batch.)
+            print(f"[FAIL] API error: {e} -- fail-safe: unreviewed = REJECT")
+            return AdversarialReview(
+                timestamp=datetime.now().isoformat(),
+                strategy_name=strategy_name,
+                overall_risk_score=10,
+                critical_flaws=[f"REVIEW FAILED (API error): {e}"],
+                warnings=[],
+                suggestions=["Re-run review once API access is restored"],
+                overfitting_indicators=[],
+                market_conditions_vulnerable=[],
+                recommended_action="REJECT",
+                full_analysis=f"API error prevented review: {e}",
+            )
     
     # =========================================================================
     # FULL ADVERSARIAL REVIEW
@@ -438,10 +466,10 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
             response_text = response.content[0].text.strip()
             
             # Parse JSON
-            if response_text.startswith("```"):
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
+            _start = response_text.find("{")
+            _end = response_text.rfind("}")
+            if _start != -1 and _end > _start:
+                response_text = response_text[_start:_end + 1]
             
             data = json.loads(response_text)
             
@@ -485,8 +513,22 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
             )
             
         except Exception as e:
-            print(f"[FAIL] API error: {e}")
-            raise
+            # Fail-safe direction: an UNREVIEWED strategy is maximum risk.
+            # (Parse failures above degrade to REVISE; infrastructure failures
+            # must not let a strategy through -- and must not abort a batch.)
+            print(f"[FAIL] API error: {e} -- fail-safe: unreviewed = REJECT")
+            return AdversarialReview(
+                timestamp=datetime.now().isoformat(),
+                strategy_name=strategy_name,
+                overall_risk_score=10,
+                critical_flaws=[f"REVIEW FAILED (API error): {e}"],
+                warnings=[],
+                suggestions=["Re-run review once API access is restored"],
+                overfitting_indicators=[],
+                market_conditions_vulnerable=[],
+                recommended_action="REJECT",
+                full_analysis=f"API error prevented review: {e}",
+            )
     
     # =========================================================================
     # PRINT REVIEW
@@ -511,7 +553,7 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
             "PROCEED_WITH_CAUTION": "[YELLOW]",
             "APPROVE": "[OK]"
         }
-        print(f"\n[LIST] RECOMMENDATION: {rec_emoji.get(review.recommended_action, '❓')} {review.recommended_action}")
+        print(f"\n[LIST] RECOMMENDATION: {rec_emoji.get(review.recommended_action, '[?]')} {review.recommended_action}")
         
         # Critical flaws
         if review.critical_flaws:
@@ -574,7 +616,7 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
                 'full_analysis': review.full_analysis
             })
         
-        with open(filepath, 'w') as f:
+        with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(reviews_data, f, indent=2)
         
         print(f"[SAVE] Saved {len(self.reviews)} reviews to {filepath}")
@@ -600,7 +642,7 @@ def adversarial_review_strategy(
     """
     
     # Load strategy code
-    with open(strategy_path, 'r') as f:
+    with open(strategy_path, 'r', encoding='utf-8') as f:
         code = f.read()
     
     strategy_name = Path(strategy_path).stem
@@ -638,7 +680,7 @@ if __name__ == "__main__":
     try:
         strategy_path = Path(__file__).parent / 'strategies' / 'simple_strategy.py'
         if strategy_path.exists():
-            with open(strategy_path, 'r') as f:
+            with open(strategy_path, 'r', encoding='utf-8') as f:
                 code = f.read()
             
             print(f"\n[FILE] Loaded strategy: {strategy_path.name}")

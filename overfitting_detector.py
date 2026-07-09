@@ -141,7 +141,7 @@ class OverfittingDetector:
     def __init__(self, random_seed: int = 42, n_jobs: int = -1):
         self.random_seed = random_seed
         self.n_jobs = n_jobs
-        np.random.seed(random_seed)
+        self._rng = np.random.RandomState(random_seed)  # instanced: no global pollution
 
     # ------------------------------------------------------------------
     # PBO via CSCV
@@ -202,16 +202,18 @@ class OverfittingDetector:
         corrs  = np.array([r[1] for r in results])
         unders = np.array([r[2] for r in results])
 
+        pbo = float(np.mean(logits < 0))          # canonical PBO (Bailey et al. 2015)
+        p_oos_loss = float(np.mean(unders))        # P(best strategy loses OOS)
         return PBOResult(
-            probability=float(np.mean(unders)),
+            probability=pbo,
             logits=logits,
             logit_mean=float(np.mean(logits)),
             logit_std=float(np.std(logits)) if len(logits) > 1 else 0.0,
             n_partitions=n_partitions,
             n_combinations=len(combos),
-            performance_degradation=float(np.mean(corrs)),
-            stochastic_dominance=float(np.mean(logits < 0)),
-            is_overfit=float(np.mean(unders)) > 0.5,
+            performance_degradation=float(np.nanmean(corrs)) if not np.all(np.isnan(corrs)) else 0.0,
+            stochastic_dominance=p_oos_loss,       # repurposed: P(OOS < threshold)
+            is_overfit=pbo > 0.5,
         )
 
     # ------------------------------------------------------------------
@@ -252,7 +254,7 @@ class OverfittingDetector:
             n_trials=n_trials,
             track_length=T,
             min_track_record_length=min_trl,
-            is_significant=dsr > 0,
+            is_significant=p_val < 0.05,
         )
 
     def _expected_max_sharpe(self, n: int, T: int, std: float = 1.0) -> float:

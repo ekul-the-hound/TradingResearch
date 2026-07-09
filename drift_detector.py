@@ -47,6 +47,10 @@ class DriftSeverity(Enum):
     WARNING = "warning"
     CRITICAL = "critical"
 
+    @property
+    def rank(self) -> int:
+        return {"none": 0, "warning": 1, "critical": 2}[self.value]
+
 
 # ==============================================================================
 # RESULT
@@ -191,7 +195,7 @@ class DriftDetector:
             severity = DriftSeverity.CRITICAL
         elif ks_p < cfg.ks_warning_pvalue:
             triggered.append("ks_warning")
-            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.value)
+            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.rank)
 
         # 2. PSI
         psi = self._compute_psi(self._ref, live)
@@ -200,13 +204,13 @@ class DriftDetector:
             severity = DriftSeverity.CRITICAL
         elif psi > cfg.psi_warning:
             triggered.append("psi_warning")
-            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.value)
+            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.rank)
 
         # 3. CUSUM
         cusum_val, cusum_signal = self._cusum_batch(live)
         if cusum_signal:
             triggered.append("cusum")
-            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.value)
+            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.rank)
 
         # 4. Sharpe degradation
         live_sharpe = float(np.mean(live) / max(np.std(live, ddof=1), 1e-10) * np.sqrt(252))
@@ -220,19 +224,19 @@ class DriftDetector:
             severity = DriftSeverity.CRITICAL
         elif degrad > cfg.sharpe_warning_pct:
             triggered.append("sharpe_warning")
-            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.value)
+            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.rank)
 
         # 5. Mean shift
         mean_shift_z = abs(np.mean(live) - self._ref_stats["mean"]) / max(self._ref_stats["std"] / np.sqrt(len(live)), 1e-10)
         if mean_shift_z > cfg.mean_shift_warning:
             triggered.append("mean_shift")
-            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.value)
+            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.rank)
 
         # 6. Variance shift
         var_ratio = np.var(live, ddof=1) / max(np.var(self._ref, ddof=1), 1e-10)
         if var_ratio > cfg.var_shift_warning or var_ratio < 1 / cfg.var_shift_warning:
             triggered.append("var_shift")
-            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.value)
+            severity = max(severity, DriftSeverity.WARNING, key=lambda s: s.rank)
 
         # Build result
         drift_detected = len(triggered) > 0
@@ -327,6 +331,9 @@ class DriftDetector:
         breakpoints = np.percentile(reference, np.linspace(0, 100, n_bins + 1))
         breakpoints[0] = -np.inf
         breakpoints[-1] = np.inf
+        breakpoints = np.unique(breakpoints)
+        if len(breakpoints) < 3:
+            return 0.0  # distribution too degenerate for PSI
 
         ref_counts = np.histogram(reference, bins=breakpoints)[0] / len(reference)
         cur_counts = np.histogram(current, bins=breakpoints)[0] / len(current)

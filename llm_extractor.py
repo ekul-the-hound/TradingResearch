@@ -184,29 +184,41 @@ class OllamaClient:
                 response = self.session.post(url, json=payload, timeout=self.timeout)
 
                 if response.status_code == 429:
-                    retry_after = int(response.headers.get("Retry-After", delay))
+                    try:
+                        retry_after = float(response.headers.get("Retry-After", delay))
+                    except (ValueError, TypeError):
+                        retry_after = delay
                     logger.warning(f"Rate limited. Waiting {retry_after}s (attempt {attempt}/{self.max_retries})")
+                    last_error = ConnectionError(f"Rate limited (429) after {self.max_retries} attempts")
                     time.sleep(retry_after)
                     delay *= self.retry_backoff
                     continue
 
                 if response.status_code >= 500:
                     logger.warning(f"Server error {response.status_code} (attempt {attempt}/{self.max_retries})")
+                    last_error = ConnectionError(f"Server error {response.status_code} after {self.max_retries} attempts")
                     time.sleep(delay)
                     delay *= self.retry_backoff
                     continue
 
                 response.raise_for_status()
-                data = response.json()
+                try:
+                    data = response.json()
+                except ValueError:
+                    logger.warning(f"Empty/invalid JSON body (HTTP 200, attempt {attempt}/{self.max_retries}) -- likely silent rate limit")
+                    last_error = ConnectionError("Empty response body from Ollama (silent rate limit?)")
+                    time.sleep(delay)
+                    delay *= self.retry_backoff
+                    continue
 
                 text = data["choices"][0]["message"]["content"]
                 usage = data.get("usage", {})
 
-                # ── Empty-response retry (silent rate limiting: 200 OK + empty body) ──
+                # Empty-response retry (silent rate limiting: 200 OK + empty body)
                 if not text or not text.strip():
                     logger.warning(
                         f"Empty response from {self.model} "
-                        f"(attempt {attempt}/{self.max_retries}) – likely silent rate-limit"
+                        f"(attempt {attempt}/{self.max_retries}) -- likely silent rate-limit"
                     )
                     if attempt < self.max_retries:
                         time.sleep(delay)
@@ -501,7 +513,10 @@ class LLMExtractor:
                 if result:
                     strat_id = self.db.save_strategy(result)
                     result["strategy_id"] = strat_id
-                    strategies.append(result)
+                    if result.get("status") != "code_gen_failed":
+                        strategies.append(result)
+                    else:
+                        logger.info(f"  -> Saved (code_gen_failed, excluded from dedup/validation): {strat_id}")
                     logger.info(f"  -> Saved strategy: {result.get('strategy_name')} ({strat_id})")
             except Exception as e:
                 logger.error(f"  -> Unexpected error processing doc {doc_id}: {e}")

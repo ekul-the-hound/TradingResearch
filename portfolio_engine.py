@@ -360,13 +360,9 @@ class PortfolioEngine:
             recursive_bisect(right, weight * (1 - alpha))
         
         recursive_bisect(list(sort_idx), 1.0)
-        
-        # Reorder back to original
-        final_weights = np.zeros(n)
-        for i, idx in enumerate(sort_idx):
-            final_weights[idx] = weights[i]
-        
-        return final_weights / final_weights.sum()
+        # weights[] is already indexed by original column position --
+        # recursive_bisect received original indices, no reorder needed
+        return weights / weights.sum()
     
     def _apply_constraints(self, weights: np.ndarray) -> np.ndarray:
         """Apply min/max weight constraints"""
@@ -461,7 +457,7 @@ class PortfolioEngine:
         print("\n[STATS] WEIGHTS:")
         print("-"*70)
         for name, weight in sorted(result.weights.items(), key=lambda x: -x[1]):
-            bar = "█" * int(weight * 50)
+            bar = "#" * int(weight * 50)
             print(f"  {name:<20} {weight*100:>6.1f}%  {bar}")
         
         print("\n[STATS] PORTFOLIO METRICS:")
@@ -481,7 +477,7 @@ class PortfolioEngine:
         print("\n[STATS] RISK CONTRIBUTIONS:")
         print("-"*70)
         for name, contrib in sorted(result.risk_contributions.items(), key=lambda x: -x[1]):
-            bar = "█" * int(contrib * 50)
+            bar = "#" * int(contrib * 50)
             print(f"  {name:<20} {contrib*100:>6.1f}%  {bar}")
         
         print("\n" + "="*70)

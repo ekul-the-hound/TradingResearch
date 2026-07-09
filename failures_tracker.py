@@ -93,7 +93,7 @@ class FailuresTracker:
         """Load existing failures from file"""
         if self.failures_file.exists():
             try:
-                with open(self.failures_file, 'r') as f:
+                with open(self.failures_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     self.failures = [
                         FailureRecord(**record) for record in data
@@ -101,15 +101,23 @@ class FailuresTracker:
                 print(f"[FOLDER] Loaded {len(self.failures)} failure records")
             except Exception as e:
                 print(f"[WARN]  Could not load failures file: {e}")
+                backup = self.failures_file.with_suffix('.json.corrupt')
+                try:
+                    self.failures_file.replace(backup)
+                    print(f"[WARN]  Corrupt file preserved at {backup}")
+                except OSError:
+                    pass
                 self.failures = []
         else:
             self.failures = []
     
     def _save_failures(self):
-        """Save failures to file"""
+        """Save failures to file (atomic: write temp, then replace)"""
         try:
-            with open(self.failures_file, 'w') as f:
+            tmp = self.failures_file.with_suffix('.json.tmp')
+            with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump([asdict(f) for f in self.failures], f, indent=2)
+            tmp.replace(self.failures_file)
         except Exception as e:
             print(f"[WARN]  Could not save failures: {e}")
     
@@ -192,7 +200,7 @@ class FailuresTracker:
             failure_type = self._detect_failure_type(metrics)
         
         if failure_type is None:
-            print(f"ℹ️  No failure detected for {result.get('strategy_name', 'Unknown')}")
+            print(f"[i]  No failure detected for {result.get('strategy_name', 'Unknown')}")
             return None
         
         # Auto-generate reason if not provided
@@ -462,7 +470,7 @@ class FailuresTracker:
         content = "\n".join(lines)
         
         # Save to file
-        with open(output_path, 'w') as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
         print(f"[FILE] Generated {output_path}")
@@ -538,7 +546,7 @@ class FailuresTracker:
         for ftype, count in sorted(summary['by_type'].items(), key=lambda x: x[1], reverse=True):
             print(f"   {ftype}: {count}")
         
-        print(f"\n📅 Recent Failures:")
+        print(f"\n[DATE] Recent Failures:")
         for f in summary['recent']:
             print(f"   - {f['name']}: {f['type']}")
             print(f"     {f['reason']}")

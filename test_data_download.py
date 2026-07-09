@@ -25,7 +25,7 @@ def test_forex_local():
     - All configured pairs are accessible
     """
     if not config.FOREX_ENABLED:
-        print("\n⏸️  Forex testing skipped (disabled in config)")
+        print("\n[OFF]  Forex testing skipped (disabled in config)")
         return {'skipped': True}
     
     print("\n" + "="*70)
@@ -100,7 +100,7 @@ def test_crypto_ccxt():
     - All configured crypto assets are accessible
     """
     if not config.CRYPTO_ENABLED:
-        print("\n⏸️  Crypto testing skipped (disabled in config)")
+        print("\n[OFF]  Crypto testing skipped (disabled in config)")
         return {'skipped': True}
     
     print("\n" + "="*70)
@@ -204,7 +204,7 @@ def test_disabled_sources():
             print(f"  [FAIL] {test_symbol}: Should have returned None but got data")
             results['indices'] = 'failed'
     else:
-        print(f"  ⏸️  Indices are enabled - skipping disabled test")
+        print(f"  [OFF]  Indices are enabled - skipping disabled test")
         results['indices'] = 'skipped'
     
     # Test Commodities
@@ -220,7 +220,7 @@ def test_disabled_sources():
             print(f"  [FAIL] {test_symbol}: Should have returned None but got data")
             results['commodities'] = 'failed'
     else:
-        print(f"  ⏸️  Commodities are enabled - skipping disabled test")
+        print(f"  [OFF]  Commodities are enabled - skipping disabled test")
         results['commodities'] = 'skipped'
     
     print(f"\n{'='*70}")
@@ -259,7 +259,7 @@ def test_cache_system():
         test_type = 'Crypto'
     
     if not test_symbol:
-        print("  ⏸️  No active assets to test cache")
+        print("  [OFF]  No active assets to test cache")
         return {'skipped': True}
     
     timeframe = '1hour'
@@ -320,7 +320,7 @@ def test_timeframe_resampling():
     - OHLCV aggregation is correct
     """
     if not config.FOREX_ENABLED:
-        print("\n⏸️  Resampling test skipped (Forex disabled)")
+        print("\n[OFF]  Resampling test skipped (Forex disabled)")
         return {'skipped': True}
     
     print("\n" + "="*70)
@@ -402,10 +402,10 @@ def run_all_tests():
     print("  [OK] Cache system")
     print("  [OK] Timeframe resampling")
     print("\nConfiguration:")
-    print(f"  Forex:       {'[OK] Enabled' if config.FOREX_ENABLED else '⏸️  Disabled'}")
-    print(f"  Crypto:      {'[OK] Enabled' if config.CRYPTO_ENABLED else '⏸️  Disabled'}")
-    print(f"  Indices:     {'⏸️  Disabled' if not config.INDICES_ENABLED else '[OK] Enabled'}")
-    print(f"  Commodities: {'⏸️  Disabled' if not config.COMMODITIES_ENABLED else '[OK] Enabled'}")
+    print(f"  Forex:       {'[OK] Enabled' if config.FOREX_ENABLED else '[OFF]  Disabled'}")
+    print(f"  Crypto:      {'[OK] Enabled' if config.CRYPTO_ENABLED else '[OFF]  Disabled'}")
+    print(f"  Indices:     {'[OFF]  Disabled' if not config.INDICES_ENABLED else '[OK] Enabled'}")
+    print(f"  Commodities: {'[OFF]  Disabled' if not config.COMMODITIES_ENABLED else '[OK] Enabled'}")
     print("="*70)
     
     input("\nPress Enter to start tests...")
@@ -437,7 +437,7 @@ def run_all_tests():
         status = "[OK]" if forex_passed == forex_total else "[WARN] " if forex_passed > 0 else "[FAIL]"
         print(f"  {status} Forex:      {forex_passed}/{forex_total} tests")
     else:
-        print(f"  ⏸️  Forex:      Skipped")
+        print(f"  [OFF]  Forex:      Skipped")
     
     # Crypto
     if 'skipped' not in all_results['crypto'] and 'error' not in all_results['crypto']:
@@ -448,7 +448,7 @@ def run_all_tests():
         status = "[OK]" if crypto_passed == crypto_total else "[WARN] " if crypto_passed > 0 else "[FAIL]"
         print(f"  {status} Crypto:     {crypto_passed}/{crypto_total} tests")
     else:
-        print(f"  ⏸️  Crypto:     Skipped/Error")
+        print(f"  [OFF]  Crypto:     Skipped/Error")
     
     # Disabled
     disabled_passed = sum(1 for v in all_results['disabled'].values() if v == 'passed')
@@ -467,7 +467,7 @@ def run_all_tests():
         status = "[OK]" if cache_passed else "[FAIL]"
         print(f"  {status} Cache:      {'Working' if cache_passed else 'Not optimal'}")
     else:
-        print(f"  ⏸️  Cache:      Skipped")
+        print(f"  [OFF]  Cache:      Skipped")
     
     # Resampling
     if 'skipped' not in all_results['resampling'] and 'error' not in all_results['resampling']:
@@ -480,7 +480,7 @@ def run_all_tests():
             status = "[OK]" if resample_passed == resample_total else "[WARN] "
             print(f"  {status} Resampling: {resample_passed}/{resample_total} timeframes")
     else:
-        print(f"  ⏸️  Resampling: Skipped")
+        print(f"  [OFF]  Resampling: Skipped")
     
     # Overall
     print(f"\n{'='*70}")
@@ -493,7 +493,7 @@ def run_all_tests():
         else:
             print(f"[WARN]  SOME ISSUES: {total_passed}/{total_tests} ({success_rate:.0f}%)")
     else:
-        print("⏸️  No tests were run")
+        print("[OFF]  No tests were run")
     
     print(f"\nNext steps:")
     if total_passed == total_tests and total_tests > 0:

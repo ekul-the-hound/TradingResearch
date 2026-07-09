@@ -238,7 +238,7 @@ class Phase1Pipeline:
                 for s in final
             ],
         }
-        with open(output_dir / "phase1_results.json", "w") as f:
+        with open(output_dir / "phase1_results.json", "w", encoding='utf-8') as f:
             json.dump(phase1_data, f, indent=2, default=str)
         print(f"[OK] Results saved to {output_dir / 'phase1_results.json'}")
 

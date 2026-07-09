@@ -345,7 +345,10 @@ class SearXNGScraper:
         path = parsed.path.lower()
 
         for sd in skip_domains:
-            if sd in domain:
+            if "/" in sd:
+                if sd in (domain + path):
+                    return True
+            elif sd in domain:
                 return True
 
         for ext in skip_extensions:
@@ -410,7 +413,7 @@ class SearXNGScraper:
             return []
 
         queries = []
-        with open(CUSTOM_QUERIES_FILE, "r") as f:
+        with open(CUSTOM_QUERIES_FILE, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):

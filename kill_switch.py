@@ -115,12 +115,12 @@ class KillSwitchResult:
             KillAction.NONE: "[OK]",
             KillAction.WARN: "[WARN]",
             KillAction.REDUCE: "[DOWN]",
-            KillAction.HALT: "🛑",
-            KillAction.HALT_DAY: "🛑",
-            KillAction.HALT_WEEK: "🛑",
+            KillAction.HALT: "[STOP]",
+            KillAction.HALT_DAY: "[STOP-D]",
+            KillAction.HALT_WEEK: "[STOP-W]",
             KillAction.LIQUIDATE: "[RED]",
-            KillAction.REVIEW: "👁️",
-        }.get(self.action, "❓")
+            KillAction.REVIEW: "[REVIEW]",
+        }.get(self.action, "[?]")
         return f"{icon} [{self.action.value}] {self.rule_name}: {self.message}"
 
 
@@ -166,6 +166,7 @@ class KillSwitch:
         consecutive_losses: int = 0,
         live_sharpe: Optional[float] = None,
         backtest_sharpe: Optional[float] = None,
+        n_observations: int = 0,
         current_vol: Optional[float] = None,
         normal_vol: Optional[float] = None,
         daily_loss_pct: Optional[float] = None,
@@ -183,10 +184,11 @@ class KillSwitch:
         if daily_loss_pct is not None:
             results.append(self._check_daily_loss(daily_loss_pct, ts))
 
-        # Compute daily loss from PnL if not provided
+        # NOTE: current_pnl is cumulative -- do NOT evaluate it under the daily rule.
+        # Evaluate cumulative loss against the monthly (slowest) limit instead.
         if daily_loss_pct is None and current_pnl < 0 and account_size > 0:
-            dl = abs(current_pnl) / account_size * 100
-            results.append(self._check_daily_loss(dl, ts))
+            cum_loss = abs(current_pnl) / account_size * 100
+            results.append(self._check_monthly_loss(cum_loss, ts))
 
         # Weekly loss
         if weekly_loss_pct is not None:
@@ -203,7 +205,8 @@ class KillSwitch:
         results.append(self._check_streak(consecutive_losses, ts))
 
         # Sharpe degradation
-        if live_sharpe is not None and backtest_sharpe is not None:
+        min_obs = getattr(self.config, "min_sharpe_observations", 20)
+        if live_sharpe is not None and backtest_sharpe is not None and n_observations >= min_obs:
             results.append(self._check_sharpe_degradation(
                 live_sharpe, backtest_sharpe, ts,
             ))

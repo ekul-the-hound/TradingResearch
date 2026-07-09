@@ -168,25 +168,31 @@ T = {
 
 class DataStore:
     def __init__(self):
-        self._c = {}; self._ts = 0; self._ttl = 15
+        self._c = {}; self._ts = {}; self._ttl = 15
 
-    def refresh(self): self._ts = 0
-    def _stale(self): return time.time() - self._ts > self._ttl
+    def refresh(self): self._ts = {}
+    def _stale(self, k): return time.time() - self._ts.get(k, 0) > self._ttl
+    def _put(self, k, v):
+        self._c[k] = v; self._ts[k] = time.time(); return v
 
     def _query(self, db_path, sql, limit=500):
         if not os.path.exists(db_path): return []
+        conn = None
         try:
-            conn = sqlite3.connect(db_path); conn.row_factory = sqlite3.Row
-            rows = [dict(r) for r in conn.execute(sql).fetchall()[:limit]]
-            conn.close(); return rows
-        except Exception: return []
+            conn = sqlite3.connect(db_path, timeout=5); conn.row_factory = sqlite3.Row
+            return [dict(r) for r in conn.execute(sql).fetchall()[:limit]]
+        except Exception as e:
+            print(f"[WARN] dashboard query failed ({os.path.basename(db_path)}): {e}")
+            return []
+        finally:
+            if conn is not None:
+                conn.close()
 
     # Backtests
     def backtests(self):
         k = "bt"
-        if k in self._c and not self._stale(): return self._c[k]
-        self._c[k] = self._query(DB_BT, "SELECT * FROM backtest_results ORDER BY timestamp DESC")
-        self._ts = time.time(); return self._c[k]
+        if k in self._c and not self._stale(k): return self._c[k]
+        return self._put(k, self._query(DB_BT, "SELECT * FROM backtest_results ORDER BY timestamp DESC"))
 
     def bt_summary(self):
         bt = self.backtests()
@@ -239,13 +245,14 @@ class DataStore:
     # Lineage
     def lineage(self):
         k = "lin"
-        if k in self._c and not self._stale(): return self._c[k]
-        self._c[k] = self._query(DB_LIN, "SELECT * FROM strategies ORDER BY created_at DESC", 300)
-        return self._c[k]
+        if k in self._c and not self._stale(k): return self._c[k]
+        return self._put(k, self._query(DB_LIN, "SELECT * FROM strategies ORDER BY created_at DESC", 300))
 
     def lineage_backtests(self):
+        k = "linbt"
+        if k in self._c and not self._stale(k): return self._c[k]
         if not os.path.exists(DB_LIN): return []
-        return self._query(DB_LIN, "SELECT * FROM backtest_metrics ORDER BY logged_at DESC", 300)
+        return self._put(k, self._query(DB_LIN, "SELECT * FROM backtest_metrics ORDER BY logged_at DESC", 300))
 
     def lin_summary(self):
         s = self.lineage()
@@ -257,9 +264,8 @@ class DataStore:
     # Discovery
     def discovered(self):
         k = "disc"
-        if k in self._c and not self._stale(): return self._c[k]
-        self._c[k] = self._query(DB_DISC, "SELECT * FROM strategies ORDER BY quality_score DESC", 200)
-        return self._c[k]
+        if k in self._c and not self._stale(k): return self._c[k]
+        return self._put(k, self._query(DB_DISC, "SELECT * FROM strategies ORDER BY quality_score DESC", 200))
 
     def disc_summary(self):
         s = self.discovered()
@@ -271,7 +277,7 @@ class DataStore:
     def pipe(self):
         if os.path.exists(PIPE_STATE):
             try:
-                with open(PIPE_STATE) as f: return json.load(f)
+                with open(PIPE_STATE, encoding="utf-8") as f: return json.load(f)
             except Exception: pass
         return {}
 
@@ -280,7 +286,7 @@ class DataStore:
         fp = OPT_DIR / "final_results.json" if OPT_DIR.exists() else None
         if fp and fp.exists():
             try:
-                with open(fp) as f: return json.load(f)
+                with open(fp, encoding="utf-8") as f: return json.load(f)
             except Exception: pass
         return None
 
@@ -288,9 +294,11 @@ class DataStore:
     def experiments(self):
         if not EXP_DIR.exists(): return []
         exps = []
-        for f in EXP_DIR.glob("*.json"):
+        exp_file = EXP_DIR / "experiments.json"
+        if exp_file.exists():
             try:
-                with open(f) as fh: exps.append(json.load(fh))
+                with open(exp_file, encoding="utf-8") as fh:
+                    exps.extend(json.load(fh).values())
             except Exception: pass
         return exps
 

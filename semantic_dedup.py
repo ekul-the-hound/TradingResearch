@@ -69,8 +69,8 @@ class SemanticDeduplicator:
     def __init__(self, db: Optional[ResearchDatabase] = None):
         self.db = db or ResearchDatabase()
         self.threshold = cfg.dedup.similarity_threshold
-        self.index_path = cfg.dedup.index_path
-        self.metadata_path = cfg.dedup.metadata_path
+        self.index_path = Path(cfg.dedup.index_path)
+        self.metadata_path = Path(cfg.dedup.metadata_path)
         self.embedding_dim = cfg.llm.embedding_dim
 
         # Strategy ID -> index position mapping
@@ -231,7 +231,7 @@ class SemanticDeduplicator:
         if top_score >= self.threshold:
             dup_id = self.metadata.get(top_idx, "unknown")
             logger.info(
-                f"Duplicate found: {strategy_id} ≈ {dup_id} "
+                f"Duplicate found: {strategy_id} ~= {dup_id} "
                 f"(similarity={top_score:.3f} >= {self.threshold})"
             )
             return True, dup_id, top_score
@@ -299,7 +299,7 @@ class SemanticDeduplicator:
 
         if best_score >= adjusted_threshold:
             logger.info(
-                f"Duplicate found (fallback): {strategy_id} ≈ {best_id} "
+                f"Duplicate found (fallback): {strategy_id} ~= {best_id} "
                 f"(similarity={best_score:.3f} >= {adjusted_threshold})"
             )
             return True, best_id, best_score
@@ -318,11 +318,11 @@ class SemanticDeduplicator:
 
     def save_index(self):
         """Save the dedup index to disk."""
-        Path(self.index_path).parent.mkdir(parents=True, exist_ok=True)
+        self.index_path.parent.mkdir(parents=True, exist_ok=True)
 
         if self.use_faiss:
             faiss.write_index(self.index, str(self.index_path))
-            with open(self.metadata_path, 'w') as f:
+            with open(self.metadata_path, 'w', encoding='utf-8') as f:
                 # Convert int keys to strings for JSON
                 json.dump({
                     "metadata": {str(k): v for k, v in self.metadata.items()},
@@ -332,8 +332,8 @@ class SemanticDeduplicator:
                 f"Saved FAISS index ({self.index.ntotal} vectors) to {self.index_path}"
             )
         else:
-            fallback_path = Path(self.metadata_path).with_suffix('.fallback.json')
-            with open(fallback_path, 'w') as f:
+            fallback_path = self.metadata_path.with_suffix('.fallback.json')
+            with open(fallback_path, 'w', encoding='utf-8') as f:
                 json.dump({
                     "ids": self._fallback_ids,
                     "texts": self.strategy_texts,
@@ -347,7 +347,7 @@ class SemanticDeduplicator:
         """Load existing FAISS index from disk."""
         try:
             self.index = faiss.read_index(str(self.index_path))
-            with open(self.metadata_path, 'r') as f:
+            with open(self.metadata_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 self.metadata = {int(k): v for k, v in data.get("metadata", {}).items()}
                 self.strategy_texts = data.get("texts", {})
@@ -402,7 +402,7 @@ class SemanticDeduplicator:
                     "similarity_score": score,
                     "status": "duplicate",
                 })
-                logger.info(f"  [FAIL] Duplicate: {strat_id} ≈ {dup_of} ({score:.3f})")
+                logger.info(f"  [FAIL] Duplicate: {strat_id} ~= {dup_of} ({score:.3f})")
             else:
                 strat["is_duplicate"] = False
                 strat["similarity_score"] = score

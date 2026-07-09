@@ -358,11 +358,22 @@ class DiscoveryPipeline:
 
         # 2. Import check -- exec in isolated namespace
         namespace = {}
-        try:
-            exec(code, namespace)
-        except ImportError as e:
-            return False, f"ImportError: {e}", 0
-        except Exception as e:
+        import threading
+        exec_holder = {}
+        def _exec():
+            try:
+                exec(code, namespace)
+            except Exception as exc:
+                exec_holder["error"] = exc
+        t = threading.Thread(target=_exec, daemon=True)
+        t.start()
+        t.join(timeout=30)
+        if t.is_alive():
+            return False, "Import timeout: module-level code hung", 0
+        if "error" in exec_holder:
+            e = exec_holder["error"]
+            if isinstance(e, ImportError):
+                return False, f"ImportError: {e}", 0
             return False, f"Import/exec error: {type(e).__name__}: {e}", 0
 
         # 3. Find Strategy subclass
@@ -397,15 +408,16 @@ class DiscoveryPipeline:
 
             cerebro = bt.Cerebro()
             cerebro.addstrategy(strategy_class)
+            cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='tradeanalyzer')
 
             # Generate dummy OHLCV data
             bars = cfg.pipeline.validation_bar_count
-            np.random.seed(42)
-            close = 100 + np.cumsum(np.random.randn(bars) * 0.5)
-            high = close + np.abs(np.random.randn(bars) * 0.3)
-            low = close - np.abs(np.random.randn(bars) * 0.3)
-            open_ = close + np.random.randn(bars) * 0.1
-            volume = np.random.randint(1000, 10000, bars).astype(float)
+            rng = np.random.RandomState(42)  # local: no global pollution
+            close = 100 + np.cumsum(rng.randn(bars) * 0.5)
+            high = close + np.abs(rng.randn(bars) * 0.3)
+            low = close - np.abs(rng.randn(bars) * 0.3)
+            open_ = close + rng.randn(bars) * 0.1
+            volume = rng.randint(1000, 10000, bars).astype(float)
 
             import pandas as pd
             dates = pd.date_range('2020-01-01', periods=bars, freq='D')
@@ -418,9 +430,22 @@ class DiscoveryPipeline:
             cerebro.adddata(data)
             cerebro.broker.setcash(10000)
 
-            # Run with timeout protection
-            results = cerebro.run()
-            strat_instance = results[0]
+            # Run with timeout protection (Windows-safe: thread + join)
+            import threading
+            results_holder = {}
+            def _run():
+                try:
+                    results_holder["results"] = cerebro.run()
+                except Exception as exc:
+                    results_holder["error"] = exc
+            t = threading.Thread(target=_run, daemon=True)
+            t.start()
+            t.join(timeout=getattr(cfg.pipeline, "validation_timeout_seconds", 60))
+            if t.is_alive():
+                return False, "Backtest timeout: strategy hung (possible infinite loop)", 0
+            if "error" in results_holder:
+                raise results_holder["error"]
+            strat_instance = results_holder["results"][0]
 
             # Count trades
             trade_count = 0
@@ -452,7 +477,8 @@ class DiscoveryPipeline:
 
     def run(self, skip_search: bool = False,
             skip_fetch: bool = False,
-            limit: int = None) -> Dict[str, Any]:
+            limit: int = None,
+            queries: Optional[List[Dict]] = None) -> Dict[str, Any]:
         """
         Run the full discovery pipeline.
 
@@ -473,7 +499,7 @@ class DiscoveryPipeline:
 
         # Steps 1-2: Search and Fetch
         if not skip_search:
-            results = self.step_1_search()
+            results = self.step_1_search(queries)
             if not skip_fetch:
                 doc_ids = self.step_2_fetch(results)
 

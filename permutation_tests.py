@@ -68,7 +68,7 @@ class PermutationTester:
     def __init__(self, random_seed: int = 42):
         self.random_seed = random_seed
         self.data_manager = DataManager()
-        np.random.seed(random_seed)
+        self._rng = np.random.RandomState(random_seed)  # instanced: no global pollution
     
     def test_strategy(
         self,
@@ -135,7 +135,7 @@ class PermutationTester:
         print(f"   Real {metric}: {real_value:.4f}")
         
         # Run permutations
-        print(f"\n🔀 Running {n_permutations} permutations...")
+        print(f"\n[SHUFFLE] Running {n_permutations} permutations...")
         permutation_values = []
         
         for i in range(n_permutations):
@@ -153,8 +153,9 @@ class PermutationTester:
                 perm_value = self._extract_metric(perm_result, metric)
                 permutation_values.append(perm_value)
             except Exception as e:
-                # Some permutations may fail, that's okay
-                permutation_values.append(0)
+                # Failed permutations are EXCLUDED, not counted as 0 --
+                # zeros would bias the null distribution toward significance
+                continue
         
         permutation_values = np.array(permutation_values)
         
@@ -164,7 +165,11 @@ class PermutationTester:
         
         # Calculate p-value (proportion of permutations >= real value)
         # For metrics where higher is better (Sharpe, return)
-        p_value = np.mean(permutation_values >= real_value)
+        if len(permutation_values) < max(10, n_permutations // 2):
+            print(f"[WARN] Only {len(permutation_values)}/{n_permutations} permutations "
+                  f"succeeded -- result unreliable")
+        # Phipson & Smyth finite-sample estimate: p can never be exactly 0
+        p_value = (1 + np.sum(np.asarray(permutation_values) >= real_value)) / (len(permutation_values) + 1)
         
         # Percentile rank of real value
         percentile_rank = np.mean(permutation_values < real_value) * 100
@@ -213,7 +218,7 @@ class PermutationTester:
             returns = df['close'].pct_change().dropna().values
             
             # Shuffle returns
-            np.random.shuffle(returns)
+            returns = self._rng.permutation(returns)  # copy: .values can be read-only (pandas CoW)
             
             # Reconstruct prices from shuffled returns
             initial_price = df['close'].iloc[0]
@@ -235,7 +240,7 @@ class PermutationTester:
             n_blocks = len(df) // block_size
             
             indices = list(range(n_blocks))
-            np.random.shuffle(indices)
+            self._rng.shuffle(indices)
             
             new_df_parts = []
             for idx in indices:
@@ -253,7 +258,7 @@ class PermutationTester:
             
         elif method == 'circular':
             # Random circular shift
-            shift = np.random.randint(0, len(df))
+            shift = self._rng.randint(0, len(df))
             df = pd.concat([df.iloc[shift:], df.iloc[:shift]])
             df.index = data.index
         

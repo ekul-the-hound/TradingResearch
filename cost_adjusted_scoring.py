@@ -204,20 +204,24 @@ class CostAdjustedScorer:
         # Calculate round-trip cost per trade
         # Each trade = buy + sell, so costs apply twice for spread/slippage
         cost_per_trade = (
-            profile.commission_pct * 2 +  # Commission both ways
-            profile.spread_pct * 2 +       # Spread both ways
-            profile.slippage_pct * 2       # Slippage both ways
+            profile.commission_pct * 2 +  # Commission per side, both ways
+            profile.spread_pct +          # ONE full quoted spread per round trip
+            profile.slippage_pct * 2      # Slippage per side, both ways
         )
         
         # Total trading costs
         commission_cost = total_trades * profile.commission_pct * 2
-        spread_cost = total_trades * profile.spread_pct * 2
+        spread_cost = total_trades * profile.spread_pct
         slippage_cost = total_trades * profile.slippage_pct * 2
         
         # Financing costs (for overnight positions)
-        # Estimate: assume 50% of time in position, held overnight
-        if avg_holding_bars > 24:  # Likely holding overnight (for hourly data)
-            overnight_periods = total_trades * (avg_holding_bars / 24)
+        # Convert holding period to days using the actual timeframe
+        _BARS_PER_DAY = {'1min': 1440, '5min': 288, '15min': 96, '30min': 48,
+                         '1hour': 24, '4hour': 6, '1day': 1}
+        bars_per_day = _BARS_PER_DAY.get(result.get('timeframe', '1hour'), 24)
+        holding_days = avg_holding_bars / bars_per_day
+        if holding_days >= 1.0:
+            overnight_periods = total_trades * holding_days
             financing_cost = overnight_periods * profile.overnight_rate * 100
         else:
             financing_cost = 0

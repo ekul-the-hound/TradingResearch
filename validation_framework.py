@@ -83,7 +83,7 @@ class ValidationFramework:
         self.n_monte_carlo = n_monte_carlo
         self.confidence_level = confidence_level
         self.ruin_threshold = ruin_threshold
-        np.random.seed(random_seed)
+        self._rng = np.random.RandomState(random_seed)  # instanced: no global pollution
     
     # =========================================================================
     # BOOTSTRAP VALIDATION
@@ -113,7 +113,7 @@ class ValidationFramework:
         bootstrap_means = np.zeros(n_samples)
         
         for i in range(n_samples):
-            sample = np.random.choice(values, size=n_trades, replace=True)
+            sample = self._rng.choice(values, size=n_trades, replace=True)
             bootstrap_means[i] = np.mean(sample)
         
         mean = np.mean(bootstrap_means)
@@ -156,7 +156,7 @@ class ValidationFramework:
         bootstrap_sharpes = np.zeros(n_samples)
         
         for i in range(n_samples):
-            sample = np.random.choice(values, size=n_trades, replace=True)
+            sample = self._rng.choice(values, size=n_trades, replace=True)
             std = np.std(sample)
             bootstrap_sharpes[i] = np.mean(sample) / std if std > 0 else 0
         
@@ -217,7 +217,7 @@ class ValidationFramework:
         bootstrap_pfs = np.zeros(self.n_bootstrap)
         
         for i in range(self.n_bootstrap):
-            sample = np.random.choice(values, size=n_trades, replace=True)
+            sample = self._rng.choice(values, size=n_trades, replace=True)
             gains = sample[sample > 0].sum()
             losses = abs(sample[sample < 0].sum())
             bootstrap_pfs[i] = gains / losses if losses > 0 else 10
@@ -267,7 +267,7 @@ class ValidationFramework:
         max_drawdowns = np.zeros(n_simulations)
         
         for sim in range(n_simulations):
-            shuffled_returns = np.random.permutation(returns)
+            shuffled_returns = self._rng.permutation(returns)
             equity = initial_capital
             peak = initial_capital
             max_dd = 0
@@ -365,6 +365,7 @@ class ValidationFramework:
         is_sharpes = []
         oos_sharpes = []
         
+        oos_returns_raw = []
         for i in range(n_windows):
             start_idx = i * window_size
             end_idx = start_idx + window_size if i < n_windows - 1 else total_bars
@@ -385,21 +386,22 @@ class ValidationFramework:
                 is_return = is_result.get('total_return_pct', 0)
                 is_sharpe = is_result.get('sharpe_ratio', 0) or 0
             except Exception as e:
-                warnings.warn(f"Window {i+1} IS backtest failed: {e}")
-                is_return = 0
-                is_sharpe = 0
+                warnings.warn(f"Window {i+1} IS backtest failed: {e} -- window skipped")
+                continue
             
             try:
                 oos_result = run_backtest_func(test_data, **backtest_kwargs)
                 oos_return = oos_result.get('total_return_pct', 0)
                 oos_sharpe = oos_result.get('sharpe_ratio', 0) or 0
             except Exception as e:
-                warnings.warn(f"Window {i+1} OOS backtest failed: {e}")
-                oos_return = 0
-                oos_sharpe = 0
+                warnings.warn(f"Window {i+1} OOS backtest failed: {e} -- window skipped")
+                continue
             
-            is_returns.append(is_return)
-            oos_returns.append(oos_return)
+            # Per-bar normalization: raw window totals scale with window LENGTH,
+            # so a 70% IS window mechanically beats a 30% OOS window
+            is_returns.append(is_return / max(len(train_data), 1))
+            oos_returns.append(oos_return / max(len(test_data), 1))
+            oos_returns_raw.append(oos_return)
             is_sharpes.append(is_sharpe)
             oos_sharpes.append(oos_sharpe)
         
@@ -415,7 +417,7 @@ class ValidationFramework:
         else:
             correlation = 0
         
-        total_oos_return = np.prod([1 + r/100 for r in oos_returns]) * 100 - 100
+        total_oos_return = np.prod([1 + r/100 for r in oos_returns_raw]) * 100 - 100
         total_oos_sharpe = np.mean(oos_sharpes)
         
         return WalkForwardResult(

@@ -249,10 +249,12 @@ class TailRiskAnalyzer:
     def _evt_cvar(
         self, shape: float, scale: float, threshold: float, var: float,
     ) -> float:
-        """CVaR from EVT."""
+        """CVaR from EVT. `var` arrives in return space (negative); compute in loss space."""
+        var_loss = abs(var)
         if abs(1 - shape) < 1e-6:
-            return var * 1.5
-        return (var + scale - shape * threshold) / (1 - shape)
+            return -var_loss * 1.5
+        es_loss = (var_loss + scale - shape * threshold) / (1 - shape)
+        return -float(max(es_loss, var_loss))  # ES must be at least as extreme as VaR
 
     # ------------------------------------------------------------------
     # TAIL DEPENDENCE

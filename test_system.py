@@ -56,14 +56,20 @@ def print_header(title):
 def print_result(success, message=""):
     """Print pass/fail result"""
     if success:
-        print(f"\n  Ã¢Å“â€¦ PASSED {message}")
+        print(f"\n  [OK] PASSED {message}")
     else:
-        print(f"\n  Ã¢ÂÅ’ FAILED {message}")
+        print(f"\n  [FAIL] FAILED {message}")
 
 def ask_continue():
-    """Ask user if they want to continue to next test"""
+    """Ask user if they want to continue to next test (auto-continue headless)"""
     print(f"\n{'-'*70}")
-    response = input("  Continue to next test? (Y/N): ").strip().upper()
+    import sys as _sys
+    if not _sys.stdin.isatty():
+        return True  # headless/CI: never block on input
+    try:
+        response = input("  Continue to next test? (Y/N): ").strip().upper()
+    except EOFError:
+        return True
     return response == 'Y'
 
 def run_test(test_name, test_func):
@@ -75,7 +81,7 @@ def run_test(test_name, test_func):
         print_result(success, details if not success else "")
         return success
     except Exception as e:
-        print(f"\n  Ã¢ÂÅ’ EXCEPTION: {e}")
+        print(f"\n  [FAIL] EXCEPTION: {e}")
         traceback.print_exc()
         return False
 
@@ -114,28 +120,28 @@ def test_config():
         forex_path = Path(config.FOREX_BASE_PATH)
         if forex_path.exists():
             files = list(forex_path.glob('*.csv')) + list(forex_path.glob('*.xlsx'))
-            print(f"    Forex dir: Ã¢Å“â€¦ Found ({len(files)} files)")
+            print(f"    Forex dir: [OK] Found ({len(files)} files)")
         else:
             warnings.append(f"Forex dir not found: {forex_path}")
-            print(f"    Forex dir: Ã¢Å¡Â Ã¯Â¸Â  Not found")
+            print(f"    Forex dir: [WARN]  Not found")
     
     if config.CRYPTO_ENABLED:
         crypto_path = Path(config.CACHE_SUBDIRS.get('crypto', ''))
         if crypto_path.exists():
             files = list(crypto_path.glob('**/*.csv'))
-            print(f"    Crypto dir: Ã¢Å“â€¦ Found ({len(files)} files)")
+            print(f"    Crypto dir: [OK] Found ({len(files)} files)")
         else:
             warnings.append(f"Crypto dir not found: {crypto_path}")
-            print(f"    Crypto dir: Ã¢Å¡Â Ã¯Â¸Â  Not found")
+            print(f"    Crypto dir: [WARN]  Not found")
     
     if config.INDICES_ENABLED:
         indices_path = Path(config.CACHE_SUBDIRS.get('indices', ''))
         if indices_path.exists():
             files = list(indices_path.glob('**/*.csv'))
-            print(f"    Indices dir: Ã¢Å“â€¦ Found ({len(files)} files)")
+            print(f"    Indices dir: [OK] Found ({len(files)} files)")
         else:
             warnings.append(f"Indices dir not found: {indices_path}")
-            print(f"    Indices dir: Ã¢Å¡Â Ã¯Â¸Â  Not found")
+            print(f"    Indices dir: [WARN]  Not found")
     
     # Check API key
     if not config.CLAUDE_API_KEY:
@@ -144,7 +150,7 @@ def test_config():
     if errors:
         return False, f"Errors: {', '.join(errors)}"
     elif warnings:
-        print(f"\n  Ã¢Å¡Â Ã¯Â¸Â  Warnings: {', '.join(warnings)}")
+        print(f"\n  [WARN]  Warnings: {', '.join(warnings)}")
         return True, "(with warnings)"
     else:
         return True, ""
@@ -168,12 +174,12 @@ def test_data_manager():
             data = manager.get_data(config.FOREX_WATCHLIST[0], '1hour', 100)
             if data is not None and len(data) > 0:
                 results['forex'] = len(data)
-                print(f"    Ã¢Å“â€¦ Got {len(data)} bars")
+                print(f"    [OK] Got {len(data)} bars")
             else:
                 results['forex'] = 0
-                print(f"    Ã¢ÂÅ’ No data returned")
+                print(f"    [FAIL] No data returned")
         except Exception as e:
-            print(f"    Ã¢ÂÅ’ Error: {e}")
+            print(f"    [FAIL] Error: {e}")
             results['forex'] = -1
     else:
         print(f"\n  Forex: Skipped (disabled)")
@@ -185,12 +191,12 @@ def test_data_manager():
             data = manager.get_data(config.CRYPTO_WATCHLIST[0], '1hour', 100)
             if data is not None and len(data) > 0:
                 results['crypto'] = len(data)
-                print(f"    Ã¢Å“â€¦ Got {len(data)} bars")
+                print(f"    [OK] Got {len(data)} bars")
             else:
                 results['crypto'] = 0
-                print(f"    Ã¢Å¡Â Ã¯Â¸Â  No data (may need local files or CCXT)")
+                print(f"    [WARN]  No data (may need local files or CCXT)")
         except Exception as e:
-            print(f"    Ã¢ÂÅ’ Error: {e}")
+            print(f"    [FAIL] Error: {e}")
             results['crypto'] = -1
     else:
         print(f"\n  Crypto: Skipped (disabled)")
@@ -202,12 +208,12 @@ def test_data_manager():
             data = manager.get_data(config.INDEX_WATCHLIST[0], '1hour', 100)
             if data is not None and len(data) > 0:
                 results['indices'] = len(data)
-                print(f"    Ã¢Å“â€¦ Got {len(data)} bars")
+                print(f"    [OK] Got {len(data)} bars")
             else:
                 results['indices'] = 0
-                print(f"    Ã¢Å¡Â Ã¯Â¸Â  No data (check local files)")
+                print(f"    [WARN]  No data (check local files)")
         except Exception as e:
-            print(f"    Ã¢ÂÅ’ Error: {e}")
+            print(f"    [FAIL] Error: {e}")
             results['indices'] = -1
     else:
         print(f"\n  Indices: Skipped (disabled)")
@@ -239,9 +245,9 @@ def test_database():
     
     # Check if database file exists/was created
     if Path(config.DATABASE_PATH).exists():
-        print(f"    Database file: Ã¢Å“â€¦ {config.DATABASE_PATH}")
+        print(f"    Database file: [OK] {config.DATABASE_PATH}")
     else:
-        print(f"    Database file: Ã¢ÂÅ’ Not found")
+        print(f"    Database file: [FAIL] Not found")
         return False, "Database file not created"
     
     # Try to get summary
@@ -261,14 +267,17 @@ def test_base_strategy():
     print("  Loading base strategy...")
     
     try:
-        from strategies.simple_strategy import SimpleMovingAverageCrossover
-        print(f"    Strategy class: Ã¢Å“â€¦ {SimpleMovingAverageCrossover.__name__}")
+        try:
+            from strategies.simple_strategy import SimpleMovingAverageCrossover
+        except ImportError:
+            from simple_strategy import SimpleMovingAverageCrossover  # flat-module fallback  # pyright: ignore[reportMissingImports]
+        print(f"    Strategy class: [OK] {SimpleMovingAverageCrossover.__name__}")
         
         # Check it has required methods
         required = ['__init__', 'next']
         for method in required:
             if hasattr(SimpleMovingAverageCrossover, method):
-                print(f"    Method '{method}': Ã¢Å“â€¦ Found")
+                print(f"    Method '{method}': [OK] Found")
             else:
                 return False, f"Missing method: {method}"
         
@@ -285,8 +294,10 @@ def test_single_backtest():
     
     import config
     from backtester_multi_timeframe import MultiTimeframeBacktester
-    from strategies.simple_strategy import SimpleMovingAverageCrossover
-    
+    try:
+        from strategies.simple_strategy import SimpleMovingAverageCrossover
+    except ImportError:
+        from simple_strategy import SimpleMovingAverageCrossover  # flat-module fallback  # pyright: ignore[reportMissingImports]
     # Pick a test symbol
     test_symbol = None
     if config.FOREX_ENABLED and config.FOREX_WATCHLIST:
@@ -326,8 +337,10 @@ def test_multi_backtest():
     
     import config
     from backtester_multi_timeframe import MultiTimeframeBacktester
-    from strategies.simple_strategy import SimpleMovingAverageCrossover
-    
+    try:
+        from strategies.simple_strategy import SimpleMovingAverageCrossover
+    except ImportError:
+        from simple_strategy import SimpleMovingAverageCrossover  # flat-module fallback  # pyright: ignore[reportMissingImports]
     # Get 2 assets
     test_assets = []
     if config.FOREX_ENABLED and config.FOREX_WATCHLIST:
@@ -375,18 +388,18 @@ def test_mutation_agent_dry():
     print(f"\n    Loading base strategy...")
     base_code = load_base_strategy()
     if base_code:
-        print(f"      Ã¢Å“â€¦ Loaded ({len(base_code)} chars)")
+        print(f"      [OK] Loaded ({len(base_code)} chars)")
     else:
         return False, "Could not load base strategy"
     
     print(f"\n    Loading mutation ideas...")
     ideas = get_all_ideas()
     ideas_list = get_ideas_list()
-    print(f"      Ã¢Å“â€¦ Loaded {len(ideas_list)} ideas")
+    print(f"      [OK] Loaded {len(ideas_list)} ideas")
     
     print(f"\n    Loading performance summary...")
     performance = get_performance_summary()
-    print(f"      Ã¢Å“â€¦ Summary loaded ({len(performance)} chars)")
+    print(f"      [OK] Summary loaded ({len(performance)} chars)")
     
     # Check MUTATION_PROMPT has the coding rules
     from mutate_strategy import MUTATION_PROMPT
@@ -401,9 +414,9 @@ def test_mutation_agent_dry():
         rules_present.append('min bars')
     
     if len(rules_present) >= 3:
-        print(f"      Ã¢Å“â€¦ Coding rules present: {', '.join(rules_present)}")
+        print(f"      [OK] Coding rules present: {', '.join(rules_present)}")
     else:
-        print(f"      Ã¢Å¡Â Ã¯Â¸Â  Some coding rules may be missing")
+        print(f"      [WARN]  Some coding rules may be missing")
         return True, "(prompt may need Backtrader rules)"
     
     return True, ""
@@ -420,13 +433,13 @@ def test_variant_loading():
     variants_dir = Path(__file__).parent / 'strategies' / 'variants'
     
     if not variants_dir.exists():
-        print(f"    Variants directory: Ã¢Å¡Â Ã¯Â¸Â  Not found (will be created by mutation agent)")
+        print(f"    Variants directory: [WARN]  Not found (will be created by mutation agent)")
         return True, "(no variants generated yet)"
     
     variant_files = list(variants_dir.glob('variant_*.py'))
     
     if not variant_files:
-        print(f"    Variant files: Ã¢Å¡Â Ã¯Â¸Â  None found (run mutation agent first)")
+        print(f"    Variant files: [WARN]  None found (run mutation agent first)")
         return True, "(no variants generated yet)"
     
     print(f"    Found {len(variant_files)} variant files")
@@ -441,10 +454,10 @@ def test_variant_loading():
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             loaded += 1
-            print(f"      Ã¢Å“â€¦ {filepath.name}")
+            print(f"      [OK] {filepath.name}")
         except Exception as e:
             failed += 1
-            print(f"      Ã¢ÂÅ’ {filepath.name}: {str(e)[:50]}")
+            print(f"      [FAIL] {filepath.name}: {str(e)[:50]}")
     
     if failed == 0:
         return True, f"({loaded} variants loaded)"
@@ -483,7 +496,7 @@ def test_regime_classifier():
             'volume': np.random.randint(1000, 10000, 200)
         }, index=dates)
         
-        print(f"      Ã¢Å“â€¦ Created {len(df)} bars")
+        print(f"      [OK] Created {len(df)} bars")
         
         # Test classifier
         print(f"\n    Running classification...")
@@ -492,7 +505,7 @@ def test_regime_classifier():
         
         if 'regime' in result_df.columns:
             regimes = result_df['regime'].value_counts()
-            print(f"      Ã¢Å“â€¦ Classified bars into {len(regimes)} regimes:")
+            print(f"      [OK] Classified bars into {len(regimes)} regimes:")
             for regime, count in regimes.items():
                 print(f"         {regime}: {count} bars")
             return True, ""
@@ -525,7 +538,7 @@ def test_validation_framework():
             'exit_time': pd.date_range('2023-01-02', periods=50, freq='1D'),
         })
         
-        print(f"      Ã¢Å“â€¦ Created {len(trades)} sample trades")
+        print(f"      [OK] Created {len(trades)} sample trades")
         
         validator = ValidationFramework(n_bootstrap=100, n_monte_carlo=100)
         
@@ -534,33 +547,33 @@ def test_validation_framework():
         try:
             bootstrap_result = validator.bootstrap_trades(trades, metric='return_pct')
             if bootstrap_result:
-                print(f"      Ã¢Å“â€¦ Bootstrap complete")
+                print(f"      [OK] Bootstrap complete")
                 print(f"         Mean: {bootstrap_result.mean:.2f}%")
                 print(f"         CI: [{bootstrap_result.ci_lower:.2f}, {bootstrap_result.ci_upper:.2f}]")
             else:
-                print(f"      Ã¢Å¡Â Ã¯Â¸Â  Bootstrap returned None")
+                print(f"      [WARN]  Bootstrap returned None")
         except Exception as e:
-            print(f"      Ã¢Å¡Â Ã¯Â¸Â  Bootstrap error: {e}")
+            print(f"      [WARN]  Bootstrap error: {e}")
         
         # Test Monte Carlo
         print(f"\n    Testing Monte Carlo simulation...")
         try:
             mc_result = validator.monte_carlo_equity(trades, initial_capital=10000)
             if mc_result:
-                print(f"      Ã¢Å“â€¦ Monte Carlo complete")
+                print(f"      [OK] Monte Carlo complete")
                 print(f"         Probability of ruin: {mc_result.probability_of_ruin:.1f}%")
                 print(f"         Mean final equity: ${mc_result.mean_final_equity:.2f}")
             else:
-                print(f"      Ã¢Å¡Â Ã¯Â¸Â  Monte Carlo returned None")
+                print(f"      [WARN]  Monte Carlo returned None")
         except Exception as e:
-            print(f"      Ã¢Å¡Â Ã¯Â¸Â  Monte Carlo error: {e}")
+            print(f"      [WARN]  Monte Carlo error: {e}")
         
         # Test Walk-Forward (simplified check)
         print(f"\n    Testing Walk-Forward framework...")
         if hasattr(validator, 'walk_forward_test'):
-            print(f"      Ã¢Å“â€¦ Walk-Forward method available")
+            print(f"      [OK] Walk-Forward method available")
         else:
-            print(f"      Ã¢Å¡Â Ã¯Â¸Â  Walk-Forward method not found")
+            print(f"      [WARN]  Walk-Forward method not found")
         
         return True, ""
         
@@ -579,25 +592,25 @@ def test_manual_gates():
         
         print(f"\n    Importing ValidationGate...")
         gate = ValidationGate(enabled=False)  # Disabled for testing
-        print(f"      Ã¢Å“â€¦ ValidationGate imported")
+        print(f"      [OK] ValidationGate imported")
         
         # Check methods that actually exist
         methods = ['approve', 'get_session_summary', 'reset_session']
         for method in methods:
             if hasattr(gate, method):
-                print(f"      Ã¢Å“â€¦ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      Ã¢Å¡Â Ã¯Â¸Â  Method '{method}' not found")
+                print(f"      [WARN]  Method '{method}' not found")
         
         # Test approve method (non-interactive since enabled=False)
         print(f"\n    Testing approve method (gates disabled)...")
         result = gate.approve("Test operation", estimated_cost=0.10)
-        print(f"      Ã¢Å“â€¦ Approve returned: {result}")
+        print(f"      [OK] Approve returned: {result}")
         
         # Test session tracking
         print(f"\n    Testing session tracking...")
-        print(f"      Ã¢Å“â€¦ Total approved: {gate.total_approved}")
-        print(f"      Ã¢Å“â€¦ Total approved cost: ${gate.total_approved_cost:.2f}")
+        print(f"      [OK] Total approved: {gate.total_approved}")
+        print(f"      [OK] Total approved cost: ${gate.total_approved_cost:.2f}")
         
         return True, ""
         
@@ -613,22 +626,25 @@ def test_regime_backtester():
     
     try:
         from backtester_multi_timeframe import MultiTimeframeBacktester
-        from strategies.simple_strategy import SimpleMovingAverageCrossover
+        try:
+            from strategies.simple_strategy import SimpleMovingAverageCrossover
+        except ImportError:
+            from simple_strategy import SimpleMovingAverageCrossover  # flat-module fallback  # pyright: ignore[reportMissingImports]
         import config
         
         # Check if regime analysis is available
         backtester = MultiTimeframeBacktester()
         
         if hasattr(backtester, 'run_with_regime_analysis'):
-            print(f"      Ã¢Å“â€¦ Regime analysis method available")
+            print(f"      [OK] Regime analysis method available")
         else:
-            print(f"      Ã¢Å¡Â Ã¯Â¸Â  Regime analysis method not found (may be integrated differently)")
+            print(f"      [WARN]  Regime analysis method not found (may be integrated differently)")
         
         # Check for regime classifier integration
         if hasattr(backtester, 'regime_classifier') or hasattr(backtester, 'enable_regime_analysis'):
-            print(f"      Ã¢Å“â€¦ Regime classifier integration found")
+            print(f"      [OK] Regime classifier integration found")
         else:
-            print(f"      Ã¢Å¡Â Ã¯Â¸Â  Regime classifier may not be integrated yet")
+            print(f"      [WARN]  Regime classifier may not be integrated yet")
         
         return True, "(regime features checked)"
         
@@ -651,7 +667,7 @@ def test_robustness_tests():
         
         print(f"\n    Importing RobustnessTests...")
         tester = RobustnessTests()
-        print(f"      Ã¢Å“â€¦ RobustnessTests imported")
+        print(f"      [OK] RobustnessTests imported")
         
         # Check methods exist
         methods = [
@@ -663,15 +679,15 @@ def test_robustness_tests():
         
         for method in methods:
             if hasattr(tester, method):
-                print(f"      Ã¢Å“â€¦ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      Ã¢ÂÅ’ Method '{method}' not found")
+                print(f"      [FAIL] Method '{method}' not found")
                 return False, f"Missing method: {method}"
         
         # Check dataclasses
         print(f"\n    Checking result dataclasses...")
-        print(f"      Ã¢Å“â€¦ LatencyTestResult: {list(LatencyTestResult.__annotations__.keys())[:4]}...")
-        print(f"      Ã¢Å“â€¦ SlippageTestResult: {list(SlippageTestResult.__annotations__.keys())[:4]}...")
+        print(f"      [OK] LatencyTestResult: {list(LatencyTestResult.__annotations__.keys())[:4]}...")
+        print(f"      [OK] SlippageTestResult: {list(SlippageTestResult.__annotations__.keys())[:4]}...")
         
         return True, ""
         
@@ -693,16 +709,16 @@ def test_adversarial_reviewer_dry():
         
         # Check if API key is configured
         if not config.CLAUDE_API_KEY:
-            print(f"      Ã¢Å¡Â Ã¯Â¸Â  No API key configured (reviewer won't run live)")
+            print(f"      [WARN]  No API key configured (reviewer won't run live)")
         else:
-            print(f"      Ã¢Å“â€¦ API key configured")
+            print(f"      [OK] API key configured")
         
         # Check class can be instantiated (requires API key)
         if config.CLAUDE_API_KEY:
             reviewer = AdversarialReviewer()
-            print(f"      Ã¢Å“â€¦ AdversarialReviewer instantiated")
+            print(f"      [OK] AdversarialReviewer instantiated")
         else:
-            print(f"      Ã¢Å¡Â Ã¯Â¸Â  Cannot instantiate without API key")
+            print(f"      [WARN]  Cannot instantiate without API key")
         
         # Check methods exist on class
         methods = [
@@ -714,18 +730,18 @@ def test_adversarial_reviewer_dry():
         
         for method in methods:
             if hasattr(AdversarialReviewer, method):
-                print(f"      Ã¢Å“â€¦ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      Ã¢ÂÅ’ Method '{method}' not found")
+                print(f"      [FAIL] Method '{method}' not found")
         
         # Check dataclass
         print(f"\n    Checking AdversarialReview dataclass...")
         fields = ['overall_risk_score', 'critical_flaws', 'warnings', 'recommended_action']
         for field in fields:
             if field in AdversarialReview.__annotations__:
-                print(f"      Ã¢Å“â€¦ Field '{field}' found")
+                print(f"      [OK] Field '{field}' found")
             else:
-                print(f"      Ã¢Å¡Â Ã¯Â¸Â  Field '{field}' not found")
+                print(f"      [WARN]  Field '{field}' not found")
         
         return True, "(dry run - no API call made)"
         
@@ -744,7 +760,7 @@ def test_failures_tracker():
         
         print(f"\n    Importing FailuresTracker...")
         tracker = FailuresTracker()
-        print(f"      Ã¢Å“â€¦ FailuresTracker imported")
+        print(f"      [OK] FailuresTracker imported")
         
         # Check methods exist
         methods = [
@@ -758,24 +774,24 @@ def test_failures_tracker():
         
         for method in methods:
             if hasattr(tracker, method):
-                print(f"      Ã¢Å“â€¦ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      Ã¢ÂÅ’ Method '{method}' not found")
+                print(f"      [FAIL] Method '{method}' not found")
                 return False, f"Missing method: {method}"
         
         # Check failure types defined
         print(f"\n    Checking failure types...")
         if hasattr(tracker, 'FAILURE_TYPES'):
-            print(f"      Ã¢Å“â€¦ {len(tracker.FAILURE_TYPES)} failure types defined")
+            print(f"      [OK] {len(tracker.FAILURE_TYPES)} failure types defined")
             for ftype in list(tracker.FAILURE_TYPES.keys())[:5]:
                 print(f"         - {ftype}")
         else:
-            print(f"      Ã¢Å¡Â Ã¯Â¸Â  FAILURE_TYPES not found")
+            print(f"      [WARN]  FAILURE_TYPES not found")
         
         # Test get_summary (non-destructive)
         print(f"\n    Testing get_summary...")
         summary = tracker.get_summary()
-        print(f"      Ã¢Å“â€¦ Summary retrieved: {summary.get('total', 0)} failures logged")
+        print(f"      [OK] Summary retrieved: {summary.get('total', 0)} failures logged")
         
         return True, ""
         
@@ -798,7 +814,7 @@ def test_permutation_tests():
         
         print(f"\n    Importing PermutationTester...")
         tester = PermutationTester()
-        print(f"      Ã¢Å“â€¦ PermutationTester imported")
+        print(f"      [OK] PermutationTester imported")
         
         # Check methods exist
         methods = [
@@ -810,9 +826,9 @@ def test_permutation_tests():
         
         for method in methods:
             if hasattr(tester, method):
-                print(f"      Ã¢Å“â€¦ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      Ã¢ÂÅ’ Method '{method}' not found")
+                print(f"      [FAIL] Method '{method}' not found")
                 return False, f"Missing method: {method}"
         
         # Check dataclass
@@ -820,9 +836,9 @@ def test_permutation_tests():
         fields = ['p_value', 'is_significant', 'real_value', 'permutation_mean']
         for field in fields:
             if field in PermutationResult.__annotations__:
-                print(f"      Ã¢Å“â€¦ Field '{field}' found")
+                print(f"      [OK] Field '{field}' found")
             else:
-                print(f"      Ã¢Å¡Â Ã¯Â¸Â  Field '{field}' not found")
+                print(f"      [WARN]  Field '{field}' not found")
         
         return True, ""
         
@@ -841,7 +857,7 @@ def test_parameter_sensitivity():
         
         print(f"\n    Importing ParameterSensitivity...")
         analyzer = ParameterSensitivity()
-        print(f"      Ã¢Å“â€¦ ParameterSensitivity imported")
+        print(f"      [OK] ParameterSensitivity imported")
         
         # Check methods exist
         methods = [
@@ -853,15 +869,15 @@ def test_parameter_sensitivity():
         
         for method in methods:
             if hasattr(analyzer, method):
-                print(f"      Ã¢Å“â€¦ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      Ã¢ÂÅ’ Method '{method}' not found")
+                print(f"      [FAIL] Method '{method}' not found")
                 return False, f"Missing method: {method}"
         
         # Check dataclasses
         print(f"\n    Checking result dataclasses...")
-        print(f"      Ã¢Å“â€¦ SingleParamResult fields: {list(SingleParamResult.__annotations__.keys())[:4]}...")
-        print(f"      Ã¢Å“â€¦ TwoParamResult fields: {list(TwoParamResult.__annotations__.keys())[:4]}...")
+        print(f"      [OK] SingleParamResult fields: {list(SingleParamResult.__annotations__.keys())[:4]}...")
+        print(f"      [OK] TwoParamResult fields: {list(TwoParamResult.__annotations__.keys())[:4]}...")
         
         return True, ""
         
@@ -880,7 +896,7 @@ def test_cost_adjusted_scoring():
         
         print(f"\n    Importing CostAdjustedScorer...")
         scorer = CostAdjustedScorer()
-        print(f"      Ã¢Å“â€¦ CostAdjustedScorer imported")
+        print(f"      [OK] CostAdjustedScorer imported")
         
         # Check methods exist
         methods = [
@@ -893,9 +909,9 @@ def test_cost_adjusted_scoring():
         
         for method in methods:
             if hasattr(scorer, method):
-                print(f"      Ã¢Å“â€¦ Method '{method}' found")
+                print(f"      [OK] Method '{method}' found")
             else:
-                print(f"      Ã¢ÂÅ’ Method '{method}' not found")
+                print(f"      [FAIL] Method '{method}' not found")
                 return False, f"Missing method: {method}"
         
         # Test with sample data
@@ -911,10 +927,10 @@ def test_cost_adjusted_scoring():
         }
         
         result = scorer.adjust_result(sample)
-        print(f"      Ã¢Å“â€¦ Gross return: {result.gross_return_pct:.2f}%")
-        print(f"      Ã¢Å“â€¦ Net return: {result.net_return_pct:.2f}%")
-        print(f"      Ã¢Å“â€¦ Total costs: {result.total_cost_pct:.2f}%")
-        print(f"      Ã¢Å“â€¦ Viable: {result.is_viable}")
+        print(f"      [OK] Gross return: {result.gross_return_pct:.2f}%")
+        print(f"      [OK] Net return: {result.net_return_pct:.2f}%")
+        print(f"      [OK] Total costs: {result.total_cost_pct:.2f}%")
+        print(f"      [OK] Viable: {result.is_viable}")
         
         return True, ""
         
@@ -933,13 +949,13 @@ def test_expanded_mutation_config():
         
         print(f"\n    Loading mutation ideas...")
         ideas = get_ideas_list()
-        print(f"      Ã¢Å“â€¦ Loaded {len(ideas)} mutation ideas")
+        print(f"      [OK] Loaded {len(ideas)} mutation ideas")
         
         # Check for minimum number of ideas
         if len(ideas) >= 70:
-            print(f"      Ã¢Å“â€¦ Sufficient ideas for diverse mutations")
+            print(f"      [OK] Sufficient ideas for diverse mutations")
         else:
-            print(f"      Ã¢Å¡Â Ã¯Â¸Â  Consider adding more ideas ({len(ideas)} < 70)")
+            print(f"      [WARN]  Consider adding more ideas ({len(ideas)} < 70)")
         
         # Check categories exist
         all_ideas = get_all_ideas()
@@ -949,9 +965,9 @@ def test_expanded_mutation_config():
         print(f"\n    Checking categories...")
         for cat in categories:
             if cat in all_ideas:
-                print(f"      Ã¢Å“â€¦ Category '{cat}' found")
+                print(f"      [OK] Category '{cat}' found")
             else:
-                print(f"      Ã¢Å¡Â Ã¯Â¸Â  Category '{cat}' not found")
+                print(f"      [WARN]  Category '{cat}' not found")
         
         return True, ""
         
@@ -1300,11 +1316,100 @@ def test_execution_engine():
 # MAIN
 # ==============================================================================
 
+
+
+# ==============================================================================
+# REGRESSION PINS -- value-level asserts locking the audit's worst fixes
+# (these FAIL if any of the five most damaging bugs ever regress)
+# ==============================================================================
+
+def test_regression_pins():
+    import tempfile, os as _os
+    import backtrader as bt
+    import numpy as np
+    import pandas as pd
+
+    # PIN 1: data_manager must NOT overwrite close with volume (the worst bug)
+    from data_manager import DataManager
+    with tempfile.TemporaryDirectory() as td:
+        p = _os.path.join(td, "pin.csv")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("datetime,open,high,low,close,volume\n")
+            for i in range(30):
+                f.write(f"2023-01-{i+1:02d} 00:00:00,1.10,1.11,1.09,1.105,99999\n")
+        df = DataManager()._load_and_normalize_csv(p)
+        assert df is not None and len(df) > 0, "CSV loader returned nothing"
+        assert (df["close"] < 100).all(), "REGRESSION: close overwritten with volume!"
+        assert (df["volume"] > 1000).all(), "volume column corrupted"
+    print("    [OK] PIN 1: close != volume after CSV normalization")
+
+    # PIN 2: PaperTrader equity must NOT move by notional on an open
+    from execution_engine import PaperTrader
+    pt = PaperTrader(initial_capital=100000)
+    pt.update_price("PINX", 50.0)
+    pt.submit_order("PINX", "BUY", 100)  # notional 5000
+    assert abs(pt.equity - 100000) < 100000 * 0.01, (
+        f"REGRESSION: equity {pt.equity} moved ~notional on open (accounting bug)")
+    print("    [OK] PIN 2: PaperTrader equity stable after open (commission-only)")
+
+    # PIN 3: HRP weights ordering -- low-vol strategy gets more weight
+    from portfolio_engine import PortfolioEngine
+    rng = np.random.RandomState(11)
+    n = 400
+    curves = {}
+    for name, vol in (("lowvol", 0.002), ("midvol", 0.008), ("highvol", 0.03)):
+        rets = rng.normal(0.0003, vol, n)
+        curves[name] = pd.Series(10000 * np.cumprod(1 + rets),
+                                 index=pd.date_range("2023-01-01", periods=n))
+    res = PortfolioEngine().build_portfolio(curves, method="hrp")
+    w = res.weights
+    assert w["lowvol"] > w["highvol"], (
+        f"REGRESSION: HRP weights scrambled -- lowvol={w['lowvol']:.3f} "
+        f"<= highvol={w['highvol']:.3f}")
+    print(f"    [OK] PIN 3: HRP ordering (lowvol {w['lowvol']:.2f} > highvol {w['highvol']:.2f})")
+
+    # PIN 4: EVT CVaR must be at least as extreme as EVT VaR
+    from tail_risk import TailRiskAnalyzer
+    heavy = rng.standard_t(3, 2000) * 0.01
+    tr = TailRiskAnalyzer().analyze(heavy)
+    assert tr.evt_cvar_99 <= tr.evt_var_99 + 1e-12, (
+        f"REGRESSION: EVT CVaR ({tr.evt_cvar_99:.4f}) less extreme than "
+        f"VaR ({tr.evt_var_99:.4f}) -- sign-space bug is back")
+    print(f"    [OK] PIN 4: EVT CVaR ({tr.evt_cvar_99:.4f}) <= VaR ({tr.evt_var_99:.4f})")
+
+    # PIN 5: TradeTracker records real entry size / direction on closed trades
+    from backtester_multi_timeframe import TradeTracker
+
+    class _PinStrat(bt.Strategy):
+        def next(self):
+            if len(self) == 5 and not self.position:
+                self.buy(size=10)
+            elif len(self) == 20 and self.position:
+                self.close()
+
+    idx = pd.date_range("2023-01-01", periods=60, freq="D")
+    px = 100 + np.cumsum(rng.randn(60) * 0.5)
+    data = pd.DataFrame({"open": px, "high": px + 0.5, "low": px - 0.5,
+                         "close": px, "volume": 1000.0}, index=idx)
+    cerebro = bt.Cerebro()
+    cerebro.adddata(bt.feeds.PandasData(dataname=data))
+    cerebro.addstrategy(_PinStrat)
+    cerebro.addanalyzer(TradeTracker, _name="pins")
+    strat = cerebro.run()[0]
+    trades = strat.analyzers.pins.trades
+    assert len(trades) >= 1, "no trades recorded"
+    t = trades[0]
+    assert t["size"] != 0, "REGRESSION: TradeTracker size==0 (closed-trade bug is back)"
+    assert t["is_long"] is True or t["is_long"] == True, "is_long wrong for a buy"
+    print(f"    [OK] PIN 5: TradeTracker size={t['size']}, is_long={t['is_long']}")
+    return True, "all 5 regression pins verified"
+
+
 def main():
     """Run all system tests"""
     
     print("\n" + "="*70)
-    print("  Ã°Å¸â€Â§ TRADING RESEARCH SYSTEM - FULL TEST")
+    print("  [TOOL] TRADING RESEARCH SYSTEM - FULL TEST")
     print("="*70)
     print(f"  Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"  Python: {sys.version.split()[0]}")
@@ -1312,6 +1417,7 @@ def main():
     
     # All tests organized by phase
     tests = [
+        ("0. REGRESSION PINS (audit fixes)", test_regression_pins),
         # Foundation (1-8)
         ("1. Config Validation", test_config),
         ("2. Data Manager", test_data_manager),
@@ -1355,7 +1461,7 @@ def main():
         results.append((test_name, success))
         
         if not ask_continue():
-            print("\n  Ã°Å¸â€ºâ€˜ Testing stopped by user")
+            print("\n  [STOP] Testing stopped by user")
             break
     
     # Final Summary
@@ -1369,21 +1475,21 @@ def main():
     print(f"  Failed:    {total - passed}")
     
     # Group results by phase
-    print(f"\n  Ã°Å¸â€œâ€¹ FOUNDATION TESTS (1-8):")
+    print(f"\n  [LIST] FOUNDATION TESTS (1-8):")
     for test_name, success in results[:8]:
-        status = "Ã¢Å“â€¦ PASS" if success else "Ã¢ÂÅ’ FAIL"
+        status = "[OK] PASS" if success else "[FAIL] FAIL"
         print(f"    {status}  {test_name}")
     
     if len(results) > 8:
-        print(f"\n  Ã°Å¸â€œâ€¹ WEEK 1-2 TESTS (9-12):")
+        print(f"\n  [LIST] WEEK 1-2 TESTS (9-12):")
         for test_name, success in results[8:12]:
-            status = "Ã¢Å“â€¦ PASS" if success else "Ã¢ÂÅ’ FAIL"
+            status = "[OK] PASS" if success else "[FAIL] FAIL"
             print(f"    {status}  {test_name}")
     
     if len(results) > 12:
-        print(f"\n  Ã°Å¸â€œâ€¹ WEEK 3 TESTS (13-15):")
+        print(f"\n  [LIST] WEEK 3 TESTS (13-15):")
         for test_name, success in results[12:15]:
-            status = "Ã¢Å“â€¦ PASS" if success else "Ã¢ÂÅ’ FAIL"
+            status = "[OK] PASS" if success else "[FAIL] FAIL"
             print(f"    {status}  {test_name}")
     
 

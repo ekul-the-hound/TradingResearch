@@ -191,12 +191,12 @@ def test_lm_4_alerts():
 # -- MODULE 4: Strategy Lifecycle ---------------------------------------------
 
 def test_lc_1_register():
-    lc = StrategyLifecycle()
+    lc = StrategyLifecycle(state_path=None)
     lc.register("S_001", backtest_sharpe=1.5)
     assert lc.get_state("S_001") == LifecycleState.RESEARCH
 
 def test_lc_2_promote():
-    lc = StrategyLifecycle()
+    lc = StrategyLifecycle(state_path=None)
     lc.register("S_001")
     lc.promote("S_001")
     assert lc.get_state("S_001") == LifecycleState.PAPER
@@ -204,7 +204,7 @@ def test_lc_2_promote():
     assert lc.get_state("S_001") == LifecycleState.LIVE
 
 def test_lc_3_demote():
-    lc = StrategyLifecycle()
+    lc = StrategyLifecycle(state_path=None)
     lc.register("S_001")
     lc.promote("S_001")  # PAPER
     lc.promote("S_001")  # LIVE
@@ -212,7 +212,7 @@ def test_lc_3_demote():
     assert lc.get_state("S_001") == LifecycleState.REVIEW
 
 def test_lc_4_retire():
-    lc = StrategyLifecycle()
+    lc = StrategyLifecycle(state_path=None)
     lc.register("S_001")
     lc.promote("S_001")  # PAPER
     lc.promote("S_001")  # LIVE
@@ -220,7 +220,7 @@ def test_lc_4_retire():
     assert lc.get_state("S_001") == LifecycleState.RETIRED
 
 def test_lc_5_invalid():
-    lc = StrategyLifecycle()
+    lc = StrategyLifecycle(state_path=None)
     lc.register("S_001")
     try:
         lc.retire("S_001")  # Can't retire from RESEARCH
@@ -229,7 +229,7 @@ def test_lc_5_invalid():
         pass
 
 def test_lc_6_auto_promote():
-    lc = StrategyLifecycle(LifecycleConfig(min_paper_days=5, min_trades_for_promotion=5))
+    lc = StrategyLifecycle(LifecycleConfig(min_paper_days=5, min_trades_for_promotion=5), state_path=None)
     lc.register("S_001", backtest_sharpe=1.5)
     lc.promote("S_001")  # PAPER
     tr = lc.check_auto_transitions(
@@ -240,7 +240,7 @@ def test_lc_6_auto_promote():
     assert lc.get_state("S_001") == LifecycleState.LIVE
 
 def test_lc_7_auto_demote():
-    lc = StrategyLifecycle()
+    lc = StrategyLifecycle(state_path=None)
     lc.register("S_001", backtest_sharpe=2.0)
     lc.promote("S_001")
     lc.promote("S_001")  # LIVE
@@ -252,7 +252,7 @@ def test_lc_7_auto_demote():
     assert lc.get_state("S_001") == LifecycleState.REVIEW
 
 def test_lc_8_audit_trail():
-    lc = StrategyLifecycle()
+    lc = StrategyLifecycle(state_path=None)
     lc.register("S_001")
     lc.promote("S_001")
     lc.promote("S_001")
@@ -262,7 +262,7 @@ def test_lc_8_audit_trail():
     assert trail[0].to_state == LifecycleState.PAPER
 
 def test_lc_9_summary():
-    lc = StrategyLifecycle()
+    lc = StrategyLifecycle(state_path=None)
     for i in range(5):
         lc.register(f"S_{i}")
     lc.promote("S_0")
@@ -274,7 +274,7 @@ def test_lc_9_summary():
     assert s["live"] == 1
 
 def test_lc_10_kill_switch_demote():
-    lc = StrategyLifecycle()
+    lc = StrategyLifecycle(state_path=None)
     lc.register("S_001", backtest_sharpe=2.0)
     lc.promote("S_001")
     lc.promote("S_001")
@@ -328,7 +328,7 @@ if __name__ == "__main__":
         print(f"\n{'-'*60}\n  {name}\n{'-'*60}")
         for n, fn in ALL[lo:hi]:
             run_test(n, fn)
-    print(f"\n  ⏱️  {time.time()-start:.1f}s\n{'='*60}")
+    print(f"\n  [TIME]  {time.time()-start:.1f}s\n{'='*60}")
     print(f"  PHASE 4: {_p} passed, {_f} failed")
     if _e:
         for n, e in _e: print(f"    {n}: {e}")

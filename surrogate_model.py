@@ -67,7 +67,7 @@ class SurrogateMetrics:
     def __str__(self) -> str:
         return (
             f"Surrogate [{self.model_type}] -- n={self.n_train}, features={self.n_features}\n"
-            f"  R² = {self.r2:.4f} (CV: {self.cv_mean:.4f} ± {self.cv_std:.4f})\n"
+            f"  R² = {self.r2:.4f} (CV: {self.cv_mean:.4f} +/- {self.cv_std:.4f})\n"
             f"  RMSE = {self.rmse:.4f}, MAE = {self.mae:.4f}"
         )
 

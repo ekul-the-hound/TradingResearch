@@ -27,7 +27,8 @@ class ResultsDatabase:
     
     def init_database(self):
         """Create tables if they don't exist"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
+        conn.execute("PRAGMA journal_mode=WAL")
         cursor = conn.cursor()
         
         # Create backtest_results table (new name for consistency)

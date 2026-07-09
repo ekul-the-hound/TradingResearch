@@ -66,7 +66,7 @@ def print_result(test_num: int, name: str, success: bool, detail: str = ""):
 def print_skip(test_num: int, name: str, reason: str = ""):
     global SKIP_COUNT
     SKIP_COUNT += 1
-    print(f"  ⊘ Test {test_num}: {name} (SKIPPED{': ' + reason if reason else ''})")
+    print(f"  [SKIP] Test {test_num}: {name} (SKIPPED{': ' + reason if reason else ''})")
 
 
 def run_test(test_num: int, name: str, func) -> bool:

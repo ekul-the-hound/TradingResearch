@@ -352,11 +352,11 @@ class PaperTrader:
         # Update position
         self._update_position(order)
         
-        # Update cash
-        if order.side == OrderSide.BUY:
-            self.cash -= order.size * fill_price + commission
-        else:
-            self.cash += order.size * fill_price - commission
+        # Update cash: only commission moves cash at fill time.
+        # Realized PnL is credited in _update_position when a position closes.
+        # (Previously cash moved by full notional, so equity = cash + unrealized
+        # cratered by the notional on every fill.)
+        self.cash -= commission
     
     def _calculate_slippage(self, order: Order, price: float) -> float:
         """Calculate slippage for order"""
@@ -394,11 +394,13 @@ class PaperTrader:
                 
                 # Calculate realized PnL
                 if pos.side == PositionSide.LONG:
-                    pnl = (order.filled_price - pos.entry_price) * min(order.size, pos.size)
+                    pnl_gross = (order.filled_price - pos.entry_price) * min(order.size, pos.size)
                 else:
-                    pnl = (pos.entry_price - order.filled_price) * min(order.size, pos.size)
+                    pnl_gross = (pos.entry_price - order.filled_price) * min(order.size, pos.size)
                 
-                pnl -= order.commission
+                # Credit realized PnL to cash (commission already deducted at fill)
+                self.cash += pnl_gross
+                pnl = pnl_gross - order.commission
                 
                 # Record trade
                 self._record_trade(pos, order, pnl)
@@ -505,7 +507,7 @@ class PaperTrader:
         
         # Daily loss limit
         if self.day_start_equity > 0:
-            daily_loss_pct = -self.daily_pnl / self.day_start_equity * 100
+            daily_loss_pct = (self.day_start_equity - self.equity) / self.day_start_equity * 100
             if daily_loss_pct >= self.config.max_daily_loss_pct:
                 warnings.warn(f"Daily loss limit reached: {daily_loss_pct:.2f}%")
                 return False
@@ -516,7 +518,8 @@ class PaperTrader:
             return False
         
         # Cash sufficiency check for BUY orders
-        if side == 'BUY':
+        side_str = side.value if hasattr(side, 'value') else str(side)
+        if side_str.upper() in ('BUY', 'SELL'):
             current_price = self.prices.get(symbol, 0)
             if current_price > 0:
                 required_cash = size * current_price * 0.1  # 10% margin requirement

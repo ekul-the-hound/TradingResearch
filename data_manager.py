@@ -175,7 +175,7 @@ class DataManager:
         # ====================================================================
         if asset_type == 'indices':
             if not config.INDICES_ENABLED:
-                print(f"⏸️  Indices disabled in config")
+                print(f"[OFF]  Indices disabled in config")
                 return None
             return self._get_local_indices_data(symbol, timeframe, max_bars, use_cache)
         
@@ -184,7 +184,7 @@ class DataManager:
         # ====================================================================
         if asset_type == 'commodities':
             if not config.COMMODITIES_ENABLED:
-                print(f"⏸️  Data not added yet: {symbol} {timeframe}")
+                print(f"[OFF]  Data not added yet: {symbol} {timeframe}")
                 print(f"   (Commodities awaiting futures data source)")
                 return None
         
@@ -193,7 +193,7 @@ class DataManager:
         # ====================================================================
         if asset_type == 'forex':
             if not config.FOREX_ENABLED:
-                print(f"⏸️  Forex disabled in config")
+                print(f"[OFF]  Forex disabled in config")
                 return None
             return self._get_forex_data(symbol, timeframe, max_bars, use_cache)
         
@@ -202,7 +202,7 @@ class DataManager:
         # ====================================================================
         if asset_type == 'crypto':
             if not config.CRYPTO_ENABLED:
-                print(f"⏸️  Crypto disabled in config")
+                print(f"[OFF]  Crypto disabled in config")
                 return None
             
             # Try local files first
@@ -371,7 +371,7 @@ class DataManager:
                     return None
             
             if 'volume' in df.columns:
-                df[col] = pd.to_numeric(df['volume'], errors='coerce')
+                df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
             else:
                 df['volume'] = 0
             
@@ -566,11 +566,11 @@ class DataManager:
         """
         # Timeframe mapping to pandas resample rule
         resample_rules = {
-            '5min': '5T',
-            '15min': '15T',
-            '30min': '30T',
-            '1hour': '1H',
-            '4hour': '4H',
+            '5min': '5min',
+            '15min': '15min',
+            '30min': '30min',
+            '1hour': '1h',
+            '4hour': '4h',
             '1day': '1D',
             '1week': '1W',
         }
@@ -645,7 +645,7 @@ class DataManager:
                     self._save_to_cache(symbol, timeframe, data, exchange=exchange_name)
                     return data
                 else:
-                    print(f"  ℹ️  No data from {exchange_name.upper()}, trying next...")
+                    print(f"  [i]  No data from {exchange_name.upper()}, trying next...")
             
             except Exception as e:
                 print(f"  [FAIL] Error from {exchange_name.upper()}: {str(e)[:100]}")
@@ -727,7 +727,7 @@ class DataManager:
             cache_file = self._get_cache_filename(symbol, timeframe)
             if os.path.exists(cache_file):
                 os.remove(cache_file)
-                print(f"🗑️  Cleared cache for {symbol} {timeframe}")
+                print(f"[DEL]  Cleared cache for {symbol} {timeframe}")
         else:
             cleared = 0
             for subdir in config.CACHE_SUBDIRS.values():
@@ -736,7 +736,7 @@ class DataManager:
                         if file.endswith('.csv') and 'merged' not in file:
                             os.remove(os.path.join(subdir, file))
                             cleared += 1
-            print(f"🗑️  Cleared {cleared} cache files")
+            print(f"[DEL]  Cleared {cleared} cache files")
 
 
 # ==============================================================================

@@ -104,8 +104,16 @@ def test_ks_4_streak():
     assert ks.check(consecutive_losses=10).action == KillAction.HALT
 
 def test_ks_5_sharpe():
-    r = KillSwitch(KillSwitchConfig(sharpe_degradation_pct=50)).check(live_sharpe=0.4, backtest_sharpe=1.5)
-    assert r.triggered  # 73% degradation
+    # Sharpe rule is gated on sample size (>=20 observations) so noise-Sharpe
+    # from a handful of days can't kill a strategy -- pass n_observations
+    r = KillSwitch(KillSwitchConfig(sharpe_degradation_pct=50)).check(
+        live_sharpe=0.4, backtest_sharpe=1.5, n_observations=30)
+    assert r.triggered  # 73% degradation with sufficient sample
+
+    # And verify the gate itself: same degradation, too few observations -> no trigger
+    r2 = KillSwitch(KillSwitchConfig(sharpe_degradation_pct=50)).check(
+        live_sharpe=0.4, backtest_sharpe=1.5, n_observations=5)
+    assert not r2.triggered  # insufficient sample must NOT trip the rule
 
 def test_ks_6_can_trade():
     ks = KillSwitch()
@@ -240,7 +248,7 @@ if __name__ == "__main__":
         print(f"\n{'-'*60}\n  {name}\n{'-'*60}")
         for n, fn in ALL[lo:hi]:
             run_test(n, fn)
-    print(f"\n  ⏱️  {time.time()-start:.1f}s\n{'='*60}")
+    print(f"\n  [TIME]  {time.time()-start:.1f}s\n{'='*60}")
     print(f"  PHASE 3: {_p} passed, {_f} failed")
     if _e:
         for n, e in _e: print(f"    {n}: {e}")

@@ -100,7 +100,7 @@ class ValidationGate:
         
         # Display gate
         print("\n" + "="*70)
-        print("🚦 MANUAL VALIDATION GATE")
+        print("[GATE] MANUAL VALIDATION GATE")
         print("="*70)
         print(f"\n[LIST] Action: {description}")
         
@@ -123,9 +123,10 @@ class ValidationGate:
             try:
                 response = input("\nYour choice (Y/N/A/Q): ").strip().upper()
             except EOFError:
-                # Non-interactive mode
-                print("[WARN]  Non-interactive mode - auto-approving")
-                response = 'Y'
+                # Non-interactive mode: FAIL CLOSED -- a gate that can't ask must refuse.
+                # (Set gate.enabled = False explicitly for unattended runs you trust.)
+                print("[WARN]  Non-interactive mode - REJECTING (fail-closed)")
+                response = 'N'
             
             if response == 'Y':
                 self._log_decision(description, estimated_cost, "approved")
@@ -150,7 +151,7 @@ class ValidationGate:
             
             elif response == 'Q':
                 self._log_decision(description, estimated_cost, "quit")
-                print("🛑 Process stopped by user")
+                print("[STOP] Process stopped by user")
                 raise KeyboardInterrupt("User quit at validation gate")
             
             else:
@@ -223,7 +224,7 @@ class ValidationGate:
             return True
         
         print("\n" + "="*70)
-        print("🚦 PERFORMANCE GATE")
+        print("[GATE] PERFORMANCE GATE")
         print("="*70)
         print(f"\nResults did not meet automatic criteria:")
         print(f"  Sharpe Ratio: {sharpe:.2f} (threshold: {threshold})")
@@ -246,7 +247,7 @@ class ValidationGate:
         
         if self.log_file:
             try:
-                with open(self.log_file, 'a') as f:
+                with open(self.log_file, 'a', encoding='utf-8') as f:
                     f.write(f"{record['timestamp']} | {decision} | ${cost:.2f} | {description}\n")
             except Exception as e:
                 print(f"[WARN]  Could not write to log: {e}")

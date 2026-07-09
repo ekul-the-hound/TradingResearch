@@ -277,6 +277,15 @@ class FTMOComplianceChecker:
         missing = [c for c in required if c not in df.columns]
         if missing:
             raise ValueError(f"Missing required columns: {missing}")
+
+        # Boundary conversion: sources like execution_engine supply POSITIVE
+        # size + a side/direction column. FTMO math needs SIGNED size
+        # (positive=long, negative=short) -- convert here so shorts aren't
+        # silently treated as longs by every downstream calculation.
+        side_col = next((c for c in ('side', 'direction') if c in df.columns), None)
+        if side_col is not None:
+            is_short = df[side_col].astype(str).str.upper().str.startswith(('SELL', 'SHORT'))
+            df['size'] = df['size'].abs() * np.where(is_short, -1, 1)
         
         # Convert dates
         for col in ['entry_date', 'exit_date']:
@@ -357,7 +366,9 @@ class FTMOComplianceChecker:
         initial_balance: float
     ) -> pd.DataFrame:
         """
-        Build tick-by-tick equity curve including unrealized PnL.
+        Build event-based equity curve. NOTE: unrealized PnL is approximated
+        (same-symbol mark at event prices); intraday excursions between events
+        are NOT captured -- compliance results are optimistic upper bounds.
         
         The equity curve tracks:
         - Every trade entry (position opened, fees deducted)
@@ -391,16 +402,32 @@ class FTMOComplianceChecker:
             })
         
         events = sorted(events, key=lambda x: (x['timestamp'], x['event'] == 'exit'))
-        
+
+        # Inject daily checkpoints so every calendar day with an open position
+        # gets an equity observation (multi-day holds previously skipped days --
+        # no daily-loss check exactly where weekend gaps bite)
+        if events:
+            day = pd.Timestamp(events[0]['timestamp']).normalize() + pd.Timedelta(days=1)
+            end_ts = pd.Timestamp(events[-1]['timestamp'])
+            checkpoints = []
+            while day < end_ts:
+                checkpoints.append({'timestamp': day, 'event': 'checkpoint'})
+                day += pd.Timedelta(days=1)
+            events = sorted(events + checkpoints,
+                            key=lambda x: (x['timestamp'], x['event'] == 'exit'))
+
         # Build equity curve
         balance = initial_balance
         open_positions = {}  # trade_idx -> position info
         equity_points = []
+        last_price = None
         
         for event in events:
             ts = event['timestamp']
             
-            if event['event'] == 'entry':
+            if event['event'] == 'checkpoint':
+                pass  # no balance change -- fall through to equity snapshot
+            elif event['event'] == 'entry':
                 # Open position, deduct entry fees
                 trade_idx = event['trade_idx']
                 balance -= event['fees']
@@ -423,14 +450,16 @@ class FTMOComplianceChecker:
                     balance += gross_pnl - event['fees']
                     del open_positions[trade_idx]
             
-            # Calculate unrealized PnL for open positions
-            # Use the exit price of current trade as "current price" proxy
-            # This is a simplification - in real tick data we'd use actual prices
-            unrealized_pnl = 0
+            # Mark open positions at the current event's price as a proxy
+            # (exact only when symbols match; far better than assuming 0)
+            event_price = event.get('exit_price') or event.get('entry_price') or last_price
+            if event_price:
+                last_price = event_price
+            unrealized_pnl = 0.0
             for idx, pos in open_positions.items():
-                # For simplicity, assume unrealized is 0 until we have price info
-                # In production, you'd need price data for each bar
-                unrealized_pnl += 0
+                if event_price and (event.get('symbol') is None
+                                    or pos.get('symbol') == event.get('symbol')):
+                    unrealized_pnl += (event_price - pos['entry_price']) * pos['size']
             
             equity = balance + unrealized_pnl
             
@@ -488,19 +517,46 @@ class FTMOComplianceChecker:
         
         # Sort by timestamp
         events = sorted(events, key=lambda x: x['timestamp'])
+
+        # Inject daily checkpoints so every calendar day with an open position
+        # gets an equity observation (multi-day holds previously skipped days)
+        if events:
+            day = pd.Timestamp(events[0]['timestamp']).normalize() + pd.Timedelta(days=1)
+            end_ts = pd.Timestamp(events[-1]['timestamp'])
+            cps = []
+            while day < end_ts:
+                cps.append({'timestamp': day, 'type': 'checkpoint'})
+                day += pd.Timedelta(days=1)
+            events = sorted(events + cps, key=lambda x: x['timestamp'])
         
         # Process events
         balance = initial_balance
         open_trades = {}  # trade_idx -> trade info
         equity_history = []
         cumulative_fees = 0
+        last_price = None
         
         for ev in events:
+            if ev['type'] == 'checkpoint':
+                unrealized = 0
+                for tidx, tinfo in open_trades.items():
+                    cp = last_price if last_price is not None else tinfo['entry_price']
+                    unrealized += tinfo['direction'] * tinfo['size'] * (cp - tinfo['entry_price'])
+                equity_history.append({
+                    'timestamp': ev['timestamp'],
+                    'balance': balance,
+                    'equity': balance + unrealized,
+                    'unrealized_pnl': unrealized,
+                    'cumulative_fees': cumulative_fees,
+                    'event': 'checkpoint'
+                })
+                continue
             if ev['type'] == 'entry':
                 # Deduct entry fees
                 balance -= ev['entry_fees']
                 cumulative_fees += ev['entry_fees']
                 
+                last_price = ev['price']
                 open_trades[ev['trade_idx']] = {
                     'size': ev['size'],
                     'direction': ev['direction'],
@@ -518,6 +574,7 @@ class FTMOComplianceChecker:
                 })
             
             else:  # exit
+                last_price = ev['price']
                 # Calculate realized PnL
                 trade_info = open_trades.get(ev['trade_idx'])
                 if trade_info:
@@ -950,43 +1007,43 @@ class FTMOComplianceChecker:
         lines.append("=" * 70)
         
         # Rule checks
-        lines.append("\nðŸ“‹ RULE COMPLIANCE:")
+        lines.append("\n[LIST] RULE COMPLIANCE:")
         lines.append("-" * 50)
         
         # Daily Loss
-        status = "âœ… PASS" if result.daily_loss_ok else "âŒ FAIL"
+        status = "[OK] PASS" if result.daily_loss_ok else "[FAIL] FAIL"
         lines.append(f"Max Daily Loss (5%):     {status}")
         lines.append(f"   Worst Day:            {result.max_daily_loss_pct:.2f}%")
         if result.max_daily_loss_date:
             lines.append(f"   Date:                 {result.max_daily_loss_date}")
         
         # Total Drawdown
-        status = "âœ… PASS" if result.total_drawdown_ok else "âŒ FAIL"
+        status = "[OK] PASS" if result.total_drawdown_ok else "[FAIL] FAIL"
         lines.append(f"\nMax Total DD (10%):      {status}")
         lines.append(f"   Max Drawdown:         {result.max_total_drawdown_pct:.2f}%")
         if result.max_drawdown_date:
             lines.append(f"   Date:                 {result.max_drawdown_date}")
         
         # Trading Days
-        status = "âœ… PASS" if result.min_days_ok else "âŒ FAIL"
+        status = "[OK] PASS" if result.min_days_ok else "[FAIL] FAIL"
         lines.append(f"\nMin Trading Days (4):    {status}")
         lines.append(f"   Trading Days:         {result.trading_days}")
         
         # Profit Target
-        status = "âœ… PASS" if result.profit_target_ok else "âŒ FAIL"
+        status = "[OK] PASS" if result.profit_target_ok else "[FAIL] FAIL"
         lines.append(f"\nProfit Target ({profit_target:.0f}%):    {status}")
         lines.append(f"   Return:               {result.final_return_pct:+.2f}%")
         
         # Final Verdict
         lines.append("\n" + "=" * 50)
         if result.passed:
-            lines.append("ðŸ† FINAL VERDICT: PASS")
+            lines.append("[TROPHY] FINAL VERDICT: PASS")
         else:
-            lines.append("âŒ FINAL VERDICT: FAIL")
+            lines.append("[FAIL] FINAL VERDICT: FAIL")
         lines.append("=" * 50)
         
         # Diagnostic metrics
-        lines.append("\nðŸ“Š DIAGNOSTICS:")
+        lines.append("\n[STATS] DIAGNOSTICS:")
         lines.append("-" * 50)
         lines.append(f"Final Equity:     ${result.final_equity:,.2f}")
         lines.append(f"Total PnL:        ${result.total_pnl:+,.2f}")
@@ -1013,10 +1070,10 @@ def run_unit_tests():
         nonlocal tests_passed, tests_failed
         if condition:
             tests_passed += 1
-            print(f"  âœ… {message}")
+            print(f"  [OK] {message}")
         else:
             tests_failed += 1
-            print(f"  âŒ {message}")
+            print(f"  [FAIL] {message}")
     
     print("\n" + "=" * 70)
     print("FTMO COMPLIANCE MODULE - UNIT TESTS")
@@ -1027,7 +1084,7 @@ def run_unit_tests():
     # =========================================================================
     # Test 1: Basic pass scenario
     # =========================================================================
-    print("\nðŸ“‹ Test 1: Basic passing scenario")
+    print("\n[LIST] Test 1: Basic passing scenario")
     
     trades_pass = pd.DataFrame([
         {'entry_date': '2024-01-02 10:00:00', 'exit_date': '2024-01-02 15:00:00',
@@ -1052,7 +1109,7 @@ def run_unit_tests():
     # =========================================================================
     # Test 2: Daily loss breach (single day exceeds 5%)
     # =========================================================================
-    print("\nðŸ“‹ Test 2: Daily loss breach")
+    print("\n[LIST] Test 2: Daily loss breach")
     
     trades_daily_breach = pd.DataFrame([
         # Day 1: Big loss
@@ -1076,7 +1133,7 @@ def run_unit_tests():
     # =========================================================================
     # Test 3: Total drawdown breach (exceeds 10%)
     # =========================================================================
-    print("\nðŸ“‹ Test 3: Total drawdown breach")
+    print("\n[LIST] Test 3: Total drawdown breach")
     
     trades_dd_breach = pd.DataFrame([
         # Gradual losses exceeding 10%
@@ -1099,7 +1156,7 @@ def run_unit_tests():
     # =========================================================================
     # Test 4: Insufficient trading days
     # =========================================================================
-    print("\nðŸ“‹ Test 4: Insufficient trading days")
+    print("\n[LIST] Test 4: Insufficient trading days")
     
     trades_few_days = pd.DataFrame([
         {'entry_date': '2024-01-02 10:00:00', 'exit_date': '2024-01-02 15:00:00',
@@ -1117,7 +1174,7 @@ def run_unit_tests():
     # =========================================================================
     # Test 5: Timezone boundary - trade spanning midnight Prague
     # =========================================================================
-    print("\nðŸ“‹ Test 5: Prague timezone boundary handling")
+    print("\n[LIST] Test 5: Prague timezone boundary handling")
     
     # Trade entered late night, closed next morning Prague time
     trades_tz = pd.DataFrame([
@@ -1140,7 +1197,7 @@ def run_unit_tests():
     # =========================================================================
     # Test 6: Near-limit drawdown (just under 5%)
     # =========================================================================
-    print("\nðŸ“‹ Test 6: Near-limit daily drawdown (edge case)")
+    print("\n[LIST] Test 6: Near-limit daily drawdown (edge case)")
     
     trades_near_limit = pd.DataFrame([
         # Day 1: 4.9% loss (just under limit)
@@ -1164,7 +1221,7 @@ def run_unit_tests():
     # =========================================================================
     # Test 7: Crypto fee structure
     # =========================================================================
-    print("\nðŸ“‹ Test 7: Crypto fee structure (0.005%)")
+    print("\n[LIST] Test 7: Crypto fee structure (0.005%)")
     
     trades_crypto = pd.DataFrame([
         {'entry_date': '2024-01-02 10:00:00', 'exit_date': '2024-01-02 15:00:00',
@@ -1179,14 +1236,14 @@ def run_unit_tests():
     
     result = checker.validate(trades_crypto, account_size=10000, phase='challenge')
     
-    # $1000 profit per trade Ã-- 4 = $4000 on $10K = 40%
+    # $1000 profit per trade x 4 = $4000 on $10K = 40%
     assert_true(result.total_fees > 0, f"Crypto fees calculated: ${result.total_fees:.2f}")
     assert_true(result.final_return_pct > 30, f"Crypto return: {result.final_return_pct:.2f}%")
     
     # =========================================================================
     # Test 8: Multi-account size validation
     # =========================================================================
-    print("\nðŸ“‹ Test 8: Multi-account size validation")
+    print("\n[LIST] Test 8: Multi-account size validation")
     
     summary_df = checker.validate_all_account_sizes(trades_pass, phase='challenge')
     
@@ -1197,7 +1254,7 @@ def run_unit_tests():
     # =========================================================================
     # Test 9: Verification phase (5% target)
     # =========================================================================
-    print("\nðŸ“‹ Test 9: Verification phase (5% target)")
+    print("\n[LIST] Test 9: Verification phase (5% target)")
     
     trades_verification = pd.DataFrame([
         {'entry_date': '2024-01-02 10:00:00', 'exit_date': '2024-01-02 15:00:00',
@@ -1219,7 +1276,7 @@ def run_unit_tests():
     # =========================================================================
     # Test 10: Empty trades
     # =========================================================================
-    print("\nðŸ“‹ Test 10: Empty trade history")
+    print("\n[LIST] Test 10: Empty trade history")
     
     trades_empty = pd.DataFrame(columns=['entry_date', 'exit_date', 'entry_price', 'size', 'symbol'])
     
@@ -1233,8 +1290,8 @@ def run_unit_tests():
     # =========================================================================
     print("\n" + "=" * 70)
     print(f"TESTS COMPLETED: {tests_passed + tests_failed}")
-    print(f"  âœ… Passed: {tests_passed}")
-    print(f"  âŒ Failed: {tests_failed}")
+    print(f"  [OK] Passed: {tests_passed}")
+    print(f"  [FAIL] Failed: {tests_failed}")
     print("=" * 70)
     
     return tests_failed == 0
@@ -1279,6 +1336,6 @@ if __name__ == "__main__":
         print(checker.generate_report(result, phase='challenge'))
         
         # Show all account sizes
-        print("\nðŸ“Š ALL ACCOUNT SIZES:")
+        print("\n[STATS] ALL ACCOUNT SIZES:")
         summary = checker.validate_all_account_sizes(sample_trades, phase='challenge')
         print(summary.to_string(index=False))

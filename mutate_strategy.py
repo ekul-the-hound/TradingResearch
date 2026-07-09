@@ -196,17 +196,33 @@ Generate exactly {num_variants} complete strategy variants now:
 # MAIN FUNCTIONS
 # ==============================================================================
 
+def load_pruned_hypotheses(state_dir='data/learning_loop'):
+    """Read hypothesis families the learning loop has pruned (cross-process contract)."""
+    try:
+        p = Path(state_dir) / 'pruned_hypotheses.json'
+        if not p.exists():
+            return []
+        with open(p, encoding='utf-8') as f:
+            return json.load(f).get('pruned_hypotheses', []) or []
+    except Exception as e:
+        print(f"   [WARN] Could not read pruned hypotheses: {e}")
+        return []
+
+
 def load_base_strategy(strategy_path=None):
     """Load the base strategy code from file"""
     
     if strategy_path is None:
         strategy_path = Path(__file__).parent / 'strategies' / 'simple_strategy.py'
+        if not strategy_path.exists():
+            # Flat-module layout: strategy files live in the project root
+            strategy_path = Path(__file__).parent / 'simple_strategy.py'
     
     if not strategy_path.exists():
         print(f"[FAIL] Base strategy not found: {strategy_path}")
         return None
     
-    with open(strategy_path, 'r') as f:
+    with open(strategy_path, 'r', encoding='utf-8') as f:
         code = f.read()
     
     print(f"[OK] Loaded base strategy: {strategy_path.name}")
@@ -221,7 +237,7 @@ def get_performance_summary():
     try:
         # Query recent results for the base strategy
         import sqlite3
-        conn = sqlite3.connect(config.DATABASE_PATH)
+        conn = sqlite3.connect(config.DATABASE_PATH, timeout=30)
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -242,15 +258,17 @@ def get_performance_summary():
         conn.close()
         
         if row and row[5] > 0:  # total_tests > 0
+            def _fmt(v, spec, suffix=""):
+                return f"{v:{spec}}{suffix}" if v is not None else "N/A"
             summary = f"""
 - Tests Run: {row[5]}
-- Average Return: {row[0]:.2f}%
-- Average Sharpe Ratio: {row[1]:.2f if row[1] else 'N/A'}
-- Average Win Rate: {row[2]:.1f}% if row[2] else 'N/A'
-- Average Max Drawdown: {row[3]:.2f}%
-- Average Trades per Test: {row[4]:.0f}
-- Best Single Test Return: {row[6]:.2f}%
-- Worst Single Test Return: {row[7]:.2f}%
+- Average Return: {_fmt(row[0], '.2f', '%')}
+- Average Sharpe Ratio: {_fmt(row[1], '.2f')}
+- Average Win Rate: {_fmt(row[2], '.1f', '%')}
+- Average Max Drawdown: {_fmt(row[3], '.2f', '%')}
+- Average Trades per Test: {_fmt(row[4], '.0f')}
+- Best Single Test Return: {_fmt(row[6], '.2f', '%')}
+- Worst Single Test Return: {_fmt(row[7], '.2f', '%')}
 
 The base strategy is currently unprofitable on average. Variants should aim to:
 1. Improve win rate through better entry filters
@@ -281,6 +299,18 @@ def call_mutation_agent(base_code, performance, ideas):
         performance_summary=performance,
         mutation_ideas=ideas
     )
+
+    # Learning-loop integration: never regenerate from pruned hypothesis families
+    pruned = load_pruned_hypotheses()
+    if pruned:
+        prompt += (
+            "\n\n## PRUNED HYPOTHESIS FAMILIES -- DO NOT USE\n"
+            "The self-improvement loop has measured these hypothesis families as "
+            "dead ends across multiple strategies. Do NOT generate variants based "
+            "on these ideas or close derivatives of them:\n"
+            + "".join(f"- {h}\n" for h in pruned)
+        )
+        print(f"   [i] Injected {len(pruned)} pruned hypothesis families into prompt")
     
     try:
         response = client.messages.create(
@@ -305,6 +335,9 @@ def call_mutation_agent(base_code, performance, ideas):
         print(f"   Output tokens: {output_tokens:,}")
         print(f"   Estimated cost: ${total_cost:.4f}")
         
+        if getattr(response, "stop_reason", None) == "max_tokens":
+            print("   [WARN] Response truncated at max_tokens -- final variant likely lost; "
+                  "reduce NUM_VARIANTS or raise max_tokens")
         return response.content[0].text
     
     except Exception as e:
@@ -384,10 +417,14 @@ def check_common_bugs(code):
 def save_variants(variants):
     """Save each variant to a separate file"""
     
-    # Clear old variants
-    for old_file in VARIANTS_DIR.glob('variant_*.py'):
-        old_file.unlink()
-    
+    # Validate first -- only clear old variants once we know we have replacements
+    _any_valid = any(validate_variant(v['code'])[0] for v in variants)
+    if _any_valid:
+        for old_file in VARIANTS_DIR.glob('variant_*.py'):
+            old_file.unlink()
+    else:
+        print("   [WARN] No valid variants in response -- keeping existing files")
+
     saved = []
     failed = []
     
@@ -413,7 +450,7 @@ def save_variants(variants):
 # ==============================================================================
 
 """
-            with open(filename, 'w') as f:
+            with open(filename, 'w', encoding='utf-8') as f:
                 f.write(header + code)
             
             saved.append(num)
@@ -464,7 +501,7 @@ def generate_variants_summary(variants, saved, failed):
         for num in saved:
             # Load the code to get class name
             filepath = VARIANTS_DIR / f"variant_{num:02d}.py"
-            with open(filepath, 'r') as f:
+            with open(filepath, 'r', encoding='utf-8') as f:
                 code = f.read()
             class_name, docstring = extract_variant_info(code)
             

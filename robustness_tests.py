@@ -114,8 +114,14 @@ class DelayedExecutionStrategy(bt.Strategy):
         # We'll manually call its logic
         self.base_instance = None
         
-        # Simple moving averages for demonstration
-        # In practice, this would mirror the base strategy's indicators
+        # LIMITATION: signals are proxied by an SMA crossover, NOT the base
+        # strategy's own logic. Results are a market-level latency proxy only.
+        import warnings as _w
+        _w.warn(
+            "DelayedExecutionStrategy uses an SMA-crossover PROXY -- latency "
+            "results do not reflect the specific strategy's signals",
+            stacklevel=2,
+        )
         if hasattr(self.p, 'base_params') and self.p.base_params:
             fast = self.p.base_params.get('fast_period', 10)
             slow = self.p.base_params.get('slow_period', 30)
@@ -372,8 +378,8 @@ class RobustnessTests:
                 print(f"Return: {ret:+.2f}% | Trades: {trades}")
                 
             except Exception as e:
-                print(f"[FAIL] Error: {e}")
-                results[multiplier] = {'total_return_pct': 0, 'sharpe_ratio': None, 'total_trades': 0}
+                print(f"[FAIL] Error: {e} -- multiplier excluded from analysis")
+                continue
         
         # Analyze cost sensitivity
         base_return = results.get(1.0, {}).get('total_return_pct', 0)

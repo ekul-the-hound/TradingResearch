@@ -472,7 +472,7 @@ class ParameterSensitivity:
                 bar_len = int(((ret - min_ret) / range_ret) * 20)
             else:
                 bar_len = 10
-            bar = '█' * bar_len
+            bar = '#' * bar_len
             marker = ' <-BEST' if val == result.best_param else ''
             print(f"   {val:>6}: {bar} {ret:+.2f}%{marker}")
         
@@ -505,7 +505,7 @@ class ParameterSensitivity:
         print(f"   Cliff score: {result.cliff_score:.2f} (lower = more robust)")
         
         # Print mini heatmap with ASCII
-        print(f"\n🗺️  Return Heatmap (ASCII):")
+        print(f"\n[MAP]  Return Heatmap (ASCII):")
         print(f"      {result.param2_name} ->")
         print(f"   {result.param1_name}")
         print(f"   v")
@@ -515,7 +515,7 @@ class ParameterSensitivity:
         max_val = np.max(matrix)
         range_val = max_val - min_val if max_val != min_val else 1
         
-        symbols = [' ', '░', '▒', '▓', '█']
+        symbols = [' ', '.', ':', '=', '#']
         
         for i, val1 in enumerate(result.param1_values):
             row = f"   {val1:>4}|"
@@ -527,7 +527,7 @@ class ParameterSensitivity:
             print(row)
         
         # Legend
-        print(f"\n   Legend: ' '=low  ░  ▒  ▓  █=high")
+        print(f"\n   Legend: ' '=low  .  :  =  #=high")
         print(f"   Range: {min_val:.1f}% to {max_val:.1f}%")
         
         # Robustness assessment

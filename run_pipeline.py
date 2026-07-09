@@ -210,8 +210,11 @@ class Pipeline:
         # Filter
         survivors = []
         for cr in all_results:
-            if (cr.sharpe_ratio and cr.sharpe_ratio >= cfg.min_sharpe
+            # Unmeasured metrics (None) fail the hard filter -- fail-closed,
+            # and never TypeError on None comparisons
+            if (cr.sharpe_ratio is not None and cr.sharpe_ratio >= cfg.min_sharpe
                     and cr.total_trades >= cfg.min_trades
+                    and cr.max_drawdown_pct is not None
                     and cr.max_drawdown_pct <= cfg.max_drawdown):
                 survivors.append(cr)
 
@@ -220,10 +223,12 @@ class Pipeline:
             from filtering_pipeline import FilteringPipeline
             fp = FilteringPipeline()
             filter_input = [cr.to_filter_dict() for cr in all_results]
-            filtered_ids = fp.filter(filter_input)
-            self._log(f"  [TEST] FilteringPipeline: {len(filtered_ids)} passed")
+            fresult = fp.run(filter_input)
+            self._log(f"  [TEST] FilteringPipeline: {len(fresult.survivors)} passed")
         except ImportError:
             pass
+        except Exception as e:
+            self._log(f"  [WARN]  FilteringPipeline advisory run failed: {e}")
 
         self._results["step2_all"] = all_results
         self._results["step2_candidates"] = survivors
@@ -257,11 +262,13 @@ class Pipeline:
 
                 # Feed existing results to surrogate
                 sm = SurrogateModel()
-                for cr in crs:
-                    sm.add_observation(cr.to_fingerprint_input(), cr.sharpe_ratio)
-
-                sm.fit()
-                self._log(f"     Surrogate trained on {len(crs)} observations")
+                X = np.array([list(cr.to_fingerprint_input().values()) for cr in crs])
+                y = np.array([cr.sharpe_ratio or 0.0 for cr in crs])
+                if len(X) >= 3:
+                    sm.fit(X, y)
+                    self._log(f"     Surrogate trained on {len(crs)} observations")
+                else:
+                    self._log(f"     Too few observations ({len(crs)}) to train surrogate")
                 optimized.extend(crs)  # Keep original results for now
 
             self._results["step3_optimized"] = optimized
@@ -288,15 +295,16 @@ class Pipeline:
             vf = ValidationFramework()
 
             for cr in candidates:
-                if cr.returns is not None and len(cr.returns) > 30:
+                if (cr.returns is not None and len(cr.returns) > 30
+                        and not getattr(cr, "returns_synthetic", False)):
                     self._log(f"  [TEST] Validating {cr.strategy_id}...")
                     # Monte Carlo
-                    mc = vf.monte_carlo_simulation(cr.returns, n_simulations=self.config.monte_carlo_runs)
+                    mc = vf.monte_carlo_equity(cr.returns, n_simulations=self.config.monte_carlo_runs)
                     # Bootstrap
                     bs = vf.bootstrap_sharpe(cr.returns, n_bootstrap=self.config.bootstrap_samples)
 
-                    cr.strategy_params["mc_mean_sharpe"] = mc.get("mean_sharpe", 0) if isinstance(mc, dict) else 0
-                    cr.strategy_params["bootstrap_ci_low"] = bs.get("ci_low", 0) if isinstance(bs, dict) else 0
+                    cr.strategy_params["mc_mean_sharpe"] = getattr(mc, "sharpe_ratio_mean", 0)
+                    cr.strategy_params["bootstrap_ci_low"] = getattr(bs, "ci_lower", 0)
                     validated.append(cr)
                 else:
                     validated.append(cr)
@@ -412,7 +420,7 @@ class Pipeline:
             st = ShadowTrader()
             for cr in validation_pool:
                 st.register(cr.strategy_id, cr.sharpe_ratio)
-            self._log(f"  👻 Shadow trader tracking {len(validation_pool)} strategies")
+            self._log(f"  [SHADOW] Shadow trader tracking {len(validation_pool)} strategies")
         except ImportError:
             pass
 
@@ -588,7 +596,7 @@ class Pipeline:
 
         # 1. Base strategy
         try:
-            from simple_strategy import SimpleMovingAverageCrossover
+            from simple_strategy import SimpleMovingAverageCrossover  # pyright: ignore[reportMissingImports]
             strategies.append(("SimpleMovingAverageCrossover", SimpleMovingAverageCrossover))
         except ImportError:
             pass
@@ -664,7 +672,7 @@ class Pipeline:
                 state[key] = val
 
         out = self.config.output_dir / "pipeline_state.json"
-        with open(out, "w") as f:
+        with open(out, "w", encoding='utf-8') as f:
             json.dump(state, f, indent=2, default=str)
 
 

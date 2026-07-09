@@ -12,7 +12,10 @@
 # ==============================================================================
 
 from backtester_multi_timeframe import MultiTimeframeBacktester
-from strategies.simple_strategy import SimpleMovingAverageCrossover
+try:
+    from strategies.simple_strategy import SimpleMovingAverageCrossover
+except ImportError:
+    from simple_strategy import SimpleMovingAverageCrossover  # flat-module fallback  # pyright: ignore[reportMissingImports]
 import config
 from datetime import datetime
 
@@ -47,28 +50,28 @@ def main():
         active_assets.extend(config.FOREX_WATCHLIST)
         print(f"  [OK] Forex:       {len(config.FOREX_WATCHLIST)} pairs (local files)")
     else:
-        print(f"  ⏸️  Forex:       DISABLED")
+        print(f"  [OFF] Forex:       DISABLED")
     
     # Crypto
     if config.CRYPTO_ENABLED:
         active_assets.extend(config.CRYPTO_WATCHLIST)
         print(f"  [OK] Crypto:      {len(config.CRYPTO_WATCHLIST)} currencies (CCXT)")
     else:
-        print(f"  ⏸️  Crypto:      DISABLED")
+        print(f"  [OFF] Crypto:      DISABLED")
     
     # Indices (disabled)
     if config.INDICES_ENABLED:
         active_assets.extend(config.INDEX_WATCHLIST)
         print(f"  [OK] Indices:     {len(config.INDEX_WATCHLIST)} indices")
     else:
-        print(f"  ⏸️  Indices:     DISABLED (awaiting IBKR)")
+        print(f"  [OFF] Indices:     DISABLED (awaiting IBKR)")
     
     # Commodities (disabled)
     if config.COMMODITIES_ENABLED:
         active_assets.extend(config.COMMODITY_WATCHLIST)
         print(f"  [OK] Commodities: {len(config.COMMODITY_WATCHLIST)} commodities")
     else:
-        print(f"  ⏸️  Commodities: DISABLED (awaiting futures source)")
+        print(f"  [OFF] Commodities: DISABLED (awaiting futures source)")
     
     print(f"\n  TOTAL ACTIVE:  {len(active_assets)} assets")
     
@@ -156,7 +159,7 @@ def main():
         
         # Strong Performers (Sharpe > 0.5)
         strong_performers = [r for r in results if r.get('sharpe_ratio') and r['sharpe_ratio'] > 0.5]
-        print(f"\n✨ Strong Performers (Sharpe > 0.5): {len(strong_performers)}/{len(results)}")
+        print(f"\n[*] Strong Performers (Sharpe > 0.5): {len(strong_performers)}/{len(results)}")
         
         if strong_performers:
             print("\nTop 5 by Sharpe Ratio:")

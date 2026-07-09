@@ -135,18 +135,48 @@ REPLACEMENTS = {
 }
 
 
+def _mixed_bytes(run):
+    """Encode chars via cp1252 where possible, latin-1 otherwise."""
+    out = bytearray()
+    for ch in run:
+        try:
+            out += ch.encode('cp1252')
+        except UnicodeEncodeError:
+            out += ch.encode('latin-1')
+    return bytes(out)
+
+
+def _unscramble(run):
+    """Undo repeated utf8-bytes-read-as-cp1252/latin-1 corruption (mojibake)."""
+    for _ in range(4):
+        try:
+            fixed = _mixed_bytes(run).decode('utf-8')
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            break
+        if fixed == run:
+            break
+        run = fixed
+    return run
+
+
 def fix_file(filepath):
     """Replace unicode characters in a single file."""
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
     except UnicodeDecodeError:
-        # Try with latin-1 fallback
+        # Do NOT read as latin-1 and re-save as utf-8: that BAKES mojibake into
+        # the source permanently (this exact bug corrupted files in the past).
+        # Instead, decode leniently and repair the round-trip corruption.
+        raw = open(filepath, 'rb').read()
         try:
-            with open(filepath, 'r', encoding='latin-1') as f:
-                content = f.read()
-        except Exception:
-            return 0
+            content = raw.decode('cp1252')
+        except UnicodeDecodeError:
+            content = raw.decode('latin-1')
+        repaired = _unscramble(content)
+        if repaired != content:
+            print(f"  [REPAIR] {os.path.basename(filepath)}: recovered round-trip corruption")
+        content = repaired
 
     original = content
     changes = 0
@@ -157,8 +187,25 @@ def fix_file(filepath):
             content = content.replace(old, new)
             changes += count
 
-    if changes > 0:
-        # Write fixed content
+    # Repair baked mojibake sequences the map doesn't know about
+    for run in sorted(set(re.findall(r'[^\x00-\x7F]+', content)), key=len, reverse=True):
+        fixed = _unscramble(run)
+        if fixed == run:
+            continue
+        if fixed in REPLACEMENTS:
+            content = content.replace(run, REPLACEMENTS[fixed])
+            changes += content.count(REPLACEMENTS[fixed]) and 1
+        elif all(ord(ch) < 128 for ch in fixed):
+            content = content.replace(run, fixed)
+            changes += 1
+
+    # Report leftovers instead of silently ignoring them
+    leftovers = set(re.findall(r'[^\x00-\x7F]', content))
+    if leftovers:
+        print(f"  [NOTE] {os.path.basename(filepath)}: non-ASCII remains "
+              f"(not auto-replaced): {sorted(leftovers)[:10]}")
+
+    if changes > 0 and content != original:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
 

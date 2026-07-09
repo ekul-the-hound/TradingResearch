@@ -495,7 +495,7 @@ if __name__ == "__main__":
             run_test(name, fn)
 
     elapsed = time.time() - start
-    print(f"\n  ⏱️  Completed in {elapsed:.1f}s")
+    print(f"\n  [TIME]  Completed in {elapsed:.1f}s")
     print(f"\n{'='*60}")
     print(f"  PHASE 2 TEST RESULTS")
     print(f"{'='*60}")

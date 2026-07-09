@@ -100,6 +100,7 @@ class ShadowMetrics:
     max_drawdown: float = 0.0
     current_drawdown: float = 0.0
     sharpe_ratio: float = 0.0
+    consecutive_losses: int = 0
     daily_returns: List[float] = field(default_factory=list)
     equity_curve: List[float] = field(default_factory=list)
     start_time: str = ""
@@ -178,6 +179,7 @@ class ShadowTrader:
         timestamp: Optional[str] = None,
     ) -> ShadowOrder:
         """Submit a virtual order. Fills immediately with slippage."""
+        side = side.strip().upper()
         if not self.is_active:
             order = ShadowOrder(
                 f"O_{self._order_counter}", self.strategy_id,
@@ -282,8 +284,10 @@ class ShadowTrader:
         self.metrics.total_trades += 1
         if pnl > 0:
             self.metrics.winning_trades += 1
+            self.metrics.consecutive_losses = 0
         else:
             self.metrics.losing_trades += 1
+            self.metrics.consecutive_losses += 1
         self.trades.append({
             "order_id": order.order_id,
             "side": order.side.value,

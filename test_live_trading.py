@@ -382,7 +382,7 @@ if __name__ == "__main__":
         print(f"\n{'-'*60}\n  {name}\n{'-'*60}")
         for n, fn in ALL[lo:hi]:
             run_test(n, fn)
-    print(f"\n  ⏱️  {time.time()-start:.1f}s\n{'='*60}")
+    print(f"\n  [TIME]  {time.time()-start:.1f}s\n{'='*60}")
     print(f"  LIVE TRADING: {_p} passed, {_f} failed")
     if _e:
         for n, e in _e:

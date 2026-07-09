@@ -209,11 +209,10 @@ class PipelineConfig:
     max_retries: int = 3
     retry_delay: float = 5.0
     retry_backoff: float = 2.0
+    min_document_length: int = 500
+    max_document_length: int = 100000
     validation_bar_count: int = 200
-    min_document_length: int = 200
-    max_document_length: int = 50000
-    max_docs_per_query: int = 10
-    log_level: str = "INFO"
+    validation_timeout_seconds: int = 60
 
 
 # ==============================================================================

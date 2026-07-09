@@ -141,7 +141,7 @@ class CycleResult:
             f"  Flagged:     {self.strategies_flagged}",
             f"  Surrogate:   {'refreshed' if self.surrogate_refreshed else 'unchanged'}",
             f"  Pruned:      {self.hypotheses_pruned} hypotheses",
-            f"  κ (explore): {self.acquisition_kappa:.3f}",
+            f"  kappa (explore): {self.acquisition_kappa:.3f}",
             f"  Elapsed:     {self.elapsed_seconds:.1f}s",
         ]
         return "\n".join(lines)
@@ -355,7 +355,20 @@ class LearningLoop:
                 f"Demoted: {s.degradation_pct:.0f}% Sharpe degradation + drift", ts,
             )
 
-        # Moderate -> retrain
+        # Moderate -> retrain (gated by cooldown: drift persists across cycles,
+        # and each retrain may be an expensive Claude/optimization call)
+        cooldown_h = getattr(self.config, "retrain_cooldown_hours", 24)
+        if s.last_retrain:
+            try:
+                last = datetime.fromisoformat(s.last_retrain)
+                if (datetime.now() - last).total_seconds() < cooldown_h * 3600:
+                    s.drift_detected = False  # acknowledged; recheck next cycle
+                    return LoopAction(
+                        ActionType.FLAG_FOR_REVIEW, TriggerType.DRIFT, s.strategy_id,
+                        f"Drift persists; retrain on cooldown ({cooldown_h}h)", ts,
+                    )
+            except (ValueError, TypeError):
+                pass
         if self.retrain_fn:
             self.retrain_fn(s.strategy_id)
         s.last_retrain = ts
@@ -388,7 +401,7 @@ class LearningLoop:
 
         actions.append(LoopAction(
             ActionType.ADJUST_ACQUISITION, TriggerType.SCHEDULED, None,
-            f"κ -> {self._kappa:.3f} (avg_degrad={avg_degrad:.1f}%)", ts,
+            f"kappa -> {self._kappa:.3f} (avg_degrad={avg_degrad:.1f}%)", ts,
         ))
 
     # ------------------------------------------------------------------
@@ -399,9 +412,11 @@ class LearningLoop:
         cfg = self.config
 
         # Group strategies by hypothesis
+        if not hasattr(self, "_pruned_hypotheses"):
+            self._pruned_hypotheses: set = set()
         hyp_groups: Dict[str, List[StrategyState]] = {}
         for s in self._strategies.values():
-            if s.hypothesis_id:
+            if s.hypothesis_id and s.hypothesis_id not in self._pruned_hypotheses:
                 hyp_groups.setdefault(s.hypothesis_id, []).append(s)
 
         pruned = 0
@@ -416,6 +431,7 @@ class LearningLoop:
 
             if rate < cfg.hypothesis_min_improvement_rate:
                 pruned += 1
+                self._pruned_hypotheses.add(hyp_id)
                 actions.append(LoopAction(
                     ActionType.PRUNE_HYPOTHESIS, TriggerType.SCHEDULED, None,
                     f"Pruned hypothesis {hyp_id}: improvement rate={rate:.0%} "
@@ -452,21 +468,31 @@ class LearningLoop:
     # ------------------------------------------------------------------
     # PERSISTENCE
     # ------------------------------------------------------------------
+    def get_pruned_hypotheses(self) -> list:
+        """Hypothesis families the loop has measured as dead ends."""
+        return sorted(getattr(self, "_pruned_hypotheses", set()))
+
     def _save_state(self, result: CycleResult):
         d = Path(self.config.state_dir)
         d.mkdir(parents=True, exist_ok=True)
+        # Stable contract file for cross-process consumers (mutation agent)
+        pruned = self.get_pruned_hypotheses()
+        with open(d / "pruned_hypotheses.json", "w", encoding='utf-8') as f:
+            json.dump({"pruned_hypotheses": pruned,
+                       "updated": result.timestamp}, f, indent=2)
         data = {
             "cycle_id": result.cycle_id,
             "timestamp": result.timestamp,
             "kappa": self._kappa,
             "n_strategies": len(self._strategies),
+            "pruned_hypotheses": pruned,
             "actions": [
                 {"action": a.action.value, "trigger": a.trigger.value,
                  "strategy": a.strategy_id, "details": a.details}
                 for a in result.actions_taken
             ],
         }
-        with open(d / f"cycle_{result.cycle_id}.json", "w") as f:
+        with open(d / f"cycle_{result.cycle_id}.json", "w", encoding='utf-8') as f:
             json.dump(data, f, indent=2, default=str)
 
     # ------------------------------------------------------------------

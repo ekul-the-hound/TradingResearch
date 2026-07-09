@@ -19,7 +19,7 @@ print("="*70)
 backtester = StrategyBacktester()
 
 # Test 1: Basic test on Apple
-print("\n📍 TEST 1: Apple (AAPL) - 2020 to 2023")
+print("\n[TEST] TEST 1: Apple (AAPL) - 2020 to 2023")
 result = backtester.run_backtest(
     strategy_class=SimpleMovingAverageCrossover,
     symbol='AAPL',
@@ -36,7 +36,7 @@ else:
     exit()
 
 # Test 2: Test with custom parameters
-print("\n📍 TEST 2: Same strategy with different parameters")
+print("\n[TEST] TEST 2: Same strategy with different parameters")
 print("            (Testing 20/50 day moving averages instead of 10/30)")
 
 result2 = backtester.run_backtest(

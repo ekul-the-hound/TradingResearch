@@ -173,12 +173,14 @@ class ExperimentTracker:
         if run_id in self._runs:
             self._runs[run_id].status = status
             self._runs[run_id].end_time = datetime.now().isoformat()
+            self.save()
 
     def fail_run(self, run_id: str, error: str = ""):
         if run_id in self._runs:
             self._runs[run_id].status = RunStatus.FAILED
             self._runs[run_id].end_time = datetime.now().isoformat()
             self._runs[run_id].tags["error"] = error
+            self.save()
 
     def get_run(self, run_id: str) -> Optional[Run]:
         return self._runs.get(run_id)
@@ -349,7 +351,7 @@ class ExperimentTracker:
             }
             for eid, e in self._experiments.items()
         }
-        with open(self.base_dir / "experiments.json", "w") as f:
+        with open(self.base_dir / "experiments.json", "w", encoding='utf-8') as f:
             json.dump(exp_data, f, indent=2, default=str)
 
         run_data = {}
@@ -365,8 +367,9 @@ class ExperimentTracker:
                 "metrics": r.metrics,
                 "tags": r.tags,
                 "artifacts": r.artifacts,
+                "metric_history": r.metric_history,
             }
-        with open(self.base_dir / "runs.json", "w") as f:
+        with open(self.base_dir / "runs.json", "w", encoding='utf-8') as f:
             json.dump(run_data, f, indent=2, default=str)
 
     def _load_state(self):
@@ -375,7 +378,7 @@ class ExperimentTracker:
         run_file = self.base_dir / "runs.json"
 
         if exp_file.exists():
-            with open(exp_file) as f:
+            with open(exp_file, encoding='utf-8') as f:
                 data = json.load(f)
             for eid, d in data.items():
                 self._experiments[eid] = Experiment(**d)
@@ -383,11 +386,13 @@ class ExperimentTracker:
                 self._exp_counter = max(self._exp_counter, num)
 
         if run_file.exists():
-            with open(run_file) as f:
+            with open(run_file, encoding='utf-8') as f:
                 data = json.load(f)
             for rid, d in data.items():
                 d["status"] = RunStatus(d["status"])
-                d.pop("metric_history", None)
+                hist = d.pop("metric_history", {}) or {}
+                # JSON turns tuples into lists -- restore tuple shape
+                d["metric_history"] = {k: [tuple(x) for x in v] for k, v in hist.items()}
                 self._runs[rid] = Run(**d)
                 num = int(rid.split("_")[1]) if "_" in rid else 0
                 self._run_counter = max(self._run_counter, num)

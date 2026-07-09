@@ -134,9 +134,84 @@ class StrategyLifecycle:
     Manages strategy state transitions with audit trail.
     """
 
-    def __init__(self, config: Optional[LifecycleConfig] = None):
+    def __init__(self, config: Optional[LifecycleConfig] = None,
+                 state_path: Optional[str] = "data/lifecycle_state.json"):
         self.config = config or LifecycleConfig()
         self._strategies: Dict[str, StrategyRecord] = {}
+        self.state_path = state_path
+        if self.state_path:
+            self.load()
+
+    # ------------------------------------------------------------------
+    # PERSISTENCE (the system of record for what is allowed to trade
+    # must survive restarts -- atomic write, tolerant load)
+    # ------------------------------------------------------------------
+    def save(self):
+        if not self.state_path:
+            return
+        import json, os
+        payload = {}
+        for sid, r in self._strategies.items():
+            payload[sid] = {
+                "strategy_id": r.strategy_id,
+                "state": r.state.value,
+                "created_at": r.created_at,
+                "backtest_sharpe": r.backtest_sharpe,
+                "paper_start": r.paper_start,
+                "live_start": r.live_start,
+                "retired_at": r.retired_at,
+                "paper_days": r.paper_days,
+                "live_days": r.live_days,
+                "metadata": r.metadata,
+                "transitions": [{
+                    "strategy_id": t.strategy_id,
+                    "from_state": t.from_state.value,
+                    "to_state": t.to_state.value,
+                    "reason": t.reason,
+                    "timestamp": t.timestamp,
+                    "auto": t.auto,
+                } for t in r.transitions],
+            }
+        parent = os.path.dirname(self.state_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        tmp = self.state_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, default=str)
+        os.replace(tmp, self.state_path)
+
+    def load(self):
+        import json, os
+        if not self.state_path or not os.path.exists(self.state_path):
+            return
+        try:
+            with open(self.state_path, encoding="utf-8") as f:
+                payload = json.load(f)
+        except Exception as e:
+            print(f"[WARN] Could not load lifecycle state: {e} -- starting empty "
+                  f"(corrupt file left in place at {self.state_path})")
+            return
+        for sid, d in payload.items():
+            transitions = [TransitionRecord(
+                strategy_id=t["strategy_id"],
+                from_state=LifecycleState(t["from_state"]),
+                to_state=LifecycleState(t["to_state"]),
+                reason=t["reason"], timestamp=t["timestamp"],
+                auto=t.get("auto", False),
+            ) for t in d.get("transitions", [])]
+            self._strategies[sid] = StrategyRecord(
+                strategy_id=d["strategy_id"],
+                state=LifecycleState(d["state"]),
+                created_at=d["created_at"],
+                backtest_sharpe=d.get("backtest_sharpe", 0.0),
+                paper_start=d.get("paper_start"),
+                live_start=d.get("live_start"),
+                retired_at=d.get("retired_at"),
+                paper_days=d.get("paper_days", 0),
+                live_days=d.get("live_days", 0),
+                transitions=transitions,
+                metadata=d.get("metadata", {}),
+            )
 
     # ------------------------------------------------------------------
     # REGISTRATION
@@ -156,6 +231,7 @@ class StrategyLifecycle:
             metadata=metadata or {},
         )
         self._strategies[strategy_id] = rec
+        self.save()
         return rec
 
     # ------------------------------------------------------------------
@@ -247,9 +323,14 @@ class StrategyLifecycle:
                     auto=True,
                 )
 
-        # LIVE -> REVIEW (auto-demote)
+        # LIVE -> PAUSED (drift) or LIVE -> REVIEW (auto-demote)
         elif rec.state == LifecycleState.LIVE:
             rec.live_days = days_active
+            if drift_detected:
+                return self._do_transition(
+                    rec, LifecycleState.PAUSED,
+                    "Auto-pause: drift detected", auto=True,
+                )
             bt_sharpe = max(rec.backtest_sharpe, 0.01)
             degradation = (1 - live_sharpe / bt_sharpe) * 100 if bt_sharpe > 0 else 100
 
@@ -274,12 +355,6 @@ class StrategyLifecycle:
                     f"Auto-demote: {', '.join(reasons)}", auto=True,
                 )
 
-        # LIVE -> PAUSED (drift)
-        elif rec.state == LifecycleState.LIVE and drift_detected:
-            return self._do_transition(
-                rec, LifecycleState.PAUSED,
-                "Auto-pause: drift detected", auto=True,
-            )
 
         # REVIEW -> RETIRED (timeout)
         elif rec.state == LifecycleState.REVIEW:
@@ -340,4 +415,5 @@ class StrategyLifecycle:
         elif to == LifecycleState.RETIRED:
             rec.retired_at = tr.timestamp
         rec.state = to
+        self.save()
         return tr

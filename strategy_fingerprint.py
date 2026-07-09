@@ -141,7 +141,7 @@ class StrategyFingerprinter:
     def transform(
         self,
         strategies: List[Dict[str, Any]],
-        fit: bool = True,
+        fit: bool = False,
     ) -> FingerprintResult:
         """
         Convert a list of strategy dicts into a feature matrix.
@@ -167,7 +167,15 @@ class StrategyFingerprinter:
 
         # Optionally scale
         if self.fit_scaler:
-            if fit or self.scaler is None:
+            if self.scaler is None:
+                # First-ever batch defines the coordinate system
+                self.scaler = StandardScaler()
+                X_scaled = self.scaler.fit_transform(X)
+            elif fit:
+                # Explicit refit invalidates ALL previously stored fingerprints --
+                # caller must also rebuild the FAISS index / surrogate training set
+                import warnings
+                warnings.warn("Fingerprint scaler refit: previously stored fingerprints are now stale")
                 self.scaler = StandardScaler()
                 X_scaled = self.scaler.fit_transform(X)
             else:
@@ -190,6 +198,29 @@ class StrategyFingerprinter:
         if self.scaler is not None:
             x = self.scaler.transform(x)
         return x[0]
+
+    # ------------------------------------------------------------------
+    # SCALER PERSISTENCE -- the coordinate system must survive restarts,
+    # or every process start silently begins a new incompatible space
+    # ------------------------------------------------------------------
+    def save_scaler(self, path: str = "data/fingerprint_scaler.joblib"):
+        import os
+        import joblib
+        if self.scaler is None:
+            return False
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        joblib.dump(self.scaler, path)
+        return True
+
+    def load_scaler(self, path: str = "data/fingerprint_scaler.joblib"):
+        import os
+        import joblib
+        if not os.path.exists(path):
+            return False
+        self.scaler = joblib.load(path)
+        return True
 
     # ------------------------------------------------------------------
     # FEATURE EXTRACTION

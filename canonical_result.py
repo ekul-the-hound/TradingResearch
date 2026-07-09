@@ -41,8 +41,8 @@ class CanonicalResult:
 
     # -- Core metrics (from backtester) ------------------------------------
     total_return_pct: float = 0.0
-    sharpe_ratio: float = 0.0
-    max_drawdown_pct: float = 0.0
+    sharpe_ratio: Optional[float] = None      # None = unmeasured (distinct from 0.0)
+    max_drawdown_pct: Optional[float] = None   # None = unmeasured
     total_trades: int = 0
     win_rate: Optional[float] = None       # percentage (0-100)
     profit_factor: Optional[float] = None
@@ -95,8 +95,8 @@ class CanonicalResult:
             timeframe=result.get("timeframe", ""),
             strategy_params=result.get("strategy_params", {}),
             total_return_pct=result.get("total_return_pct", 0) or 0,
-            sharpe_ratio=result.get("sharpe_ratio") or 0,
-            max_drawdown_pct=result.get("max_drawdown_pct", 0) or 0,
+            sharpe_ratio=result.get("sharpe_ratio"),          # preserve None
+            max_drawdown_pct=result.get("max_drawdown_pct"),   # preserve None
             total_trades=result.get("total_trades", 0) or 0,
             win_rate=result.get("win_rate"),
             profit_factor=result.get("profit_factor"),
@@ -138,6 +138,7 @@ class CanonicalResult:
                 self.returns = np.array([0.0])
 
         elif self.total_return_pct != 0 and self.bars_tested > 0:
+            self.returns_synthetic = True
             # Synthesize approximate daily returns from summary stats
             n = max(self.bars_tested, 1)
             total_r = self.total_return_pct / 100
@@ -149,7 +150,9 @@ class CanonicalResult:
             else:
                 daily_vol = abs(daily_r) * 2
 
-            rng = np.random.RandomState(hash(self.strategy_id) % 2**31)
+            import hashlib
+            seed = int(hashlib.sha256(str(self.strategy_id).encode()).hexdigest()[:8], 16)
+            rng = np.random.RandomState(seed)
             self.returns = rng.normal(daily_r, max(daily_vol, 1e-8), n)
 
             # Build equity curve
@@ -228,7 +231,7 @@ class CanonicalResult:
             "mutation_type": self.mutation_type,
             "hypothesis_id": self.hypothesis_id,
             "generation": self.generation,
-            "backtest_sharpe": self.sharpe_ratio,
+            "backtest_sharpe": self.sharpe_ratio if self.sharpe_ratio is not None else 0.0,
             "live_sharpe": 0,  # Populated later during shadow trading
             "max_drawdown": self.max_drawdown_pct / 100 if self.max_drawdown_pct else 0,
             "total_trades": self.total_trades,
@@ -236,10 +239,10 @@ class CanonicalResult:
         }
 
     def __str__(self):
-        sr = f"{self.sharpe_ratio:.3f}" if self.sharpe_ratio else "N/A"
+        sr = f"{self.sharpe_ratio:.3f}" if self.sharpe_ratio is not None else "N/A"
         wr = f"{self.win_rate:.1f}%" if self.win_rate else "N/A"
         return (
             f"[{self.strategy_id}] {self.symbol} {self.timeframe} | "
             f"Return: {self.total_return_pct:+.2f}% | Sharpe: {sr} | "
-            f"DD: {self.max_drawdown_pct:.1f}% | Trades: {self.total_trades} | WR: {wr}"
+            f"DD: {f'{self.max_drawdown_pct:.1f}%' if self.max_drawdown_pct is not None else 'N/A'} | Trades: {self.total_trades} | WR: {wr}"
         )

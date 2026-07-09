@@ -261,6 +261,10 @@ class FilteringPipeline:
         self, s: Dict, cfg: FilterConfig, pbo: Optional[float] = None,
     ) -> Tuple[bool, List[str]]:
         reasons = []
+        required = ["sharpe_ratio", "max_drawdown_pct", "total_trades"]
+        missing = [k for k in required if s.get(k) is None]
+        if missing:
+            reasons.append(f"missing_metrics_{'_'.join(missing)}")
         sr = s.get("sharpe_ratio")
         if sr is not None and sr < cfg.min_sharpe:
             reasons.append(f"sharpe_below_{cfg.min_sharpe}")
@@ -303,7 +307,7 @@ class FilteringPipeline:
         _add(s.get("sharpe_ratio"),     cfg.weight_sharpe,         0, 3)
         _add(s.get("max_drawdown_pct"), cfg.weight_drawdown,       0, 50, invert=True)
         _add(s.get("profit_factor"),    cfg.weight_profit_factor,  0, 3)
-        _add(s.get("win_rate"),         cfg.weight_win_rate,       0, 1)
+        _add(s.get("win_rate"),         cfg.weight_win_rate,       0, 100)
         _add(s.get("total_trades"),     cfg.weight_trades,         0, 500)
         _add(pbo,                       cfg.weight_pbo,            0, 1,  invert=True)
 
@@ -361,6 +365,6 @@ class FilteringPipeline:
             ],
         }
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding='utf-8') as f:
             json.dump(data, f, indent=2, default=str)
         print(f"[OK] Results saved to {output_path}")

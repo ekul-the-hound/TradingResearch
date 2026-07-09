@@ -343,9 +343,10 @@ class CCXTBroker(BaseBroker):
             free = bal.get("free", {})
             used = bal.get("used", {})
             # Sum USDT values
-            equity = float(total.get("USDT", 0) or 0)
-            free_m = float(free.get("USDT", 0) or 0)
-            used_m = float(used.get("USDT", 0) or 0)
+            quote = next((c for c in ("USDT", "USD", "USDC") if total.get(c)), "USDT")
+            equity = float(total.get(quote, 0) or 0)
+            free_m = float(free.get(quote, 0) or 0)
+            used_m = float(used.get(quote, 0) or 0)
             return BrokerBalance(
                 total_equity=equity, free_margin=free_m,
                 used_margin=used_m, unrealized_pnl=0,
@@ -355,10 +356,46 @@ class CCXTBroker(BaseBroker):
             logger.error(f"get_balance failed: {e}")
             return BrokerBalance(0, 0, 0, 0)
 
+    def _spot_positions_from_balance(self) -> List[BrokerPosition]:
+        """Spot exchanges have no positions endpoint -- derive holdings from balances."""
+        result = []
+        try:
+            bal = self._exchange.fetch_balance()
+            for asset, amount in (bal.get("total") or {}).items():
+                try:
+                    amount = float(amount or 0)
+                except (TypeError, ValueError):
+                    continue
+                if asset in ("USDT", "USD", "USDC") or amount <= 0:
+                    continue
+                symbol = f"{asset}/USDT"
+                price = 0.0
+                try:
+                    ticker = self._exchange.fetch_ticker(symbol)
+                    price = float(ticker.get("last", 0) or 0)
+                except Exception:
+                    pass
+                result.append(BrokerPosition(
+                    symbol=symbol,
+                    side="long",
+                    size=amount,
+                    entry_price=0.0,  # not recoverable from balances
+                    current_price=price,
+                    unrealized_pnl=0.0,
+                    realized_pnl=0.0,
+                ))
+        except Exception as e:
+            logger.error(f"spot position fallback failed: {e}")
+        return result
+
     def get_positions(self) -> List[BrokerPosition]:
         if not self._exchange:
             return []
         try:
+            if not self._exchange.has.get("fetchPositions"):
+                # Spot exchanges (e.g. Binance US) have no positions endpoint --
+                # derive holdings from balances so flatten/flatten_all work.
+                return self._spot_positions_from_balance()
             positions = self._exchange.fetch_positions()
             result = []
             for p in positions:

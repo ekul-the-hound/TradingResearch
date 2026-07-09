@@ -140,8 +140,8 @@ class RetrainResult:
     def __str__(self):
         icon = {
             RetrainDecision.ADOPT_NEW: "[OK]",
-            RetrainDecision.KEEP_OLD: "⏸️",
-            RetrainDecision.FLAG_REVIEW: "👁️",
+            RetrainDecision.KEEP_OLD: "[HOLD]",
+            RetrainDecision.FLAG_REVIEW: "[REVIEW]",
             RetrainDecision.ABORT: "[FAIL]",
         }[self.decision]
         return (
@@ -244,7 +244,11 @@ class RetrainingScheduler:
         current = datetime.fromisoformat(now) if now else datetime.now()
         due = []
 
+        pending_sids = {j.strategy_id for j in self._job_queue
+                        if getattr(j, "status", "pending") in ("pending", "running")}
         for sid, s in self._schedules.items():
+            if sid in pending_sids:
+                continue  # already queued -- don't duplicate
             if s.next_retrain:
                 next_dt = datetime.fromisoformat(s.next_retrain)
                 if current >= next_dt:
@@ -308,11 +312,11 @@ class RetrainingScheduler:
             new_sharpe = bt_result.get("sharpe_ratio", 0)
             new_params = bt_result.get("params", old_params)
         else:
-            # Simulated retrain
-            np.random.seed(hash(job.job_id) % 2**31)
-            noise = np.random.normal(0, 0.15)
-            new_sharpe = old_sharpe + noise
-            new_params = {**old_params, "retrained": True, "window": job.window.start}
+            # No backtest_fn -- cannot genuinely retrain. Do NOT fabricate results:
+            # adopting simulated noise ratchets current_sharpe upward and corrupts
+            # every future comparison. Zero improvement -> KEEP_OLD.
+            new_sharpe = old_sharpe
+            new_params = old_params
 
         # Decision
         if old_sharpe > 0:
@@ -480,5 +484,5 @@ class RetrainingScheduler:
             "window_end": result.window.end,
             "message": result.message,
         }
-        with open(d / f"{result.job_id}.json", "w") as f:
+        with open(d / f"{result.job_id}.json", "w", encoding='utf-8') as f:
             json.dump(data, f, indent=2)

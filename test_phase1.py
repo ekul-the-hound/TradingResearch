@@ -390,7 +390,7 @@ def test_m3_6_save_load():
         pipe.save_results(result, path)
         assert os.path.exists(path)
         import json
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             data = json.load(f)
         assert data["total_survivors"] == 1
     finally:
@@ -649,7 +649,7 @@ if __name__ == "__main__":
             run_test(name, fn, QUICK_TESTS, quick)
 
     elapsed = time.time() - start
-    print(f"\n  ⏱️  Completed in {elapsed:.1f}s")
+    print(f"\n  [TIME]  Completed in {elapsed:.1f}s")
     print(f"\n{'='*60}")
     print(f"  PHASE 1 TEST RESULTS")
     print(f"{'='*60}")

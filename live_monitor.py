@@ -48,6 +48,10 @@ class StrategyHealth(Enum):
     CRITICAL = "critical"
     OFFLINE = "offline"
 
+    @property
+    def rank(self) -> int:
+        return {"healthy": 0, "degraded": 1, "critical": 2, "offline": 3}[self.value]
+
 
 # ==============================================================================
 # DATA CLASSES
@@ -63,7 +67,7 @@ class Alert:
     acknowledged: bool = False
 
     def __str__(self):
-        icon = {"info": "ℹ️", "warning": "[WARN]", "critical": "[RED]"}[self.level.value]
+        icon = {"info": "[i]", "warning": "[WARN]", "critical": "[RED]"}[self.level.value]
         return f"{icon} [{self.strategy_id}] {self.message}"
 
 
@@ -250,7 +254,7 @@ class LiveMonitor:
                 self._add_alert(AlertLevel.CRITICAL, strategy_id,
                                 f"Sharpe {metrics.sharpe_ratio:.2f} < {cfg.sharpe_critical}", ts)
             elif metrics.sharpe_ratio < cfg.sharpe_degraded and metrics.days_active >= 10:
-                health = max(health, StrategyHealth.DEGRADED, key=lambda h: h.value)
+                health = max(health, StrategyHealth.DEGRADED, key=lambda h: h.rank)
 
         # Consecutive losses
         if s.get("consecutive_losses", 0) >= cfg.max_consecutive_losses:
@@ -260,14 +264,25 @@ class LiveMonitor:
 
         # Drift
         if s.get("drift_detected"):
-            health = max(health, StrategyHealth.DEGRADED, key=lambda h: h.value)
+            health = max(health, StrategyHealth.DEGRADED, key=lambda h: h.rank)
             self._add_alert(AlertLevel.WARNING, strategy_id, "Drift detected", ts)
 
         s["health"] = health
 
     def _add_alert(self, level: AlertLevel, sid: str, msg: str, ts: str):
+        # Suppress repeats of an alert already raised for this strategy+message
+        if not hasattr(self, "_alert_keys"):
+            self._alert_keys = set()
+        key = (sid, msg)
+        if key in self._alert_keys:
+            return
+        self._alert_keys.add(key)
+        if len(self._alert_keys) > 500:
+            self._alert_keys.clear()
         alert = Alert(level, sid, msg, ts)
         self._alerts.append(alert)
+        if len(self._alerts) > 1000:
+            self._alerts = self._alerts[-500:]
 
     # ------------------------------------------------------------------
     # SNAPSHOTS

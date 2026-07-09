@@ -49,7 +49,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
-    import mlflow
+    import mlflow  # pyright: ignore[reportMissingImports]
     from mlflow.tracking import MlflowClient
     MLFLOW_AVAILABLE = True
 except ImportError:
@@ -234,10 +234,17 @@ class LineageTracker:
 
         conn = sqlite3.connect(self.db_path)
         conn.execute("""
-            INSERT OR REPLACE INTO strategies
+            INSERT INTO strategies
             (strategy_id, name, origin, parent_id, generation, mutation_type,
              mutation_params, code_hash, hypothesis, created_at, status, mlflow_run_id)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(strategy_id) DO UPDATE SET
+                name=excluded.name, origin=excluded.origin,
+                parent_id=excluded.parent_id, generation=excluded.generation,
+                mutation_type=excluded.mutation_type,
+                mutation_params=excluded.mutation_params,
+                code_hash=excluded.code_hash, hypothesis=excluded.hypothesis
+                -- status, created_at, mlflow_run_id intentionally preserved
         """, (
             rec.strategy_id, rec.name, rec.origin, rec.parent_id,
             rec.generation, rec.mutation_type,

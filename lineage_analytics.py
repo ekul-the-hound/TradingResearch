@@ -257,7 +257,9 @@ class LineageAnalyzer:
 
         reports = []
         for hid, group in by_hyp.items():
-            sharpes = [s.live_sharpe for s in group if s.live_sharpe != 0]
+            # Sort chronologically so the trend is over TIME, not insertion order
+            group_sorted = sorted(group, key=lambda s: s.created_at or "")
+            sharpes = [s.live_sharpe for s in group_sorted if s.live_sharpe != 0]
             active = [s for s in group if s.is_active]
             avg_sharpe = float(np.mean(sharpes)) if sharpes else 0
 

@@ -71,12 +71,22 @@ def load_variant_class(filepath):
         strategy_class = None
         class_name = None
         
+        candidates = []
         for name in dir(module):
             obj = getattr(module, name)
-            if isinstance(obj, type) and issubclass(obj, bt.Strategy) and obj != bt.Strategy:
-                strategy_class = obj
-                class_name = name
-                break
+            if (isinstance(obj, type) and issubclass(obj, bt.Strategy)
+                    and obj is not bt.Strategy
+                    and getattr(obj, "__module__", "") == module.__name__):
+                candidates.append((name, obj))
+        if not candidates:
+            # Fall back to imported subclasses if nothing is defined locally
+            for name in dir(module):
+                obj = getattr(module, name)
+                if isinstance(obj, type) and issubclass(obj, bt.Strategy) and obj is not bt.Strategy:
+                    candidates.append((name, obj))
+        if candidates:
+            # Most-derived class wins (deepest MRO)
+            class_name, strategy_class = max(candidates, key=lambda kv: len(kv[1].__mro__))
         
         if strategy_class:
             return strategy_class, class_name, None
