@@ -428,6 +428,19 @@ class DiscoveryPipeline:
 
             data = bt.feeds.PandasData(dataname=df)
             cerebro.adddata(data)
+            # Second correlated dummy feed so pairs/spread strategies can validate.
+            # Single-feed strategies simply ignore it.
+            close2 = close * 0.85 + np.cumsum(rng.randn(bars) * 0.3)
+            high2 = close2 + np.abs(rng.randn(bars) * 0.3)
+            low2 = close2 - np.abs(rng.randn(bars) * 0.3)
+            open2 = close2 + rng.randn(bars) * 0.1
+            volume2 = rng.randint(1000, 10000, bars).astype(float)
+            df2 = pd.DataFrame({
+                'open': open2, 'high': high2, 'low': low2,
+                'close': close2, 'volume': volume2,
+            }, index=dates)
+            data2 = bt.feeds.PandasData(dataname=df2)
+            cerebro.adddata(data2)
             cerebro.broker.setcash(10000)
 
             # Run with timeout protection (Windows-safe: thread + join)
