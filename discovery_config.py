@@ -52,11 +52,25 @@ MODES = {
         "request_timeout": 180,
     },
     "local": {
-        "summarizer_model": "qwen3.5:9b",
+        "summarizer_model": "qwen2.5:7b-instruct",  # non-thinking; replaces qwen3.5:9b
         "code_model": "qwen2.5-coder:7b",
-        "reviewer_model": "qwen3.5:9b",
+        "reviewer_model": "qwen2.5:7b-instruct",
         "max_content_chars": 12000,   # smaller context for local models
         "request_timeout": 300,       # local models are slower
+    },
+    "hybrid": {
+        "summarizer_model": "minimax-m3:cloud",  # local, free, fast, no-thinking
+        "code_model": "minimax-m3:cloud",           # cloud muscle for Backtrader codegen
+        "reviewer_model": "minimax-m3:cloud",       # or qwen2.5:7b-instruct if quota tight
+        "max_content_chars": 30000,   # M3 handles big context; summarizer runs local
+        "request_timeout": 300,       # cloud codegen can be slow on free tier
+    },
+    "local27": {
+        "summarizer_model": "qwen3.6:27b",
+        "code_model": "qwen3.6:27b",
+        "reviewer_model": "qwen3.6:27b",
+        "max_content_chars": 30000,   # 256K context; capped for speed
+        "request_timeout": 600,       # 27B local inference is slow
     },
 }
 
@@ -211,7 +225,7 @@ class PipelineConfig:
     retry_backoff: float = 2.0
     min_document_length: int = 500
     max_document_length: int = 100000
-    validation_bar_count: int = 200
+    validation_bar_count: int = 600
     validation_timeout_seconds: int = 60
 
 

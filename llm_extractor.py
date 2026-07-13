@@ -69,16 +69,46 @@ CODEGEN_SYSTEM_PROMPT = """You are an expert Backtrader developer. Your job is t
 CRITICAL BACKTRADER CODING RULES:
 
 ### Rule 1: Indicator Names
-Use CORRECT Backtrader indicator names:
-- bt.indicators.OBV(self.data)
+You may ONLY use indicators from this verified list of names that actually exist in
+Backtrader. Using any name not on this list will crash with AttributeError.
+
+SUPPORTED (use exactly these names):
 - bt.indicators.RSI(self.data.close, period=14)
 - bt.indicators.ATR(self.data, period=14)
 - bt.indicators.ADX(self.data, period=14)
 - bt.indicators.BollingerBands(self.data.close)
 - bt.indicators.MACD(self.data.close)
 - bt.indicators.Stochastic(self.data)
-- bt.indicators.SimpleMovingAverage / ExponentialMovingAverage
+- bt.indicators.SimpleMovingAverage(self.data.close, period=n)
+- bt.indicators.ExponentialMovingAverage(self.data.close, period=n)
+- bt.indicators.WeightedMovingAverage(self.data.close, period=n)
 - bt.indicators.CrossOver(fast, slow)
+- bt.indicators.WilliamsR(self.data, period=14)
+- bt.indicators.CCI(self.data, period=20)
+- bt.indicators.MomentumOscillator(self.data.close, period=n)
+- bt.indicators.RateOfChange(self.data.close, period=n)
+- bt.indicators.StandardDeviation(self.data.close, period=n)
+- bt.indicators.Highest(self.data.high, period=n)
+- bt.indicators.Lowest(self.data.low, period=n)
+- bt.indicators.SumN(line, period=n)
+
+### Rule 1b: Indicators NOT in the list must be computed manually
+Backtrader does NOT have OBV, LogReturn, VWAP, MFI, Supertrend, Ichimoku, Keltner,
+Donchian, or any deep-learning / RL / ML component. If the strategy needs one of
+these or anything else not in the SUPPORTED list above, DO NOT write
+bt.indicators.<Name> — that will crash. Instead compute it yourself in __init__
+using primitive lines and arithmetic, or in next() from self.data arrays. Example
+for a value not in the list (OBV computed manually):
+```python
+# in next(): maintain a running value off self.data, do not call bt.indicators.OBV
+if self.data.close[0] > self.data.close[-1]:
+    self._obv += self.data.volume[0]
+elif self.data.close[0] < self.data.close[-1]:
+    self._obv -= self.data.volume[0]
+```
+If the source strategy depends on ML/RL/neural components that cannot be expressed
+with these primitives, reduce it to the closest rule-based approximation using only
+SUPPORTED indicators — never emit an indicator name that isn't on the list.
 
 ### Rule 2: Position Price Access
 ALWAYS check position exists before accessing .price:
@@ -100,6 +130,14 @@ Check data availability with try/except when using multiple data feeds.
 
 ### Rule 5: Partial Exits
 Use explicit size: self.sell(size=half_size), NOT self.close()
+
+### Rule 6: No fixed-size buffers indexed by bar number
+NEVER pre-allocate a fixed-size list/array and assign into it by bar index, e.g.
+`self.buf = [0]*N; self.buf[len(self)] = x` — this crashes with
+"IndexError: array assignment index out of range". If you need a rolling window,
+either use a Backtrader indicator, or use `collections.deque(maxlen=N)` and append,
+or read historical values directly via self.data.close[-1], self.data.close[-2], etc.
+Do not build image-like 2D arrays or convert bars into fixed tensors.
 
 OUTPUT REQUIREMENTS:
 - Complete, working Python file
@@ -174,6 +212,11 @@ class OllamaClient:
             "max_tokens": self.max_tokens,
             "temperature": temperature if temperature is not None else self.temperature,
             "stream": False,
+            # Disable reasoning phase on thinking models (qwen3.6, minimax-m3, ...).
+            # Models without the toggle ignore this field. Without it, thinking
+            # models burn the max_tokens budget on reasoning and return empty
+            # or <think>-polluted content.
+            "think": False,
         }
 
         last_error = None
@@ -212,6 +255,12 @@ class OllamaClient:
                     continue
 
                 text = data["choices"][0]["message"]["content"]
+
+                # Fallback for thinking models whose reasoning leaks into
+                # content as a <think>...</think> block despite think:False.
+                if text and "<think>" in text:
+                    import re as _re
+                    text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL).strip()
                 usage = data.get("usage", {})
 
                 # Empty-response retry (silent rate limiting: 200 OK + empty body)
@@ -406,20 +455,46 @@ class LLMExtractor:
 
         start_time = time.time()
         try:
-            response_text, usage = self.code_generator.chat(
-                CODEGEN_SYSTEM_PROMPT, user_prompt,
-            )
-            duration = time.time() - start_time
+            import ast as _ast
+            code = None
+            syntax_attempts = 3
+            for syn_attempt in range(1, syntax_attempts + 1):
+                response_text, usage = self.code_generator.chat(
+                    CODEGEN_SYSTEM_PROMPT, user_prompt,
+                )
 
-            self.db.log_extraction({
-                "doc_id": doc_id, "stage": "code_generation",
-                "model_used": cfg.llm.code_generator.model,
-                "prompt_tokens": usage.get("prompt_tokens", 0),
-                "completion_tokens": usage.get("completion_tokens", 0),
-                "success": True, "duration_seconds": duration,
-            })
+                self.db.log_extraction({
+                    "doc_id": doc_id, "stage": "code_generation",
+                    "model_used": cfg.llm.code_generator.model,
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "success": True,
+                    "duration_seconds": time.time() - start_time,
+                })
 
-            code = self._clean_code_response(response_text)
+                candidate = self._clean_code_response(response_text)
+
+                # Truncation guard: rate-limited free-tier responses often get cut
+                # mid-stream (unterminated strings, unclosed parens, dangling ifs).
+                # Never accept code that doesn't parse -- treat like an empty
+                # response and retry instead of saving broken strategies.
+                try:
+                    _ast.parse(candidate)
+                except SyntaxError as se:
+                    logger.warning(
+                        f"Generated code fails ast.parse ({se.msg} at line {se.lineno}) "
+                        f"-- likely truncated by rate-limit "
+                        f"({len(candidate)} chars, attempt {syn_attempt}/{syntax_attempts})"
+                    )
+                    if syn_attempt < syntax_attempts:
+                        time.sleep(5 * syn_attempt)
+                        continue
+                    logger.error(f"Code truncated after {syntax_attempts} attempts for doc {doc_id}")
+                    self.stats["extraction_errors"] += 1
+                    return None
+
+                code = candidate
+                break
 
             if not code or "class " not in code:
                 logger.warning(f"Code generation produced no valid class for doc {doc_id}")
