@@ -146,24 +146,6 @@ try:
 except ImportError:
     INBOX_AVAILABLE = False
 
-# Source extraction page (paste transcripts/articles)
-try:
-    from page_sources import PgSources
-    SOURCES_AVAILABLE = True
-except Exception as _src_err:
-    SOURCES_AVAILABLE = False
-    _SRC_ERR = str(_src_err)
-
-    @component
-    def PgSources():
-        return html.div({"style": {"color": "#f59e0b", "padding": "40px",
-            "fontFamily": "monospace", "fontSize": "13px"}},
-            html.p("page_sources.py failed to load:"),
-            html.p({"style": {"color": "#ef4444"}}, _SRC_ERR),
-            html.p({"style": {"color": "#64748b"}},
-                "Check that page_sources.py and source_extractor.py are in "
-                "the project root, then clear __pycache__ and restart."))
-
 # ==============================================================================
 # THEME
 # ==============================================================================
@@ -1599,7 +1581,6 @@ def PgDecay():
 NAV = [
     ("pipeline",    "[CYCLE]","Pipeline"),
     ("inbox",       "[IN]","Strategy Inbox"),
-    ("sources",     "[DOC]","Source Extraction"),
     ("backtests",   "[STATS]","Backtests"),
     ("strategies",  "[DNA]","Strategies"),
     ("lineage",     "[TREE]","Lineage"),
@@ -1617,7 +1598,6 @@ NAV = [
 TITLES = {
     "pipeline":    ("Pipeline Overview","End-to-end system status -- all 6 phases"),
     "inbox":       ("Strategy Inbox","Add strategies manually + view AI discoveries"),
-    "sources":     ("Source Extraction","Paste transcripts/articles -- extract strategies, review, approve to codegen"),
     "backtests":   ("Backtest Results","Real results -- return dist, scatter, by symbol/TF"),
     "strategies":  ("Strategy Comparison","Variant ranking -- return, Sharpe, WR, DD, PF"),
     "lineage":     ("Lineage Tracking","Phase 1 -- genealogy, mutations, generations"),
@@ -1633,13 +1613,13 @@ TITLES = {
 }
 
 PAGES = {
-    "pipeline":PgPipeline,"inbox":PgInbox,"sources":PgSources,"backtests":PgBacktests,"strategies":PgStrategies,
+    "pipeline":PgPipeline,"inbox":PgInbox,"backtests":PgBacktests,"strategies":PgStrategies,
     "lineage":PgLineage,"overfit":PgOverfitFilter,"optimization":PgOptimization,
     "risk":PgRisk,"live":PgLive,"discovery":PgDiscovery,
     "learning":PgLearning,"validation":PgValidation,"decay":PgDecay,"ftmo":PgFTMOPortfolio,
 }
 
-NAV_COLORS = {"sources":T["p5"],"lineage":T["p1"],"overfit":T["p1"],"optimization":T["p2"],
+NAV_COLORS = {"lineage":T["p1"],"overfit":T["p1"],"optimization":T["p2"],
     "risk":T["p3"],"live":T["p4"],"discovery":T["p5"],"learning":T["p6"],"decay":T["p3"]}
 
 
