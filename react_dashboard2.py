@@ -62,6 +62,7 @@ except Exception:
     DB_BT = str(BASE / "results" / "backtest_results.db")
 
 DB_LIN = str(BASE / "data" / "lineage.db")
+DB_DECAY = str(BASE / "data" / "decay.db")
 # Discovery DB -- check both possible names
 _disc1 = str(BASE / "data" / "discovery.db")
 _disc2 = str(BASE / "data" / "research_lab.db")
@@ -123,6 +124,11 @@ _load("ExperimentTracker",    "experiment_tracker",     "ExperimentTracker")
 _load("RetrainingScheduler",  "retraining_scheduler",  "RetrainingScheduler")
 # Integration + existing
 _load("FTMOComplianceChecker","ftmo_compliance",       "FTMOComplianceChecker")
+try:
+    import dashboard_ftmo_panel as _ftmo_panel
+except Exception as _e:
+    _ftmo_panel = None
+    print(f"[WARN] dashboard_ftmo_panel unavailable: {_e}")
 _load("PortfolioEngine",      "portfolio_engine",      "PortfolioEngine")
 _load("ValidationFramework",  "validation_framework",  "ValidationFramework")
 _load("CostAdjustedScorer",   "cost_adjusted_scoring", "CostAdjustedScorer")
@@ -1184,31 +1190,77 @@ def PgValidation():
 def PgFTMOPortfolio():
     bt=D.backtests(); vs=D.variant_stats()
 
-    # FTMO
-    sizes=[10000,25000,50000,100000,200000]
-    ftmo_rows=[]
-    if bt:
-        best=max(bt,key=lambda r:r.get("total_return_pct")or 0)
-        ret_pct=(best.get("total_return_pct")or 0)/100
-        dd_pct=abs(best.get("max_drawdown_pct")or 0)/100
-        for sz in sizes:
-            final=sz*(1+ret_pct); d_ok=dd_pct<0.05; t_ok=dd_pct<0.10; tgt=ret_pct>=0.10; vrf=ret_pct>=0.05
-            p=d_ok and t_ok and tgt
-            ftmo_rows.append([f"${sz:,}",f"${final:,.0f}",
-                _badge("PASS" if d_ok else "FAIL",T["green"] if d_ok else T["red"]),
-                _badge("PASS" if t_ok else "FAIL",T["green"] if t_ok else T["red"]),
-                _badge("PASS" if tgt else "FAIL",T["green"] if tgt else T["red"]),
-                _badge("PASS" if p else "FAIL",T["green"] if p else T["red"])])
+    # FTMO PROXY FIX
+    #
+    # Was: d_ok = dd_pct < 0.05 and t_ok = dd_pct < 0.10 -- the SAME total
+    # max-drawdown number tested against two thresholds, with the "Daily<5%"
+    # column never looking at a daily boundary. Min-trading-days was missing
+    # from the table entirely. FTMOComplianceChecker was imported but unused.
+    #
+    # Now: real checker output when trade-level data is reachable, and an
+    # explicit unavailable state when it is not. backtest_results stores only
+    # summary statistics, so the panel resolves trades from the decay DB.
+    ftmo_rows = []
+    ftmo_panel = None
+    if bt and _ftmo_panel is not None:
+        best = max(bt, key=lambda r: r.get("total_return_pct") or 0)
+        ftmo_panel = _ftmo_panel.build_panel(
+            # Results DB first: it stores entry AND exit prices, so compliance
+            # is exact. The decay DB has no prices, so fees for notional-fee
+            # asset classes are only approximate there.
+            results_db_path=DB_BT,
+            decay_db_path=DB_DECAY,
+            strategy_id=best.get("variant_id") or best.get("strategy_name") or "",
+            strategy_name=best.get("strategy_name"),
+            symbol=best.get("symbol"),
+            timeframe=best.get("timeframe"),
+            phase="challenge",
+        )
+        if ftmo_panel.available:
+            for r in ftmo_panel.rows:
+                cells = _ftmo_panel.row_cells(r)
+                ftmo_rows.append(
+                    [f"${r['account_size']:,}", f"${r['final_equity']:,.0f}"]
+                    + [_badge(lbl, T["green"] if ok else T["red"]) for lbl, ok in cells]
+                )
 
     # Cost comparison: raw vs net
     f1=go.Figure()
     if vs:
         names=[v["v"][:18] for v in vs[:8]]
         raw_rets=[v["ret"] for v in vs[:8]]
-        est_costs=[abs(v["ret"])*0.3 for v in vs[:8]]  # estimated
-        net_rets=[r-c for r,c in zip(raw_rets,est_costs)]
+        # DASHBOARD-HONESTY-COSTS
+        # Was: est_costs=[abs(v["ret"])*0.3 ...] -- an invented 30%-of-return
+        # haircut labelled "Net (est.)", while cost_adjusted_scoring.py sat
+        # unused. A made-up number presented beside a real one is worse than no
+        # number, because the chart implies they are comparable.
+        net_rets = []
+        _cost_ok = True
+        try:
+            from cost_adjusted_scoring import CostAdjustedScorer
+            _scorer = CostAdjustedScorer()
+            for v in vs[:8]:
+                adj = _scorer.adjust_result({
+                    "symbol": v.get("symbol", "EUR-USD"),
+                    "total_return_pct": v["ret"],
+                    "total_trades": v.get("trades", 0),
+                    "bars_tested": v.get("bars", 0),
+                })
+                net = adj.get("net_return_pct") if isinstance(adj, dict) else getattr(adj, "net_return_pct", None)
+                if net is None:
+                    _cost_ok = False
+                    break
+                net_rets.append(net)
+        except Exception as _e:
+            _cost_ok = False
+            print(f"[WARN] Cost model unavailable: {_e}")
+
+        if not _cost_ok:
+            net_rets = []
         f1.add_trace(go.Bar(name="Raw",x=names,y=raw_rets,marker_color=T["blue"]))
-        f1.add_trace(go.Bar(name="Net (est.)",x=names,y=net_rets,marker_color=T["amber"]))
+        # DASHBOARD-HONESTY-NETBAR: omit the series rather than plot a guess.
+        if net_rets:
+            f1.add_trace(go.Bar(name="Net (after costs)",x=names,y=net_rets,marker_color=T["amber"]))
         f1.update_layout(title="Raw vs Cost-Adjusted Returns",barmode="group",xaxis_tickangle=-45)
 
     # Portfolio: equal weight
@@ -1223,9 +1275,20 @@ def PgFTMOPortfolio():
     # Portfolio regime performance
     f3=go.Figure()
     regimes=["BULL","BEAR","RANGING","HIGH_VOL","CRASH","RECOVERY"]
-    regime_rets=[8.2,-2.1,1.5,3.4,-5.8,6.1]
-    f3.add_trace(go.Bar(x=regimes,y=regime_rets,marker_color=[T["green"],T["red"],T["blue"],T["amber"],T["red"],T["green"]]))
-    f3.update_layout(title="Portfolio Performance by Regime",yaxis_title="Return %")
+    # DASHBOARD-HONESTY-REGIME
+    # Was: regime_rets=[8.2,-2.1,1.5,3.4,-5.8,6.1] -- six hardcoded numbers
+    # rendered as "Portfolio Performance by Regime". No per-regime performance
+    # is persisted anywhere in the schema, so there is nothing to compute this
+    # from. Same class of bug as the FTMO proxy badges: a plausible-looking
+    # chart standing in for an answer the system does not have.
+    f3.add_annotation(
+        text=("Per-regime performance is not recorded.<br>"
+              "Run backtests with regime analysis enabled to populate this."),
+        showarrow=False, font=dict(size=13, color=T["dim"]),
+        xref="paper", yref="paper", x=0.5, y=0.5)
+    f3.update_layout(title="Portfolio Performance by Regime (no data)",
+                     yaxis_title="Return %",
+                     xaxis=dict(visible=False), yaxis=dict(visible=False))
 
     port_ret=np.mean([v["ret"] for v in vs[:n]]) if n>=2 else 0
     port_sr=np.mean([v["sr"] for v in vs[:n]]) if n>=2 else 0
@@ -1236,9 +1299,11 @@ def PgFTMOPortfolio():
         _card(
             _title("FTMO Prop Firm Compliance","[BANK]"),
             html.p({"style":{"color":T["dim"],"fontSize":"12px","marginBottom":"12px"}},
-                f"Based on best strategy: {bt[0].get('variant_id','?') if bt else 'N/A'}") if bt else html.div(),
-            _tbl(["Account","Final Equity","Daily<5%","Total<10%","Target+10%","Overall"],ftmo_rows) if ftmo_rows else
-                _empty("No backtest data","[BANK]")),
+                _ftmo_panel.caption(ftmo_panel) if (ftmo_panel is not None and _ftmo_panel is not None)
+                else "FTMO compliance unavailable - panel adapter not loaded") if bt else html.div(),
+            _tbl(["Account","Final Equity","Daily<5%","Total<10%","Min Days>=4","Target+10%","Overall"],ftmo_rows)
+                if ftmo_rows else
+                _empty(ftmo_panel.reason if ftmo_panel is not None else "No backtest data","[BANK]")),
         # Portfolio section
         _grid(4, _card(_metric("Strategies",n if n>=2 else 0)),
             _card(_metric("Port Return",f"{port_ret:+.1f}%",color=_ret_color(port_ret))),

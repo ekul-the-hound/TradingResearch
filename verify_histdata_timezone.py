@@ -130,8 +130,8 @@ def analyze(df, label):
         hours = [ts.hour for ts, s in week_closes if s == season]
         if not hours:
             continue
-        counts = pd.Series(hours).value_counts().sort_index()
-        top = ', '.join(f"{h:02d}:00 x{c}" for h, c in counts.head(4).items())
+        counts = pd.Series(hours).value_counts()
+        top = ', '.join(f"{h:02d}:00 x{c}" for h, c in counts.sort_values(ascending=False).head(4).items())
         print(f"    {season:7} (n={len(hours):4}): {top}")
 
     scores = score_hypotheses(week_closes)

@@ -150,7 +150,46 @@ class DataManager:
         
         return 'unknown'
     
-    def get_data(self, symbol, timeframe='1hour', max_bars=None, use_cache=True, **kwargs):
+    def get_data(self, symbol, timeframe='1hour', max_bars=None, use_cache=True,
+                 holdout_token=None, **kwargs):
+        """
+        HOLDOUT-GUARD-WRAPPER
+
+        Get OHLCV data, truncated at the protected holdout cutoff.
+
+        Every asset path in this class dispatches through here, so this is the
+        one place the holdout can be enforced for all of them at once -- and for
+        code that does not exist yet. Guarding at call sites instead would make
+        the protection only as reliable as the next person's memory, which is
+        exactly what fails across thousands of automated runs.
+
+        Truncation is the DEFAULT. To read holdout data, obtain a token:
+
+            token = guard.request_access('final validation', 'variant_07')
+            df = dm.get_data('EUR-USD', '1hour', holdout_token=token)
+
+        Inert until a cutoff is pinned: with no ledger the guard passes
+        everything through unchanged.
+        """
+        df = self._get_data_unguarded(symbol, timeframe, max_bars, use_cache, **kwargs)
+        try:
+            import holdout_guard
+            guard = holdout_guard.HoldoutGuard.load()
+            return guard.enforce(df, symbol=symbol, timeframe=timeframe,
+                                 token=holdout_token)
+        except ImportError:
+            return df
+        except Exception as e:
+            # A guard that fails open silently is worse than no guard, because
+            # it looks like protection. Say so loudly and continue -- refusing
+            # to return data at all would take the whole pipeline down over a
+            # ledger problem.
+            print(f"[HOLDOUT] [WARN] Guard did not run ({type(e).__name__}: {e}). "
+                  f"Data returned UNPROTECTED.")
+            return df
+
+    def _get_data_unguarded(self, symbol, timeframe='1hour', max_bars=None,
+                            use_cache=True, **kwargs):
         """
         Get OHLCV data for a symbol
         
@@ -510,9 +549,28 @@ class DataManager:
                 return cached_data
         
         # Load base 1-minute merged data
-        base_file = os.path.join(config.CACHE_SUBDIRS['forex'], f"{ticker}_1min_merged.csv")
+        #
+        # TIMEZONE CONTRACT: this file must be naive UTC. HistData.com publishes
+        # in EST-fixed (UTC-5, no DST); forex_data_processor.py converts at
+        # ingest and writes the _1min_utc.csv marker to prove it did.
+        #
+        # The legacy _1min_merged.csv was written WITHOUT that conversion. Its
+        # timestamps are 5 hours behind the real instant, which moves the
+        # Prague-midnight daily reset used by ftmo_compliance into the middle
+        # of the Tokyo session. We refuse it rather than fall back to it -- a
+        # loud failure here is far cheaper than a quietly wrong pass rate.
+        base_file = os.path.join(config.CACHE_SUBDIRS['forex'], f"{ticker}_1min_utc.csv")
+        legacy_file = os.path.join(config.CACHE_SUBDIRS['forex'], f"{ticker}_1min_merged.csv")
         
         if not os.path.exists(base_file):
+            if os.path.exists(legacy_file):
+                print(f"[FAIL] Stale pre-timezone-fix data for {symbol}")
+                print(f"   Found:    {legacy_file}")
+                print(f"   Expected: {base_file}")
+                print(f"   The legacy file is on HistData's EST clock, not UTC.")
+                print(f"   Every FTMO daily-loss number built from it is 5h off.")
+                print(f"   Rebuild: python forex_data_processor.py")
+                return None
             print(f"[FAIL] Missing data: {symbol} (merged file not found)")
             print(f"   Expected: {base_file}")
             print(f"   Run: python forex_data_processor.py first")
@@ -522,7 +580,9 @@ class DataManager:
             # Load base data
             df = pd.read_csv(base_file, index_col=0, parse_dates=True)
             
-            # Normalize timezone
+            # Normalize timezone.
+            # Post-fix this is a no-op: the file is already naive UTC on disk.
+            # Kept as a guard in case a tz-aware CSV is ever hand-placed here.
             if df.index.tz is not None:
                 df.index = df.index.tz_convert("UTC").tz_localize(None)
             
@@ -705,7 +765,16 @@ class DataManager:
         
         if os.path.exists(cache_file):
             try:
-                df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
+                # CACHE-DATEFMT
+                # Without an explicit format pandas cannot infer one and falls
+                # back to dateutil, which parses timestamps one at a time --
+                # painful across millions of cached rows. Caches are written by
+                # to_csv() so they are always ISO8601.
+                try:
+                    df = pd.read_csv(cache_file, index_col=0, parse_dates=True,
+                                     date_format='ISO8601')
+                except (TypeError, ValueError):
+                    df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
                 return df
             except Exception as e:
                 print(f"[WARN]  Failed to load cache: {e}")

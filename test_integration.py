@@ -77,12 +77,19 @@ def test_cr_04_returns_from_trades():
     assert cr.equity_curve is not None
 
 def test_cr_05_returns_synthetic():
+    # SYNTHETIC-RETURNS-FIX-CR05
+    # This test used to assert that a result with NO trade list still produced
+    # a 252-element return series. That series came from rng.normal() -- data
+    # the overfitting detectors cannot fail, because Gaussian draws have no
+    # skew, no excess kurtosis, and are stationary by construction. The pin is
+    # inverted: summary statistics alone must NOT yield a return series.
     raw = {"strategy_name": "test", "total_return_pct": 20, "sharpe_ratio": 1.5,
            "max_drawdown_pct": 10, "total_trades": 30, "bars_tested": 252,
            "starting_value": 10000}
     cr = CanonicalResult.from_backtest(raw, strategy_id="synth")
-    assert cr.returns is not None
-    assert len(cr.returns) == 252
+    assert cr.returns is None, "no trade list must not fabricate returns"
+    assert cr.returns_source == "none"
+    assert not cr.has_real_returns
 
 def test_cr_06_to_dict():
     cr = CanonicalResult(strategy_id="S1", sharpe_ratio=1.5, total_trades=30)
@@ -127,9 +134,14 @@ def test_cr_11_str():
     assert "EUR-USD" in s
 
 def test_cr_12_null_sharpe():
+    # INTEGRATION-FIX-CR12
+    # canonical_result deliberately preserves None to mean "unmeasured", which
+    # is distinct from a measured 0.0. Collapsing the two would let a strategy
+    # whose Sharpe could not be computed rank alongside a genuinely flat one.
+    # This assertion predates that change and asserted the opposite.
     raw = {"strategy_name": "test", "sharpe_ratio": None, "total_trades": 0}
     cr = CanonicalResult.from_backtest(raw)
-    assert cr.sharpe_ratio == 0
+    assert cr.sharpe_ratio is None
 
 def test_cr_13_equity_from_trades():
     trades = [{"pnl": 100}, {"pnl": 200}]
@@ -140,18 +152,28 @@ def test_cr_13_equity_from_trades():
     assert cr.equity_curve[-1] == 10300
 
 def test_cr_14_empty_trades():
+    # INTEGRATION-FIX-CR14
+    # trades=[] is falsy, so _compute_arrays takes the no-trade-list branch.
+    # That branch used to fabricate 100 Gaussian returns; it now reports None.
+    # Same pin as CR.05 -- an empty trade list is not a return series.
     raw = {"strategy_name": "t", "trades": [], "bars_tested": 100,
            "total_return_pct": 5, "starting_value": 10000,
            "sharpe_ratio": 0.8, "max_drawdown_pct": 5, "total_trades": 0}
     cr = CanonicalResult.from_backtest(raw)
-    assert cr.returns is not None
+    assert cr.returns is None, "empty trades must not fabricate returns"
+    assert cr.returns_source == "none"
+    assert not cr.has_real_returns
+    # The equity curve still exists, holding just the starting value.
+    assert cr.equity_curve is not None and len(cr.equity_curve) == 1
 
 def test_cr_15_missing_fields():
+    # INTEGRATION-FIX-CR15
+    # A result dict with no sharpe_ratio key yields None (unmeasured), not 0.0.
     raw = {"strategy_name": "minimal"}
     cr = CanonicalResult.from_backtest(raw)
     assert cr.strategy_name == "minimal"
     assert cr.total_trades == 0
-    assert cr.sharpe_ratio == 0
+    assert cr.sharpe_ratio is None
 
 
 # ==============================================================================

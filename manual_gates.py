@@ -252,6 +252,21 @@ class ValidationGate:
             except Exception as e:
                 print(f"[WARN]  Could not write to log: {e}")
     
+    def reset_session(self):
+        """
+        Clear session counters and start a fresh session.
+
+        Reported missing by test_system test 11. Useful between pipeline runs
+        in one process, so approved-cost totals do not accumulate across
+        unrelated runs and trip a budget ceiling that was never really hit.
+        """
+        self.session_start = datetime.now()
+        self.total_approved_cost = 0.0
+        self.total_blocked = 0
+        self.total_approved = 0
+        self.decisions = []
+        return self.get_session_summary()
+
     def get_session_summary(self) -> dict:
         """Get summary of this session's gate decisions"""
         

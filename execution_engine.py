@@ -136,6 +136,9 @@ class Trade:
     duration: timedelta
     
 
+import position_sizing
+
+
 @dataclass
 class ExecutionConfig:
     """Execution configuration"""
@@ -155,6 +158,13 @@ class ExecutionConfig:
     max_position_size: float = 100000
     max_daily_loss_pct: float = 5.0
     max_drawdown_pct: float = 10.0
+
+    # Position sizing.
+    # risk_per_trade_pct is the fraction of equity lost if price reaches the
+    # stop. Default 0.5%: FTMO's binding constraint is a 5% daily loss, so at
+    # 2% per trade three consecutive losers end a challenge. Set explicitly.
+    risk_per_trade_pct: float = 0.005
+    max_leverage_pct: float = 0.20
     
     # Order settings
     max_orders_per_second: int = 10
@@ -626,6 +636,11 @@ class ExecutionEngine:
         
         self.is_running = False
         self.signal_queue = queue.Queue()
+
+        # Feeds the fallback stop when a strategy supplies none. Built from
+        # the prices process_signal already receives -- no new data source.
+        self.vol_tracker = position_sizing.VolatilityTracker()
+        self.last_sizing = None  # SizingResult of the most recent sizing call
     
     def process_signal(
         self,
@@ -633,7 +648,12 @@ class ExecutionEngine:
         signal: int,  # 1 = long, -1 = short, 0 = flat
         price: float,
         size: float = None,
-        timestamp: datetime = None
+        timestamp: datetime = None,
+        # SIZING-FIX-SIGNATURE: keyword-only so existing positional callers
+        # are unaffected. Pass stop_price for real risk-based sizing.
+        *,
+        stop_price: float = None,
+        stop_distance: float = None
     ):
         """
         Process a trading signal.
@@ -646,6 +666,10 @@ class ExecutionEngine:
             timestamp: Signal timestamp
         """
         
+        # SIZING FIX: track realised volatility so a missing strategy stop
+        # falls back to something volatility-aware instead of a flat 2%.
+        self.vol_tracker.update(symbol, price)
+
         # Update price
         self.trader.update_price(symbol, price, timestamp)
         
@@ -666,7 +690,8 @@ class ExecutionEngine:
             
             if current_side != PositionSide.LONG:
                 # Open long
-                order_size = size or self._calculate_size(symbol, price)
+                order_size = size or self._calculate_size(
+                    symbol, price, stop_price=stop_price, stop_distance=stop_distance)
                 self.trader.submit_order(symbol, 'BUY', order_size)
         
         elif signal == -1:  # Short
@@ -676,27 +701,47 @@ class ExecutionEngine:
             
             if current_side != PositionSide.SHORT:
                 # Open short
-                order_size = size or self._calculate_size(symbol, price)
+                order_size = size or self._calculate_size(
+                    symbol, price, stop_price=stop_price, stop_distance=stop_distance)
                 self.trader.submit_order(symbol, 'SELL', order_size)
     
-    def _calculate_size(self, symbol: str, price: float) -> float:
-        """Calculate position size based on risk parameters"""
-        # Simple fixed fractional sizing
-        risk_pct = 0.02  # 2% risk per trade
-        risk_amount = self.trader.equity * risk_pct
-        
-        # Assume 2% stop loss
-        stop_distance = price * 0.02
-        
-        size = risk_amount / stop_distance
-        
-        # Apply limits
-        size = min(size, self.config.max_position_size)
-        
-        # Ensure position value doesn't exceed 20% of equity (leverage limit)
-        max_position_value = self.trader.equity * 0.20
-        max_size_by_value = max_position_value / price if price > 0 else 0
-        size = min(size, max_size_by_value)
+    def _calculate_size(self, symbol: str, price: float,
+                        stop_price: float = None,
+                        stop_distance: float = None) -> float:
+        """
+        Calculate position size from the distance to the actual stop.
+
+        SIZING FIX: the old implementation was
+            risk_amount   = equity * 0.02
+            stop_distance = price  * 0.02
+            size          = risk_amount / stop_distance
+        in which the two 2%s cancel to size = equity / price. It carried no
+        risk parameter at all, and the 20% leverage cap (always 5x smaller)
+        bound every single call -- so every position was exactly 20% of equity
+        notional on every instrument. Changing risk_pct did nothing.
+
+        Now: size = (equity * risk_per_trade_pct) / distance_to_stop, with the
+        stop taken from the strategy when supplied and a volatility-scaled
+        estimate when not. The full SizingResult is kept on self.last_sizing
+        so callers can tell real risk sizing from a capped or fallback number.
+        """
+        result = position_sizing.size_position(
+            symbol=symbol,
+            price=price,
+            equity=self.trader.equity,
+            risk_per_trade=getattr(self.config, 'risk_per_trade_pct', 0.005),
+            stop_distance=stop_distance,
+            stop_price=stop_price,
+            max_position_size=self.config.max_position_size,
+            max_leverage_pct=getattr(self.config, 'max_leverage_pct', 0.20),
+            vol_tracker=self.vol_tracker,
+        )
+        self.last_sizing = result
+
+        for w in result.warnings:
+            print(f"[SIZING] {symbol}: {w}")
+
+        size = result.size
         
         # Ensure we have cash for at least 10% margin
         margin_requirement = 0.10

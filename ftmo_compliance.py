@@ -40,6 +40,8 @@ import pytz
 # CONSTANTS & CONFIGURATION
 # ==============================================================================
 
+import ftmo_daily_anchor
+
 PRAGUE_TZ = pytz.timezone('Europe/Prague')
 UTC_TZ = pytz.UTC
 
@@ -149,9 +151,26 @@ class EquityPoint:
 # ==============================================================================
 
 def to_prague_time(dt: datetime) -> datetime:
-    """Convert datetime to Prague timezone"""
+    """
+    Convert datetime to Prague timezone.
+
+    INVARIANT: naive timestamps are UTC.
+
+    This is enforced upstream, not assumed here. Each data source is
+    responsible for normalising to naive UTC before its trades reach this
+    module:
+      - Forex  : forex_data_processor.py converts HistData EST-fixed (UTC-5,
+                 no DST) -> UTC at ingest and marks the file _1min_utc.csv.
+      - Crypto : CCXT returns epoch milliseconds, which pandas parses as UTC.
+      - Indices: NOT YET AUDITED. Kaggle equity files are typically US market
+                 local time WITH daylight saving, which would be a different
+                 bug from the forex one. Do not assume these are UTC.
+
+    If that invariant breaks, the Prague-midnight daily reset lands in the
+    wrong place and every max-daily-loss check silently measures the wrong
+    24-hour window.
+    """
     if dt.tzinfo is None:
-        # Assume UTC if no timezone
         dt = UTC_TZ.localize(dt)
     return dt.astimezone(PRAGUE_TZ)
 
@@ -406,13 +425,20 @@ class FTMOComplianceChecker:
         # Inject daily checkpoints so every calendar day with an open position
         # gets an equity observation (multi-day holds previously skipped days --
         # no daily-loss check exactly where weekend gaps bite)
+        #
+        # ANCHOR FIX (event curve): these used to be placed with
+        # pd.Timestamp.normalize(), i.e. 00:00 UTC, while _calculate_daily_stats
+        # groups by PRAGUE date. Prague midnight is 23:00 UTC under CET and
+        # 22:00 UTC under CEST, so the "day start" observation actually sat 1-2
+        # hours into the trading day and moved by an hour twice a year. FTMO
+        # recalculates at midnight CE(S)T, so that is where the checkpoint goes.
         if events:
-            day = pd.Timestamp(events[0]['timestamp']).normalize() + pd.Timedelta(days=1)
-            end_ts = pd.Timestamp(events[-1]['timestamp'])
-            checkpoints = []
-            while day < end_ts:
-                checkpoints.append({'timestamp': day, 'event': 'checkpoint'})
-                day += pd.Timedelta(days=1)
+            checkpoints = [
+                {'timestamp': ts, 'event': 'checkpoint'}
+                for ts in ftmo_daily_anchor.prague_midnight_checkpoints(
+                    events[0]['timestamp'], events[-1]['timestamp']
+                )
+            ]
             events = sorted(events + checkpoints,
                             key=lambda x: (x['timestamp'], x['event'] == 'exit'))
 
@@ -520,13 +546,16 @@ class FTMOComplianceChecker:
 
         # Inject daily checkpoints so every calendar day with an open position
         # gets an equity observation (multi-day holds previously skipped days)
+        #
+        # ANCHOR FIX (intraday curve): see the note in _build_equity_curve.
+        # Checkpoints now land on true Prague midnight, DST-correct.
         if events:
-            day = pd.Timestamp(events[0]['timestamp']).normalize() + pd.Timedelta(days=1)
-            end_ts = pd.Timestamp(events[-1]['timestamp'])
-            cps = []
-            while day < end_ts:
-                cps.append({'timestamp': day, 'type': 'checkpoint'})
-                day += pd.Timedelta(days=1)
+            cps = [
+                {'timestamp': ts, 'type': 'checkpoint'}
+                for ts in ftmo_daily_anchor.prague_midnight_checkpoints(
+                    events[0]['timestamp'], events[-1]['timestamp']
+                )
+            ]
             events = sorted(events + cps, key=lambda x: x['timestamp'])
         
         # Process events
@@ -620,38 +649,25 @@ class FTMOComplianceChecker:
         - daily_pnl
         - daily_drawdown (from start of day)
         """
-        df = equity_curve.copy()
-        
-        # Convert to Prague timezone and extract date
-        df['prague_time'] = df['timestamp'].apply(to_prague_time)
-        df['prague_date'] = df['prague_time'].apply(lambda x: x.date())
-        
-        # Group by Prague date
-        daily_stats = []
-        
-        for date, group in df.groupby('prague_date'):
-            start_equity = group['equity'].iloc[0]
-            end_equity = group['equity'].iloc[-1]
-            min_equity = group['equity'].min()
-            max_equity = group['equity'].max()
-            
-            # Daily loss is the worst drawdown from the START of the day's equity
-            # FTMO rule: 5% of INITIAL BALANCE, not current balance
-            daily_low_from_start = start_equity - min_equity
-            daily_loss_pct = daily_low_from_start / initial_balance * 100
-            
-            daily_stats.append({
-                'date': date,
-                'start_equity': start_equity,
-                'end_equity': end_equity,
-                'min_equity': min_equity,
-                'max_equity': max_equity,
-                'daily_pnl': end_equity - start_equity,
-                'daily_loss_from_start': daily_low_from_start,
-                'daily_loss_pct': daily_loss_pct
-            })
-        
-        return pd.DataFrame(daily_stats)
+        # ANCHOR FIX (daily stats)
+        #
+        # Was: start_equity = group['equity'].iloc[0], i.e. the first EVENT
+        # inside the Prague day, measured on equity.
+        #
+        # FTMO recalculates the limit at midnight CE(S)T from the account
+        # BALANCE ("Intraday changes resulting from open positions do not
+        # affect the Maximum Daily Loss Limit"), and compares EQUITY against
+        # it. Using equity on both sides meant that carrying a floating loss
+        # across midnight lowered the anchor, shrank the measured daily loss,
+        # and hid real breaches -- wrong in the optimistic direction.
+        #
+        # Column contract is preserved; anchor_balance, daily_loss_limit,
+        # breached and anchor_source are added for diagnostics.
+        return ftmo_daily_anchor.calculate_daily_stats_anchored(
+            equity_curve,
+            initial_balance,
+            max_daily_loss_pct=MAX_DAILY_LOSS_PCT,
+        )
     
     def _calculate_max_total_drawdown(
         self,
@@ -849,6 +865,36 @@ class FTMOComplianceChecker:
         
         return pd.DataFrame(results)
     
+    def simulate_pass_rate_bootstrap(
+        self,
+        trades_df: pd.DataFrame,
+        account_size: int = 100_000,
+        phase: str = 'challenge',
+        n_simulations: int = 1000,
+        window_days: int = 30,
+        mode: str = 'block',
+        random_seed: int = 42,
+        verbose: bool = True,
+    ):
+        """
+        Preferred pass-rate estimate.
+
+        Samples trades with replacement over a fixed challenge window and lays
+        them on a fresh calendar, so both the trade set and its path through
+        time vary between simulations. Defaults to a stationary block bootstrap,
+        which preserves streaks -- and streaks are what breach a daily-loss rule.
+
+        Returns a PassRateResult; call .to_dict() for the legacy dict shape.
+        Reports degenerate=True if every simulation somehow came out identical,
+        which is the failure the old implementation had and never surfaced.
+        """
+        import pass_rate_simulator as _prs
+        return _prs.simulate_pass_rate(
+            self, trades_df, account_size=account_size, phase=phase,
+            n_simulations=n_simulations, window_days=window_days,
+            mode=mode, random_seed=random_seed, verbose=verbose,
+        )
+
     def simulate_pass_rate(
         self,
         trades_df: pd.DataFrame,
@@ -914,10 +960,27 @@ class FTMOComplianceChecker:
             if (i + 1) % 200 == 0:
                 print(f"  Progress: {i+1}/{n_simulations} ({(i+1)/n_simulations*100:.0f}%)")
             
-            # Shuffle trade order
-            shuffled = trades.sample(frac=1, random_state=random_seed + i).reset_index(drop=True)
-            
-            # Validate
+            # PASS-RATE-FIX
+            # Was: trades.sample(frac=1, ...) then validate(shuffled).
+            #
+            # That shuffle is a NO-OP. Every trade row carries its own
+            # entry_date and exit_date, and _build_equity_curve sorts events by
+            # timestamp before doing anything, so reordering rows cannot change
+            # the result. Verified: original and shuffled give byte-identical
+            # return and drawdown. All 1,000 simulations were the same
+            # simulation, pass_rate could only ever be 0.0 or 1.0, and the
+            # percentiles below were all the same number.
+            #
+            # pass_rate_simulator samples WITH REPLACEMENT and re-dates onto a
+            # fresh calendar, so composition and path both vary. Preferred over
+            # this loop entirely -- see simulate_pass_rate_bootstrap().
+            import pass_rate_simulator as _prs
+            shuffled = _prs.build_synthetic_window(
+                trades, window_days=30,
+                rng=np.random.RandomState(random_seed + i))
+            if shuffled.empty:
+                continue
+
             result = self.validate(shuffled, account_size=account_size, phase=phase)
             
             max_dd_distribution.append(result.max_total_drawdown_pct)

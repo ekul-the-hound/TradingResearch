@@ -57,6 +57,40 @@ class ResultsDatabase:
             )
         ''')
         
+        # TRADE-PERSISTENCE-SCHEMA
+        # backtest_results holds summary statistics only -- total_trades is a
+        # count. Without the underlying trades, FTMOComplianceChecker cannot
+        # run at all (it needs entry/exit dates and prices), which is why the
+        # dashboard fell back to proxy badges and why canonical_result had a
+        # synthetic-returns branch. The trades are already computed by
+        # TradeTracker on every backtest and thrown away here; this keeps them.
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS backtest_trades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                backtest_id INTEGER NOT NULL,
+                strategy_name TEXT,
+                variant_id TEXT,
+                symbol TEXT,
+                timeframe TEXT,
+                entry_date TEXT,
+                exit_date TEXT,
+                entry_price REAL,
+                exit_price REAL,
+                size REAL,
+                pnl REAL,
+                return_pct REAL,
+                duration_bars INTEGER,
+                is_long INTEGER,
+                FOREIGN KEY (backtest_id) REFERENCES backtest_results(id)
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bt_trades_backtest "
+            "ON backtest_trades(backtest_id)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bt_trades_lookup "
+            "ON backtest_trades(variant_id, symbol, timeframe)")
+
         # Also create the old table name for backwards compatibility
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS backtests (
@@ -135,10 +169,105 @@ class ResultsDatabase:
         ))
         
         backtest_id = cursor.lastrowid
+
+        # TRADE-PERSISTENCE-SAVE
+        # Persist the trade list alongside the summary. Wrapped so that a
+        # malformed trade record can never lose the backtest row itself --
+        # a partial save is much better than a rolled-back result.
+        trades = result.get('trades') or []
+        if trades:
+            try:
+                rows = []
+                for t in trades:
+                    if not isinstance(t, dict):
+                        continue
+                    rows.append((
+                        backtest_id,
+                        result.get('strategy_name'),
+                        result.get('variant_id'),
+                        result.get('symbol'),
+                        result.get('timeframe'),
+                        str(t.get('entry_date')) if t.get('entry_date') is not None else None,
+                        str(t.get('exit_date')) if t.get('exit_date') is not None else None,
+                        t.get('entry_price'),
+                        t.get('exit_price'),
+                        t.get('size'),
+                        t.get('pnl'),
+                        t.get('return_pct'),
+                        t.get('duration_bars'),
+                        1 if t.get('is_long') else 0,
+                    ))
+                if rows:
+                    cursor.executemany('''
+                        INSERT INTO backtest_trades (
+                            backtest_id, strategy_name, variant_id, symbol, timeframe,
+                            entry_date, exit_date, entry_price, exit_price, size,
+                            pnl, return_pct, duration_bars, is_long
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', rows)
+            except Exception as e:
+                print(f"[WARN] Could not persist {len(trades)} trades for "
+                      f"backtest {backtest_id}: {type(e).__name__}: {e}")
+
         conn.commit()
         conn.close()
         
         return backtest_id
+
+    def get_trades(self, backtest_id):
+        """
+        Trade list for one backtest, as a list of dicts matching the shape
+        FTMOComplianceChecker expects. Empty list if none were persisted
+        (results saved before this table existed have none).
+        """
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                "SELECT * FROM backtest_trades WHERE backtest_id = ? "
+                "ORDER BY exit_date ASC", (backtest_id,)).fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
+        finally:
+            conn.close()
+
+    def get_latest_trades(self, variant_id=None, strategy_name=None,
+                          symbol=None, timeframe=None):
+        """
+        Trades from the most recent matching backtest.
+
+        Returns (trades, backtest_id). Scoped to a single backtest deliberately:
+        concatenating trades across runs would splice unrelated equity paths
+        together and produce a meaningless daily-loss sequence.
+        """
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            q = "SELECT id FROM backtest_results WHERE 1=1"
+            p = []
+            if variant_id:
+                q += " AND variant_id = ?"; p.append(variant_id)
+            if strategy_name:
+                q += " AND strategy_name = ?"; p.append(strategy_name)
+            if symbol:
+                q += " AND symbol = ?"; p.append(symbol)
+            if timeframe:
+                q += " AND timeframe = ?"; p.append(timeframe)
+            q += " ORDER BY id DESC LIMIT 1"
+
+            row = conn.execute(q, p).fetchone()
+            if not row:
+                return [], None
+            bid = row['id']
+            trades = conn.execute(
+                "SELECT * FROM backtest_trades WHERE backtest_id = ? "
+                "ORDER BY exit_date ASC", (bid,)).fetchall()
+            return [dict(t) for t in trades], bid
+        except Exception:
+            return [], None
+        finally:
+            conn.close()
     
     def get_all_backtests(self, strategy_name=None, symbol=None, variant_id=None):
         """Retrieve backtests with optional filtering"""

@@ -1112,30 +1112,35 @@ def FTMOPage():
     account_sizes = [10000, 25000, 50000, 100000, 200000]
     results_rows = []
     
-    for size in account_sizes:
-        # Scale the return to the account size
-        # If we made -30% on $10k, we'd make -30% on any size
-        scaled_return = result.total_return_pct
-        scaled_final = size * (1 + scaled_return / 100)
-        scaled_dd = result.max_drawdown_pct
-        
-        # FTMO limits
-        daily_ok = scaled_dd < 5  # 5% daily limit
-        total_ok = scaled_dd < 10  # 10% total limit
-        profit_ok = scaled_return >= 10  # 10% profit target
-        min_days_ok = result.total_trades >= 4  # Min trading days
-        
-        passed = daily_ok and total_ok and profit_ok and min_days_ok
-        
+    # FTMO PROXY FIX
+    #
+    # Was: daily_ok = scaled_dd < 5 (total drawdown, not daily loss) and
+    # min_days_ok = result.total_trades >= 4 (trade COUNT standing in for
+    # distinct trading DAYS -- four trades in one session passed a rule that
+    # requires four days). trades_df was built on the line above and ignored.
+    #
+    # Now: the real checker runs on those trades. When it cannot run, the rows
+    # list stays empty and the UI shows why rather than a fabricated verdict.
+    import dashboard_ftmo_panel as _ftmo_panel
+
+    ftmo_panel = _ftmo_panel.rows_from_trades(
+        trades_df,
+        phase='challenge',
+        account_sizes=account_sizes,
+        strategy_id=getattr(result, 'strategy_name', '') or getattr(result, 'variant_id', ''),
+    )
+    ftmo_unavailable_reason = '' if ftmo_panel.available else ftmo_panel.reason
+
+    for r in ftmo_panel.rows:
         results_rows.append({
-            'account_size': size,
-            'daily_loss_ok': daily_ok,
-            'total_drawdown_ok': total_ok,
-            'profit_target_ok': profit_ok,
-            'min_days_ok': min_days_ok,
-            'final_return_pct': scaled_return,
-            'final_equity': scaled_final,
-            'PASS': passed
+            'account_size': r['account_size'],
+            'daily_loss_ok': r['daily_ok'],
+            'total_drawdown_ok': r['total_ok'],
+            'profit_target_ok': r['profit_ok'],
+            'min_days_ok': r['min_days_ok'],
+            'final_return_pct': r['final_return_pct'],
+            'final_equity': r['final_equity'],
+            'PASS': r['passed']
         })
     
     return html.div({'style': {'display': 'flex', 'flexDirection': 'column', 'gap': '24px'}},

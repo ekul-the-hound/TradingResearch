@@ -356,9 +356,29 @@ class BacktestAdapter:
         wrs = [r.win_rate for r in results if r.win_rate is not None]
         pfs = [r.profit_factor for r in results if r.profit_factor is not None]
 
-        # Concatenate return arrays
-        return_arrays = [r.returns for r in results if r.returns is not None and len(r.returns) > 0]
-        all_returns = np.concatenate(return_arrays) if return_arrays else None
+        # SYNTHETIC-RETURNS-FIX-AGGREGATE
+        # Previously this concatenated every non-empty returns array and built
+        # the aggregate without carrying returns_synthetic forward, so mixing
+        # one real result with one fabricated one produced an aggregate that
+        # reported itself as clean. Provenance was destroyed exactly where it
+        # started to matter. Synthetic inputs are now excluded and the
+        # aggregate records that it is incomplete.
+        usable, n_synthetic = [], 0
+        for r in results:
+            if r.returns is None or len(r.returns) == 0:
+                continue
+            if getattr(r, 'returns_synthetic', False) or getattr(r, 'returns_source', '') == 'synthetic':
+                n_synthetic += 1
+                continue
+            usable.append(r.returns)
+
+        all_returns = np.concatenate(usable) if usable else None
+        agg_returns_source = 'none'
+        if usable:
+            agg_returns_source = 'mixed' if n_synthetic else 'trade_list'
+        if n_synthetic:
+            print(f"[WARN] {name}: excluded {n_synthetic} synthetic return series "
+                  f"from aggregation; aggregate marked '{agg_returns_source}'")
 
         agg = CanonicalResult(
             strategy_id=f"{name}_agg",
@@ -371,6 +391,7 @@ class BacktestAdapter:
             win_rate=float(np.mean(wrs)) if wrs else None,
             profit_factor=float(np.mean(pfs)) if pfs else None,
             returns=all_returns,
+            returns_source=agg_returns_source,
         )
         return agg
 

@@ -176,6 +176,84 @@ class Pipeline:
     # ==================================================================
     # STEP 2: Backtest & Filter
     # ==================================================================
+    def _lookahead_gate(self, candidates):
+        """
+        LOOKAHEAD-GATE
+
+        Static lookahead scan in front of evaluation. A strategy that reads
+        future bars backtests beautifully and loses money live, and it inflates
+        exactly the metrics used for promotion -- so the scan belongs BEFORE
+        backtest time is spent, not after.
+
+        Layer 1 only (AST, milliseconds, no data). The empirical perturbation
+        test costs a backtest per cut point and belongs at promotion, not here.
+
+        Fails open: if the detector is missing the pipeline continues rather
+        than halting, but says so. Silent degradation is how the pipeline's
+        dead steps stayed hidden for so long.
+        """
+        try:
+            from lookahead_detector import LookaheadDetector
+        except ImportError:
+            self._log("  [WARN]  lookahead_detector not available - gate SKIPPED")
+            return candidates, []
+
+        det = LookaheadDetector()
+        kept, rejected = [], []
+
+        for cr in candidates:
+            src_path = None
+            for attr in ('source_path', 'file_path', 'strategy_path'):
+                if getattr(cr, attr, None):
+                    src_path = getattr(cr, attr)
+                    break
+            if not src_path:
+                params = getattr(cr, 'strategy_params', {}) or {}
+                src_path = params.get('source_path') or params.get('file_path')
+
+            if not src_path or not os.path.exists(src_path):
+                kept.append(cr)          # nothing to scan; not evidence of guilt
+                continue
+
+            # SAFETY-GATE
+            # Three static checks in one pass, cheapest first so a rejection
+            # short-circuits before any backtest is spent.
+            reasons = []
+
+            report = det.scan_file(src_path)
+            if report.failed:
+                rules = ', '.join(sorted({f.rule for f in report.critical})) or 'parse error'
+                reasons.append(f"lookahead({rules})")
+
+            # Prohibited patterns: martingale, grid, hedging. A strategy using
+            # these cannot be funded regardless of performance, so this is a
+            # harder gate than any metric threshold. Note the mutation prompt
+            # used to actively request martingale -- see mutation_config.
+            if not reasons:
+                try:
+                    import prohibited_patterns as _pp
+                    prep = _pp.scan_file(src_path)
+                    if prep.failed:
+                        pats = ', '.join(sorted(prep.patterns))
+                        reasons.append(f"prohibited({pats})")
+                except ImportError:
+                    self._log("  [WARN]  prohibited_patterns not available")
+
+            if reasons:
+                why = ' '.join(reasons)
+                rejected.append((cr, why))
+                if hasattr(cr, 'strategy_params'):
+                    cr.strategy_params['safety_gate_rejected'] = why
+                self._log(f"  [REJECT] {cr.strategy_id}: {why}")
+            else:
+                kept.append(cr)
+
+        if rejected:
+            self._log(f"  [GATE] Lookahead: {len(rejected)} rejected, {len(kept)} passed")
+        else:
+            self._log(f"  [GATE] Lookahead: all {len(kept)} candidates clean")
+        return kept, rejected
+
     def step_2_backtest_filter(self):
         """
         Run backtests across symbols/timeframes, filter by thresholds.
@@ -305,8 +383,22 @@ class Pipeline:
 
                     cr.strategy_params["mc_mean_sharpe"] = getattr(mc, "sharpe_ratio_mean", 0)
                     cr.strategy_params["bootstrap_ci_low"] = getattr(bs, "ci_lower", 0)
+                    cr.strategy_params["validation_status"] = "validated"
                     validated.append(cr)
                 else:
+                    # SYNTHETIC-RETURNS-FIX-PIPELINE
+                    # This branch used to append the candidate unchanged, so a
+                    # strategy that was never validated became indistinguishable
+                    # from one that passed. Tag it instead.
+                    if cr.returns is None or len(cr.returns) == 0:
+                        why = "no return series (trade extraction disabled?)"
+                    elif getattr(cr, "returns_synthetic", False) or getattr(cr, "returns_source", "") in ("synthetic", "mixed"):
+                        why = f"return series is '{getattr(cr, 'returns_source', 'synthetic')}', not trade-derived"
+                    else:
+                        why = f"only {len(cr.returns)} observations, need > 30"
+                    cr.strategy_params["validation_status"] = "skipped"
+                    cr.strategy_params["validation_skipped_reason"] = why
+                    self._log(f"  [WARN] {cr.strategy_id} NOT validated: {why}")
                     validated.append(cr)
 
         except ImportError:
@@ -338,12 +430,24 @@ class Pipeline:
                 pass
 
             try:
-                from capacity_model import CapacityModel
-                cm = CapacityModel()
+                # PIPELINE-API-FIX-CAPACITY
+                # Was: `from capacity_model import CapacityModel`. That name
+                # does not exist -- the module exports CapacityEstimator. The
+                # resulting ImportError was caught by a bare `pass`, so this
+                # block has silently done nothing and max_capacity was never
+                # written. Quieter than the step 6 bug, and longer lived.
+                from capacity_model import CapacityEstimator
+                cm = CapacityEstimator()
                 cap = cm.estimate(cr.to_risk_dict())
-                cr.strategy_params["max_capacity"] = getattr(cap, "max_aum", 0)
+                max_aum = getattr(cap, "max_aum", None)
+                if max_aum is None:
+                    max_aum = getattr(cap, "max_capacity_usd", None)
+                cr.strategy_params["max_capacity"] = max_aum if max_aum is not None else 0
             except ImportError:
-                pass
+                self._log("  [WARN]  capacity_model not available")
+            except Exception as e:
+                self._log(f"  [WARN]  Capacity estimate failed for {cr.strategy_id} "
+                          f"({type(e).__name__}: {e})")
 
         self._results["step5_risk_assessed"] = candidates
         self._log(f"  [OK] Risk analysis complete for {len(candidates)} strategies")
@@ -361,20 +465,53 @@ class Pipeline:
             return
 
         try:
-            from diversification_filter import DiversificationFilter
-            df = DiversificationFilter(max_correlation=self.config.max_correlation)
+            # INTEGRATION-FIX-PIPE05
+            # This block previously called two things that do not exist:
+            #   DiversificationFilter(max_correlation=...)  -- the constructor
+            #       takes lineage_tracker only; max_correlation is a field on
+            #       DiversityConfig.
+            #   df.filter(returns_dict)                     -- the method is
+            #       run(strategies, returns_dict, trade_dates_dict, config)
+            #       and it returns a DiversificationResult, not a list of ids.
+            # Both raise TypeError/AttributeError, which `except ImportError`
+            # does not catch, so this step has never completed. The except is
+            # widened below so a failure here degrades to "keep everything"
+            # rather than aborting the pipeline.
+            from diversification_filter import DiversificationFilter, DiversityConfig
+
             returns_dict = {}
             for cr in candidates:
                 if cr.returns is not None and len(cr.returns) > 10:
                     returns_dict[cr.strategy_id] = cr.returns
 
             if returns_dict:
-                surviving_ids = df.filter(returns_dict)
+                strategies = [
+                    {
+                        "strategy_id": cr.strategy_id,
+                        "name": cr.strategy_name or cr.strategy_id,
+                        "composite_score": cr.sharpe_ratio if cr.sharpe_ratio is not None else 0.0,
+                    }
+                    for cr in candidates
+                ]
+                dcfg = DiversityConfig(max_correlation=self.config.max_correlation)
+                result = DiversificationFilter().run(
+                    strategies, returns_dict=returns_dict, config=dcfg)
+                surviving_ids = {
+                    s.get("strategy_id", s.get("name")) for s in result.selected
+                }
                 diversified = [cr for cr in candidates if cr.strategy_id in surviving_ids]
+                self._log(f"  [INFO] max pairwise corr {result.max_pairwise_corr:.2f}, "
+                          f"effective N {result.effective_n:.1f}")
             else:
+                self._log("  [WARN]  No candidate has a usable return series; "
+                          "diversification skipped")
                 diversified = candidates
         except ImportError:
             self._log("  [WARN]  diversification_filter not available")
+            diversified = candidates
+        except Exception as e:
+            self._log(f"  [WARN]  Diversification failed ({type(e).__name__}: {e}); "
+                      f"keeping all candidates")
             diversified = candidates
 
         self._results["step6_diversified"] = diversified
@@ -416,13 +553,28 @@ class Pipeline:
 
         # Shadow trading setup for validation pool
         try:
+            # PIPELINE-API-FIX-SHADOW
+            # Was: `st = ShadowTrader()` then `st.register(id, sharpe)`.
+            # ShadowTrader.__init__ requires strategy_id and there is no
+            # register() -- the class is one tracker per strategy, not a
+            # registry. Real API: submit_order / mark_to_market / end_of_day /
+            # get_status / get_comparison(backtest_sharpe) / stop.
             from shadow_trader import ShadowTrader
-            st = ShadowTrader()
+            shadow_traders = {}
             for cr in validation_pool:
-                st.register(cr.strategy_id, cr.sharpe_ratio)
-            self._log(f"  [SHADOW] Shadow trader tracking {len(validation_pool)} strategies")
+                shadow_traders[cr.strategy_id] = {
+                    "trader": ShadowTrader(strategy_id=cr.strategy_id),
+                    # Retained so get_comparison() can be called once the
+                    # strategy has accumulated shadow fills.
+                    "backtest_sharpe": cr.sharpe_ratio if cr.sharpe_ratio is not None else 0.0,
+                }
+            self._results["step7_shadow_traders"] = shadow_traders
+            self._log(f"  [SHADOW] Shadow trader tracking {len(shadow_traders)} strategies")
         except ImportError:
-            pass
+            self._log("  [WARN]  shadow_trader not available")
+        except Exception as e:
+            self._log(f"  [WARN]  Shadow trader setup failed "
+                      f"({type(e).__name__}: {e})")
 
         self._results["step7_mutations_triggered"] = mutations
 

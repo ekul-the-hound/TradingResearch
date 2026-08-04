@@ -98,15 +98,33 @@ Only trade with 200 EMA trend
 # Examples: Fixed size, percentage risk, Kelly criterion, etc.
 # ------------------------------------------------------------------------------
 
+# PROHIBITED-PATTERN-SOURCE-FIX
+# Removed: "Martingale (increase after loss)", "Scale in (multiple entries)",
+# "DCA (dollar cost averaging)".
+#
+# This text goes straight into the mutation prompt, so it was instructing the
+# LLM to produce strategies that prop firms prohibit outright. Such a strategy
+# cannot be funded regardless of its backtest, so every hour spent evaluating
+# one is wasted -- and the pipeline had no detector to catch them.
+#
+# Anti-martingale and pyramiding are KEPT. Sizing up after WINS is a different
+# behaviour and is generally permitted; removing it would shrink the search
+# space for no benefit.
+#
+# prohibited_patterns.py catches these downstream if an LLM produces one
+# unprompted, which it occasionally will.
 POSITION_SIZING = """
-Fixed percentage risk per trade (1%, 2%)
-Volatility-adjusted position size
-Martingale (increase after loss)
+Fixed percentage risk per trade (0.25%, 0.5%, 1%)
+Volatility-adjusted position size (ATR-scaled)
 Anti-martingale (increase after win)
-Kelly criterion
-Scale in (multiple entries)
-DCA (dollar cost averaging)
-Pyramid (add to winners)
+Kelly criterion (fractional, capped)
+Pyramid (add to winners only, never to losers)
+Fixed lot size
+Equity-curve-based sizing (reduce after drawdown)
+
+NEVER generate: martingale or any size increase after a loss; grid or
+averaging down into a losing position; adding to a position that has moved
+against you. Prop firms prohibit these and will void the account.
 """
 
 
