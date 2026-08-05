@@ -24,7 +24,7 @@ from holdout_guard import (DEFAULT_HOLDOUT_FRACTION, HoldoutExhausted,
                            HoldoutGuard, HoldoutViolation)
 
 
-def frame(n=1000, start='2020-01-01'):
+def frame(n=1000, start='2020-01-01') -> pd.DataFrame:
     idx = pd.date_range(start, periods=n, freq='D')
     close = 100 * np.exp(np.cumsum(np.random.RandomState(0).normal(0, 0.01, n)))
     return pd.DataFrame({'open': close, 'high': close * 1.01,
@@ -159,11 +159,12 @@ class TestBudget(Base):
 
     def test_reason_and_strategy_are_mandatory(self):
         g = self.guard()
+        # Deliberately invalid arguments -- that is what is being tested.
         for bad in ('', '   ', None):
             with self.assertRaises(ValueError):
-                g.request_access(bad, 's1')
+                g.request_access(bad, 's1')  # pyright: ignore[reportArgumentType]
             with self.assertRaises(ValueError):
-                g.request_access('reason', bad)
+                g.request_access('reason', bad)  # pyright: ignore[reportArgumentType]
 
 
 class TestLedger(Base):

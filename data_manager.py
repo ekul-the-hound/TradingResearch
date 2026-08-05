@@ -172,11 +172,22 @@ class DataManager:
         everything through unchanged.
         """
         df = self._get_data_unguarded(symbol, timeframe, max_bars, use_cache, **kwargs)
+
+        # FINGERPRINT-RECORD
+        # Fingerprint AFTER the holdout truncation below would be wrong -- the
+        # strategy is what it actually saw, so the hash must cover the frame
+        # that is returned. Recorded further down, once enforce() has run.
         try:
             import holdout_guard
             guard = holdout_guard.HoldoutGuard.load()
-            return guard.enforce(df, symbol=symbol, timeframe=timeframe,
-                                 token=holdout_token)
+            out = guard.enforce(df, symbol=symbol, timeframe=timeframe,
+                                token=holdout_token)
+            try:
+                import data_fingerprint
+                data_fingerprint.record(symbol, timeframe, out)
+            except Exception:
+                pass          # provenance is worth having, not worth crashing for
+            return out
         except ImportError:
             return df
         except Exception as e:

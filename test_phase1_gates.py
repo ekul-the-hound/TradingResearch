@@ -270,7 +270,12 @@ def _strategies():
         params = (('period', 10),)
 
         def __init__(self):
-            self.sma = bt.indicators.SMA(self.data.close, period=self.p.period)
+            # Backtrader builds indicators, their params and their aliases
+            # through a metaclass, so no static form of this call resolves:
+            # SMA collides with the sma submodule, SimpleMovingAverage is an
+            # alias created at runtime, and the generated __init__ reports
+            # zero positional arguments. Scoped ignores, not a file-wide rule.
+            self.sma = bt.indicators.SMA(self.data.close, period=self.p.period)  # pyright: ignore[reportCallIssue]
 
         def next(self):
             if len(self) < self.p.period:

@@ -17,8 +17,17 @@ import unittest
 import numpy as np
 import pandas as pd
 
+import ast as _ast
+
 import lookahead_detector as ld
 from lookahead_detector import LookaheadDetector, CRITICAL, WARNING
+
+
+def _Visitor_const(value):
+    """Parse a literal and run it through the visitor's constant extractor."""
+    node = _ast.parse(f"x[{value}]", mode='eval').body
+    assert isinstance(node, _ast.Subscript)   # narrow expr -> Subscript
+    return ld._Visitor._const_int(node.slice)
 
 
 # ==============================================================================
@@ -269,9 +278,14 @@ def _strategies():
         params = (('fast', 10), ('slow', 30))
 
         def __init__(self):
-            self.f = bt.indicators.SMA(self.data.close, period=self.p.fast)
-            self.s = bt.indicators.SMA(self.data.close, period=self.p.slow)
-            self.x = bt.indicators.CrossOver(self.f, self.s)
+            # Backtrader builds indicators, their params and their aliases
+            # through a metaclass, so no static form of this call resolves:
+            # SMA collides with the sma submodule, SimpleMovingAverage is an
+            # alias created at runtime, and the generated __init__ reports
+            # zero positional arguments. Scoped ignores, not a file-wide rule.
+            self.f = bt.indicators.SMA(self.data.close, period=self.p.fast)  # pyright: ignore[reportCallIssue]
+            self.s = bt.indicators.SMA(self.data.close, period=self.p.slow)  # pyright: ignore[reportCallIssue]
+            self.x = bt.indicators.CrossOver(self.f, self.s)  # pyright: ignore[reportCallIssue]
 
         def next(self):
             if not self.position and self.x > 0:
@@ -329,11 +343,15 @@ class TestPerturbation(unittest.TestCase):
     def test_short_data_is_an_error_not_a_pass(self):
         r = self.d.perturbation_test(self.CleanSMA, self.data.head(30))
         self.assertFalse(r.clean, "insufficient data must not silently pass")
+        assert r.error is not None      # narrow Optional for the checker
         self.assertIn('60 bars', r.error)
 
     def test_missing_columns_is_an_error(self):
-        r = self.d.perturbation_test(self.CleanSMA, self.data[['close']])
+        # DataFrame slice: annotate so the checker sees a frame, not a Series.
+        close_only = pd.DataFrame(self.data[['close']])
+        r = self.d.perturbation_test(self.CleanSMA, close_only)
         self.assertFalse(r.clean)
+        assert r.error is not None
         self.assertIn('columns', r.error)
 
     def test_orders_timestamped_at_submission_not_notification(self):
@@ -360,8 +378,9 @@ class TestPerturbation(unittest.TestCase):
                     self.buy()
 
         Rec = ld._make_entry_analyzer()
-        c = bt.Cerebro(stdstats=False)
-        c.adddata(bt.feeds.PandasData(dataname=self.data))
+        # Metaclass-generated kwargs; see the note in lookahead_detector.
+        c = bt.Cerebro(stdstats=False)  # pyright: ignore[reportCallIssue]
+        c.adddata(bt.feeds.PandasData(dataname=self.data))  # pyright: ignore[reportCallIssue]
         c.addstrategy(BuyOnce)
         c.addanalyzer(Rec, _name='e')
         with redirect_stdout(io.StringIO()):
@@ -371,7 +390,8 @@ class TestPerturbation(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]['dt'], fired['bar_dt'],
                          "recorded time must be the bar the order was created on")
-        self.assertEqual(entries[0]['dt'], self.data.index[50].to_pydatetime())
+        expected = pd.Timestamp(self.data.index[50])  # type: ignore[arg-type]
+        self.assertEqual(entries[0]['dt'], expected.to_pydatetime())
 
     def test_multi_bar_peek_is_caught(self):
         """A strategy reading 3 bars ahead must also be detected."""

@@ -190,9 +190,12 @@ class _Visitor(ast.NodeVisitor):
 
     @staticmethod
     def _const_int(slice_node):
+        # NOTE: an ast.Index unwrapping branch used to sit here for py<3.9.
+        # Since 3.9 ast.parse never emits Index nodes (verified on 3.12: a
+        # subscript slice comes back as Constant), so the branch was dead --
+        # and ast.Index subclasses slice, which has no .value, so the code in
+        # it could not have run correctly anyway. Removed rather than silenced.
         n = slice_node
-        if isinstance(n, ast.Index):          # py<3.9 compatibility
-            n = n.value
         if isinstance(n, ast.Constant) and isinstance(n.value, int) and not isinstance(n.value, bool):
             return n.value
         if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.UAdd, ast.USub)):
@@ -395,7 +398,10 @@ def _make_entry_analyzer():
                 'size': float(order.created.size or 0),
             })
 
-        def get_analysis(self):
+        def get_analysis(self):  # pyright: ignore[reportIncompatibleMethodOverride]
+            # Backtrader's Analyzer.get_analysis returns an AutoOrderedDict.
+            # A plain list is what every caller here wants and what Backtrader
+            # accepts, so the override is deliberate rather than an oversight.
             return self.entries
 
     return EntryRecorder
@@ -536,9 +542,13 @@ class LookaheadDetector:
         Recorder = _make_entry_analyzer()
 
         def run(df):
-            cerebro = bt.Cerebro(stdstats=False)
+            # Backtrader builds its kwargs through a metaclass, so a static
+            # checker cannot see stdstats/dataname. Both are valid; the ignores
+            # are scoped to these two calls so real call errors elsewhere still
+            # get reported.
+            cerebro = bt.Cerebro(stdstats=False)  # pyright: ignore[reportCallIssue]
             cerebro.broker.setcash(cash)
-            feed = bt.feeds.PandasData(dataname=df)
+            feed = bt.feeds.PandasData(dataname=df)  # pyright: ignore[reportCallIssue]
             cerebro.adddata(feed)
             cerebro.addstrategy(strategy_class, **(strategy_params or {}))
             cerebro.addanalyzer(Recorder, _name='entries')

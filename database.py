@@ -6,6 +6,7 @@
 # ==============================================================================
 
 import sqlite3
+from typing import Union
 import json
 from datetime import datetime
 import config
@@ -17,7 +18,13 @@ class ResultsDatabase:
     This keeps a permanent record of every test you run
     """
     
-    def __init__(self, db_path=config.DATABASE_PATH):
+    def __init__(self, db_path: Union[str, os.PathLike] = config.DATABASE_PATH):
+        # TYPING-FIX-DBPATH
+        # Previously unannotated, so checkers inferred `Path` from the default
+        # (config.DATABASE_PATH is a pathlib.Path) and rejected every caller
+        # passing a string -- including the test suite. sqlite3.connect and
+        # os.path.dirname have always accepted both, so the annotation now says
+        # what the body actually supports.
         self.db_path = db_path
         
         # Create results directory if it doesn't exist
@@ -84,6 +91,19 @@ class ResultsDatabase:
                 FOREIGN KEY (backtest_id) REFERENCES backtest_results(id)
             )
         ''')
+        # FINGERPRINT-SCHEMA
+        # Added by ALTER so an existing database keeps its rows. Those rows get
+        # NULL, which is precisely the signal that they predate provenance
+        # tracking -- and therefore predate the timezone fix.
+        for _col, _type in (('data_fingerprint', 'TEXT'), ('data_rows', 'INTEGER'),
+                            ('data_first', 'TEXT'), ('data_last', 'TEXT'),
+                            ('code_fingerprint', 'TEXT')):
+            try:
+                cursor.execute(
+                    f"ALTER TABLE backtest_results ADD COLUMN {_col} {_type}")
+            except Exception:
+                pass          # already present
+
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_bt_trades_backtest "
             "ON backtest_trades(backtest_id)")
@@ -169,6 +189,31 @@ class ResultsDatabase:
         ))
         
         backtest_id = cursor.lastrowid
+
+        # FINGERPRINT-SAVE
+        # Pull the fingerprint of the frame this backtest actually consumed.
+        # A result whose provenance cannot be established is far more useful
+        # marked as such than left looking like every other row.
+        try:
+            import data_fingerprint
+            fp = (result.get('data_fingerprint')
+                  or data_fingerprint.lookup(result.get('symbol'),
+                                             result.get('timeframe')))
+            if fp:
+                cursor.execute(
+                    "UPDATE backtest_results SET data_fingerprint = ?, "
+                    "data_rows = ?, data_first = ?, data_last = ?, "
+                    "code_fingerprint = ? WHERE id = ?",
+                    (fp.get('hash'), fp.get('rows'), fp.get('first'),
+                     fp.get('last'), data_fingerprint.code_fingerprint_str(),
+                     backtest_id))
+            else:
+                cursor.execute(
+                    "UPDATE backtest_results SET code_fingerprint = ? WHERE id = ?",
+                    (data_fingerprint.code_fingerprint_str(), backtest_id))
+        except Exception as e:
+            print(f"[WARN] Could not record provenance for backtest "
+                  f"{backtest_id}: {type(e).__name__}: {e}")
 
         # TRADE-PERSISTENCE-SAVE
         # Persist the trade list alongside the summary. Wrapped so that a

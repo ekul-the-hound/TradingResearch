@@ -58,7 +58,7 @@
 import os
 import sqlite3
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 

@@ -50,12 +50,22 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-try:
-    from hypothesis import HealthCheck, given, settings
-    from hypothesis import strategies as st
-    HAS_HYPOTHESIS = True
-except ImportError:
-    HAS_HYPOTHESIS = False
+def _has_hypothesis() -> bool:
+    """
+    hypothesis is optional: the named pathological cases are the everyday gate
+    and must run without it. Importing lazily rather than under a module-level
+    try/except keeps the names out of module scope entirely -- binding them to
+    None instead just trades "possibly unbound" for "attribute of None", and
+    importing at module level would make an optional dependency mandatory.
+    """
+    try:
+        import hypothesis  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+HAS_HYPOTHESIS = _has_hypothesis()
 
 
 # Below this many bars, Backtrader itself raises IndexError for ANY strategy
@@ -127,30 +137,6 @@ def pathological_cases(n: int = 80) -> Dict[str, pd.DataFrame]:
     return cases
 
 
-if HAS_HYPOTHESIS:
-    @st.composite
-    def ohlc_frames(draw, min_bars=MIN_VIABLE_BARS, max_bars=160):
-        """
-        Adversarial but VALID OHLCV frames.
-
-        Widely-spread magnitudes on purpose: a strategy tuned on EUR-USD at 1.10
-        can behave very differently at 60,000 (BTC) or 0.0001, and the pipeline
-        runs across all of them.
-        """
-        n = draw(st.integers(min_value=min_bars, max_value=max_bars))
-        magnitude = draw(st.sampled_from([1e-4, 1e-2, 1.0, 100.0, 1e4, 1e6]))
-        closes = draw(st.lists(
-            st.floats(min_value=0.01, max_value=100.0,
-                      allow_nan=False, allow_infinity=False),
-            min_size=n, max_size=n))
-        vols = draw(st.one_of(
-            st.just(None),
-            st.lists(st.floats(min_value=0.0, max_value=1e7,
-                               allow_nan=False, allow_infinity=False),
-                     min_size=n, max_size=n)))
-        return make_frame(np.array(closes) * magnitude, volumes=vols)
-
-
 # ==============================================================================
 # RUNNER
 # ==============================================================================
@@ -201,9 +187,11 @@ def _run_once(strategy_class, df, cash=100_000, params=None):
     if df is None or df.empty:
         return True, None
     try:
-        cerebro = bt.Cerebro(stdstats=False)
+        # Backtrader generates these kwargs via a metaclass, invisible to a
+        # static checker. Scoped ignores, not a blanket rule.
+        cerebro = bt.Cerebro(stdstats=False)  # pyright: ignore[reportCallIssue]
         cerebro.broker.setcash(cash)
-        cerebro.adddata(bt.feeds.PandasData(dataname=df))
+        cerebro.adddata(bt.feeds.PandasData(dataname=df))  # pyright: ignore[reportCallIssue]
         cerebro.addstrategy(strategy_class, **(params or {}))
         buf = io.StringIO()
         with redirect_stdout(buf), warnings.catch_warnings():
@@ -253,9 +241,34 @@ def run_fuzz(strategy_class, max_examples: int = 50, cash=100_000,
     name = name or getattr(strategy_class, '__name__', 'strategy')
     res = CrashResult(name=f"{name} (fuzz)")
 
-    if not HAS_HYPOTHESIS:
+    try:
+        from hypothesis import HealthCheck, given, settings
+        from hypothesis import strategies as st
+    except ImportError:
         res.failures.append({'case': 'setup', 'error': 'hypothesis not installed'})
         return res
+
+    @st.composite
+    def ohlc_frames(draw, min_bars=MIN_VIABLE_BARS, max_bars=160):
+        """
+        Adversarial but VALID OHLCV frames.
+
+        Widely-spread magnitudes on purpose: a strategy tuned on EUR-USD at 1.10
+        can behave very differently at 60,000 (BTC) or 0.0001, and the pipeline
+        runs across all of them.
+        """
+        n = draw(st.integers(min_value=min_bars, max_value=max_bars))
+        magnitude = draw(st.sampled_from([1e-4, 1e-2, 1.0, 100.0, 1e4, 1e6]))
+        closes = draw(st.lists(
+            st.floats(min_value=0.01, max_value=100.0,
+                      allow_nan=False, allow_infinity=False),
+            min_size=n, max_size=n))
+        vols = draw(st.one_of(
+            st.just(None),
+            st.lists(st.floats(min_value=0.0, max_value=1e7,
+                               allow_nan=False, allow_infinity=False),
+                     min_size=n, max_size=n)))
+        return make_frame(np.array(closes) * magnitude, volumes=vols)
 
     found = []
 

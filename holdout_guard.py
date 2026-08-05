@@ -61,7 +61,7 @@ import os
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import numpy as np
 import pandas as pd
@@ -205,7 +205,18 @@ class HoldoutGuard:
     @property
     def cutoff(self) -> Optional[pd.Timestamp]:
         c = self._state.get('cutoff_date')
-        return pd.Timestamp(c) if c else None
+        if not c:
+            return None
+        ts = pd.Timestamp(c)
+        # pd.Timestamp can yield NaT on unparseable input. A NaT cutoff would
+        # make every comparison False and silently disable the guard, so treat
+        # it as "not configured" rather than letting it through. isna() rather
+        # than `is pd.NaT` so the checker sees the narrowing.
+        if pd.isna(ts):
+            return None
+        # cast: pd.isna is not a TypeGuard, so the narrowing above is invisible
+        # to the checker even though it is real at runtime.
+        return cast(pd.Timestamp, ts)
 
     @property
     def is_configured(self) -> bool:
@@ -228,8 +239,8 @@ class HoldoutGuard:
         return self.peeks_remaining <= 0
 
     # -- the choke point --------------------------------------------------
-    def enforce(self, df, symbol: str = '', timeframe: str = '',
-                token: Optional[HoldoutToken] = None):
+    def enforce(self, df: pd.DataFrame, symbol: str = '', timeframe: str = '',
+                token: Optional[HoldoutToken] = None) -> pd.DataFrame:
         """
         Truncate a frame at the cutoff unless a valid token is supplied.
 
@@ -244,13 +255,17 @@ class HoldoutGuard:
             return df                                # cannot reason about dates
 
         cutoff = self.cutoff
+        if cutoff is None:
+            return df
 
         if token is not None:
             self._consume(token, symbol)
             return df                                # full series, logged
 
         before = len(df)
-        out = df[df.index < cutoff]
+        # Wrap the mask result: pandas types boolean indexing loosely, and an
+        # unannotated return here propagates a Series|None union to every caller.
+        out = pd.DataFrame(df[df.index < cutoff])
         if len(out) < before:
             key = (symbol, timeframe)
             if key not in self._warned:
@@ -384,7 +399,9 @@ class HoldoutGuard:
             L += ["  NOT CONFIGURED - no cutoff pinned, no protection active.",
                   "  Call HoldoutGuard.initialise(cutoff_date) to enable.", '=' * 64]
             return '\n'.join(L)
-        L.append(f"  Cutoff:  {self.cutoff.date()} (pinned {self._state['created_at'][:10]})")
+        cutoff = self.cutoff
+        assert cutoff is not None      # is_configured already established this
+        L.append(f"  Cutoff:  {cutoff.date()} (pinned {self._state['created_at'][:10]})")
         L.append(f"  Peeks:   {self.peeks_used}/{self.max_peeks} spent, "
                  f"{self.peeks_remaining} remaining")
         if self._state['peeks']:

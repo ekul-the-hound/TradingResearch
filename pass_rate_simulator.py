@@ -162,8 +162,12 @@ def _observed_daily_counts(trades: pd.DataFrame) -> np.ndarray:
     """
     try:
         d = pd.to_datetime(trades['entry_date']).dt.date
-        counts = d.value_counts().values
-        return counts if len(counts) else np.array([1])
+        # to_numpy(), not .values: the legacy attribute can hand back an
+        # ExtensionArray or Categorical depending on dtype, and the caller
+        # indexes this with rng.randint and expects a plain ndarray. Coercing
+        # here rather than hoping the dtype cooperates.
+        counts = np.asarray(d.value_counts().to_numpy())
+        return counts if counts.size else np.array([1])
     except Exception:
         return np.array([1])
 
@@ -198,8 +202,12 @@ def build_synthetic_window(
     daily_counts = _observed_daily_counts(trades)
     tod, has_tod = _times_of_day(trades)
 
-    start = start or pd.Timestamp('2024-01-01')
-    days, cursor = [], start
+    # Resolve to a concrete Timestamp: `start or default` leaves the checker
+    # with Timestamp | NaTType | None, and a NaT cursor would loop forever.
+    cursor = pd.Timestamp(start) if start is not None else pd.Timestamp('2024-01-01')
+    if pd.isna(cursor):
+        cursor = pd.Timestamp('2024-01-01')
+    days = []
     while len(days) < window_days:
         if cursor.weekday() < 5:          # weekdays only; FX is closed weekends
             days.append(cursor)

@@ -54,7 +54,9 @@
 # third-party reading if your firm turns out to work that way.
 # ==============================================================================
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+
+from typing import cast
 
 import pandas as pd
 import pytz
@@ -73,13 +75,20 @@ VALID_ANCHOR_MODES = (ANCHOR_BALANCE, ANCHOR_MAX)
 
 def _to_naive_utc(ts) -> datetime:
     """Coerce a timestamp to a naive-UTC datetime."""
-    ts = pd.Timestamp(ts)
-    if ts.tz is not None:
-        ts = ts.tz_convert('UTC').tz_localize(None)
-    return ts.to_pydatetime()
+    t = pd.Timestamp(ts)
+    if pd.isna(t):
+        # NaT would silently compare False against every boundary, which is how
+        # a bad timestamp turns into a missing daily-loss check rather than an
+        # error. Refuse it here instead.
+        raise ValueError(f"Cannot interpret {ts!r} as a timestamp")
+    if t.tz is not None:
+        t = t.tz_convert('UTC').tz_localize(None)
+    # cast, not assert: pd.isna above already rules out NaT at runtime, but it
+    # is not a TypeGuard so the checker cannot see the narrowing.
+    return cast(datetime, t.to_pydatetime())
 
 
-def prague_date_of(ts) -> 'datetime.date':
+def prague_date_of(ts) -> date:
     """Prague calendar date for a naive-UTC timestamp."""
     naive = _to_naive_utc(ts)
     return UTC_TZ.localize(naive).astimezone(PRAGUE_TZ).date()
@@ -259,5 +268,6 @@ def compare_anchors(equity_curve: pd.DataFrame, initial_balance: float) -> pd.Da
 
     merged = new.merge(old, on='date', how='outer')
     merged['delta_pct'] = merged['daily_loss_pct'] - merged['old_daily_loss_pct']
-    return merged[['date', 'anchor_source', 'anchor_balance',
-                   'old_daily_loss_pct', 'daily_loss_pct', 'delta_pct', 'breached']]
+    return pd.DataFrame(merged[['date', 'anchor_source', 'anchor_balance',
+                                'old_daily_loss_pct', 'daily_loss_pct',
+                                'delta_pct', 'breached']])

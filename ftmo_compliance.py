@@ -41,6 +41,8 @@ import pytz
 # ==============================================================================
 
 import ftmo_daily_anchor
+import firm_rules
+from firm_rules import FirmRules
 
 PRAGUE_TZ = pytz.timezone('Europe/Prague')
 UTC_TZ = pytz.UTC
@@ -134,6 +136,25 @@ class ComplianceResult:
     
     # Daily equity curve for analysis
     daily_equity: Optional[pd.DataFrame] = None
+
+    # FIRM-RULES-PATCH-SIGNATURE-RESULT
+    # Rules the configured firm has that were NOT evaluated. Non-empty
+    # means `passed` is a partial answer and must be rendered as such.
+    # `field` is already imported at module top.
+    unsupported_rules: list = field(default_factory=list)
+
+    # How max_daily_loss_pct was derived. A result that does not say this
+    # invites its number to be read as the whole truth.
+    #   'close_only'        marked on close-like prices at trade events and
+    #                       checkpoints. Blind to intrabar excursion, and at a
+    #                       checkpoint it reuses the last trade price, which may
+    #                       be days stale. Understates risk.
+    #   'intrabar_adverse'  marked at each bar's adverse extreme. For a single
+    #                       position this is what the account actually held.
+    daily_loss_method: str = 'close_only'
+
+    # Populated only by validate_intrabar().
+    intrabar_report: Optional[object] = None
 
 
 @dataclass
@@ -263,7 +284,8 @@ class FTMOComplianceChecker:
     def __init__(
         self,
         custom_fees: Dict[AssetClass, FeeStructure] = None,
-        spread_multiplier: float = 1.0  # Increase for conservative estimates
+        spread_multiplier: float = 1.0,  # Increase for conservative estimates
+        rules: 'FirmRules' = None
     ):
         """
         Args:
@@ -275,6 +297,17 @@ class FTMOComplianceChecker:
             self.fee_structures.update(custom_fees)
         
         self.spread_multiplier = spread_multiplier
+
+        # FIRM-RULES-PATCH-SIGNATURE
+        # Thresholds now come from a profile rather than module
+        # constants. Defaults to FTMO, so existing callers that pass
+        # nothing behave exactly as before.
+        #
+        # self.rules.unsupported() lists any rule this firm has that
+        # the checker does NOT evaluate. Propagate it into every
+        # result -- a PASS with a non-empty list is a pass against the
+        # modelled subset, not against the firm.
+        self.rules = rules if rules is not None else firm_rules.ftmo()
     
     def _prepare_trades(self, trades_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -666,7 +699,7 @@ class FTMOComplianceChecker:
         return ftmo_daily_anchor.calculate_daily_stats_anchored(
             equity_curve,
             initial_balance,
-            max_daily_loss_pct=MAX_DAILY_LOSS_PCT,
+            max_daily_loss_pct=self.rules.max_daily_loss_pct,
         )
     
     def _calculate_max_total_drawdown(
@@ -709,10 +742,13 @@ class FTMOComplianceChecker:
         Returns:
             ComplianceResult with pass/fail and diagnostics
         """
-        if account_size not in ACCOUNT_SIZES:
-            raise ValueError(f"Invalid account size. Must be one of: {ACCOUNT_SIZES}")
+        if account_size not in self.rules.account_sizes:
+            raise ValueError(
+                f"Invalid account size for {self.rules.firm_name}. "
+                f"Must be one of: {self.rules.account_sizes}"
+            )
         
-        if phase not in PROFIT_TARGETS:
+        if phase not in self.rules.profit_targets:
             raise ValueError(f"Invalid phase. Must be 'challenge' or 'verification'")
         
         initial_balance = float(account_size)
@@ -778,7 +814,7 @@ class FTMOComplianceChecker:
             max_loss_idx = daily_stats['daily_loss_pct'].idxmax()
             max_daily_loss_date = str(daily_stats.loc[max_loss_idx, 'date'])
         
-        daily_loss_ok = max_daily_loss_pct <= (MAX_DAILY_LOSS_PCT * 100)
+        daily_loss_ok = max_daily_loss_pct <= (self.rules.max_daily_loss_pct * 100)
         
         # === RULE 2: Max Total Drawdown (10% of initial) ===
         max_total_drawdown_pct, max_dd_timestamp = self._calculate_max_total_drawdown(
@@ -786,14 +822,14 @@ class FTMOComplianceChecker:
         )
         max_drawdown_date = str(max_dd_timestamp.date()) if max_dd_timestamp else None
         
-        total_drawdown_ok = max_total_drawdown_pct <= (MAX_TOTAL_DRAWDOWN_PCT * 100)
+        total_drawdown_ok = max_total_drawdown_pct <= (self.rules.max_total_drawdown_pct * 100)
         
         # === RULE 3: Minimum Trading Days (4 days, Prague TZ) ===
         trades['prague_date'] = trades['entry_date'].apply(
             lambda x: get_prague_trading_day(x)
         )
         trading_days = trades['prague_date'].nunique()
-        min_days_ok = trading_days >= MIN_TRADING_DAYS
+        min_days_ok = trading_days >= self.rules.min_trading_days
         
         # === RULE 4: Profit Target ===
         total_fees = trades['total_fees'].sum()
@@ -801,7 +837,7 @@ class FTMOComplianceChecker:
         final_equity = initial_balance + total_pnl
         final_return_pct = (final_equity - initial_balance) / initial_balance * 100
         
-        profit_target = PROFIT_TARGETS[phase]
+        profit_target = self.rules.profit_targets[phase]
         profit_target_ok = final_return_pct >= (profit_target * 100)
         
         # === FINAL VERDICT ===
@@ -830,6 +866,75 @@ class FTMOComplianceChecker:
             daily_equity=daily_equity
         )
     
+    def validate_intrabar(
+        self,
+        trades_df: pd.DataFrame,
+        price_data,
+        account_size: int = 100_000,
+        phase: str = 'challenge',
+    ) -> ComplianceResult:
+        """
+        Compliance check that accounts for intrabar adverse excursion.
+
+        validate() marks equity on close-like prices at trade events and
+        injected checkpoints, so a position that goes deeply underwater within
+        a bar and recovers registers no drawdown -- and at a checkpoint it
+        reuses `last_price` from the previous TRADE event, which for a
+        multi-day hold can be days old. Both understate the daily loss.
+
+        This re-derives the daily-loss verdict from a path that marks open
+        positions at each bar's adverse extreme. For a single open position
+        that is not an assumption: price traded there.
+
+        Args:
+            price_data: OHLCV frame, or {symbol: frame}. Required -- intrabar
+                        risk cannot be inferred from entry and exit records,
+                        which is the entire point.
+
+        Returns:
+            ComplianceResult with daily_loss_method='intrabar_adverse' and the
+            full comparison attached as intrabar_report.
+        """
+        import intrabar_risk
+
+        base = self.validate(trades_df, account_size=account_size, phase=phase)
+
+        report = intrabar_risk.analyze(
+            trades_df, price_data,
+            account_size=account_size,
+            max_daily_loss_pct=MAX_DAILY_LOSS_PCT * 100,
+            initial_balance=base.initial_balance,
+        )
+
+        if report.error:
+            # Refuse to upgrade the verdict on data we could not measure. The
+            # close-only result is returned unchanged and still labelled as
+            # such, rather than being passed off as an intrabar check.
+            print(f"[INTRABAR] Not applied: {report.error}")
+            base.intrabar_report = report
+            return base
+
+        limit_pct = MAX_DAILY_LOSS_PCT * 100
+        daily_ok = report.adverse_max_daily_loss_pct <= limit_pct
+        total_ok = report.adverse_max_drawdown_pct <= MAX_TOTAL_DRAWDOWN_PCT * 100
+
+        base.max_daily_loss_pct = report.adverse_max_daily_loss_pct
+        base.max_total_drawdown_pct = max(base.max_total_drawdown_pct,
+                                          report.adverse_max_drawdown_pct)
+        base.daily_loss_ok = daily_ok
+        base.total_drawdown_ok = total_ok
+        base.passed = bool(daily_ok and total_ok
+                           and base.min_days_ok and base.profit_target_ok)
+        base.daily_loss_method = 'intrabar_adverse'
+        base.intrabar_report = report
+
+        if report.days_flipped:
+            print(f"[INTRABAR] {len(report.days_flipped)} day(s) pass on close "
+                  f"prices but breach {limit_pct}% intrabar. These are real "
+                  f"breaches -- a broker marks to market continuously.")
+
+        return base
+
     def validate_all_account_sizes(
         self,
         trades_df: pd.DataFrame,
@@ -842,7 +947,7 @@ class FTMOComplianceChecker:
         """
         results = []
         
-        for account_size in ACCOUNT_SIZES:
+        for account_size in self.rules.account_sizes:
             result = self.validate(trades_df, account_size=account_size, phase=phase)
             results.append({
                 'account_size': result.account_size,
