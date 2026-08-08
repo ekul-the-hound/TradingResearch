@@ -29,11 +29,8 @@ from __future__ import annotations
 
 import dashboard_portfolio_panel as PANEL
 
-try:
-    import firm_rules
-    _RULES_OK = True
-except Exception:                                          # pragma: no cover
-    _RULES_OK = False
+# Hard import: see dashboard_portfolio_panel for the reasoning.
+import firm_rules
 
 
 def make_page(component, html, hooks, T, card, tbl, badge, metric,
@@ -116,13 +113,13 @@ def make_page(component, html, hooks, T, card, tbl, badge, metric,
         caps, set_caps = hooks.use_state(None)
         account, set_account = hooks.use_state(100_000.0)
         overlap, set_overlap = hooks.use_state("intersection")
+        # Off by default: the bootstrap is the one genuinely slow thing on
+        # this page, and it should not run on every checkbox click.
+        run_sim, set_run_sim = hooks.use_state(False)
 
         candidates = PANEL.list_candidates(db_results)
 
         # -- resolve the active firm profile ---------------------------
-        if not _RULES_OK:
-            return empty("firm_rules.py could not be imported.", "[ERR]")
-
         base = firm_rules.load_profile(profile_key)
         if form_vals or caps is not None:
             rules, fields = PANEL.apply_firm_form(
@@ -161,6 +158,28 @@ def make_page(component, html, hooks, T, card, tbl, badge, metric,
                 results, rules, account_size=float(account), overlap=overlap)
             if merge_info.get("ok"):
                 merged = merge_info["canonical"]
+
+        challenge = None
+        if run_sim:
+            source = None
+            if merge_info is not None and merge_info.get("ok"):
+                source = merge_info["result"].daily_pnl
+            elif len(results) == 1:
+                # A single strategy is simulated on its own daily series,
+                # so the page answers the same question for one or many.
+                try:
+                    import portfolio_merge as _pm
+                    led = _pm.extract_ledger(results[0])
+                    source = _pm.daily_pnl_matrix(led, rules.reset_timezone)
+                except Exception as e:
+                    challenge = {"ok": False, "reason": str(e)}
+            if challenge is None:
+                if source is None:
+                    challenge = {"ok": False,
+                                 "reason": "Select a strategy to simulate."}
+                else:
+                    challenge = PANEL.try_challenge(
+                        source, rules, account_size=float(account))
 
         table = PANEL.build_comparison(results, portfolio=merged)
         for bid, why in failures:
@@ -314,6 +333,88 @@ def make_page(component, html, hooks, T, card, tbl, badge, metric,
                   if w["unchecked"] else []),
                 accent=T["amber"] if (w["warnings"] or w["unchecked"]) else None)
 
+        # ==============================================================
+        # CHALLENGE SIMULATION
+        # ==============================================================
+        sim_toggle = html.button({
+            "onClick": lambda e: set_run_sim(not run_sim),
+            "style": {"padding": "5px 11px", "fontSize": "11px",
+                      "borderRadius": "6px", "border": "none",
+                      "cursor": "pointer",
+                      "backgroundColor": T["p1"] + "28" if run_sim else T["elevated"],
+                      "color": T["p1"] if run_sim else T["dim"]}},
+            "simulation on" if run_sim else "run simulation")
+
+        if challenge is None:
+            sim_card = card(
+                html.div({"style": {"display": "flex",
+                                    "justifyContent": "space-between",
+                                    "alignItems": "center"}},
+                    title("Challenge Simulation", "[SIM]"), sim_toggle),
+                html.p({"style": {"color": T["faint"], "fontSize": "11px",
+                                  "margin": "10px 0 0", "lineHeight": "1.5"}},
+                       "Resamples the daily P&L into many possible runs and "
+                       "walks every evaluation stage day by day, stopping "
+                       "when the target is reached. This is a different "
+                       "question from the comparison above: that describes "
+                       "what happened, this estimates what fraction of "
+                       "resampled futures would get funded."))
+        elif not challenge.get("ok"):
+            sim_card = card(
+                html.div({"style": {"display": "flex",
+                                    "justifyContent": "space-between",
+                                    "alignItems": "center"}},
+                    title("Challenge Simulation", "[X]"), sim_toggle),
+                html.p({"style": {"color": T["red"], "fontSize": "12px",
+                                  "margin": "10px 0 0", "lineHeight": "1.5"}},
+                       challenge["reason"]),
+                accent=T["red"])
+        else:
+            att = challenge["expected_attempts"]
+            med = challenge["median_days"]
+            p90 = challenge["p90_days"]
+            sim_card = card(
+                html.div({"style": {"display": "flex",
+                                    "justifyContent": "space-between",
+                                    "alignItems": "center",
+                                    "marginBottom": "14px"}},
+                    title("Challenge Simulation", "[SIM]"), sim_toggle),
+                grid(4,
+                    metric("P(funded)",
+                           f"{challenge['p_funded'] * 100:.2f}%",
+                           "all stages cleared",
+                           T["green"] if challenge["p_funded"] >= 0.25
+                           else T["amber"] if challenge["p_funded"] >= 0.05
+                           else T["red"]),
+                    # 'never', not a large finite number -- a zero pass
+                    # rate makes the expectation undefined.
+                    metric("Expected attempts",
+                           "never" if att is None else f"{att:.1f}",
+                           "to get funded once"),
+                    metric("Days to funded",
+                           "--" if med is None else f"{med:.0f}",
+                           "--" if p90 is None else f"p90 {p90:.0f}"),
+                    metric("Within 90 days",
+                           f"{challenge['p_within_90d'] * 100:.2f}%",
+                           "of all attempts")),
+                html.div({"style": {"marginTop": "16px"}},
+                    tbl(["Stage", "Entered", "Passed", "Rate", "Med days"],
+                        PANEL.challenge_stage_rows(challenge), hl=0)),
+                html.div({"style": {"marginTop": "16px"}},
+                    _label("WHY PATHS FAILED", T["muted"], "10px"),
+                    tbl(["Stage", "Reason", "Count", "Share"],
+                        PANEL.challenge_failure_rows(challenge), hl=1)),
+                *[html.p({"style": {"margin": "10px 0 0", "fontSize": "11px",
+                                    "color": T["amber"], "lineHeight": "1.45"}},
+                         f"[!] {n}") for n in challenge["notes"]],
+                *([html.p({"style": {"margin": "10px 0 0", "fontSize": "11px",
+                                     "color": T["amber"]}},
+                          f"[PARTIAL] not checked: "
+                          f"{', '.join(challenge['unchecked'])}")]
+                  if challenge["unchecked"] else []),
+                accent=T["amber"] if (challenge["notes"]
+                                     or challenge["unchecked"]) else None)
+
         return col(
             html.div({"style": {"display": "grid",
                                 "gridTemplateColumns": "340px 1fr", "gap": "16px",
@@ -321,6 +422,6 @@ def make_page(component, html, hooks, T, card, tbl, badge, metric,
                 html.div({"style": {"display": "flex", "flexDirection": "column",
                                     "gap": "16px"}}, selector, firm_card),
                 html.div({"style": {"display": "flex", "flexDirection": "column",
-                                    "gap": "16px"}}, main, diag)))
+                                    "gap": "16px"}}, main, diag, sim_card)))
 
     return PgCompare

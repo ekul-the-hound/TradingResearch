@@ -60,6 +60,24 @@ class RuleSeverity(Enum):
 # CONFIGURATION
 # ==============================================================================
 
+def _firm_defaults():
+    """
+    The FTMO profile, imported lazily.
+
+    Lazy because kill_switch is imported by modules that firm_rules does
+    not need, and a hard import at module scope would make a risk
+    component fail to load over an unrelated dependency problem.
+    """
+    try:
+        import firm_rules
+        return firm_rules.ftmo()
+    except Exception:
+        # Last-resort literals, reached only if firm_rules is broken.
+        class _Fallback:
+            max_daily_loss_pct = 0.05
+            max_total_drawdown_pct = 0.10
+        return _Fallback()
+
 @dataclass
 class KillSwitchConfig:
     """Kill switch thresholds."""
@@ -89,9 +107,32 @@ class KillSwitchConfig:
     max_correlation: float = 0.8          # Max correlation between positions
 
     # FTMO compliance (optional)
+    # FIRM-RULES-KILLSWITCH
+    # Derived from firm_rules rather than typed out. A second hardcoded
+    # copy of the firm's numbers is a copy that goes stale the first time
+    # a limit is edited anywhere else. Use for_firm() for a non-default
+    # profile -- these defaults only describe FTMO.
     ftmo_mode: bool = False
-    ftmo_daily_limit_pct: float = 5.0
-    ftmo_total_limit_pct: float = 10.0
+    ftmo_daily_limit_pct: float = field(
+        default_factory=lambda: _firm_defaults().max_daily_loss_pct * 100)
+    ftmo_total_limit_pct: float = field(
+        default_factory=lambda: _firm_defaults().max_total_drawdown_pct * 100)
+
+    @classmethod
+    def for_firm(cls, rules, **kwargs) -> 'KillSwitchConfig':
+        """
+        Build a config whose FTMO-mode limits match a FirmRules profile.
+
+        Use this whenever the firm is not stock FTMO. Passing the profile
+        to the governor while leaving the kill switch on its defaults
+        gives you two components enforcing different numbers.
+        """
+        kwargs.setdefault('ftmo_mode', True)
+        kwargs.setdefault('ftmo_daily_limit_pct',
+                          rules.max_daily_loss_pct * 100)
+        kwargs.setdefault('ftmo_total_limit_pct',
+                          rules.max_total_drawdown_pct * 100)
+        return cls(**kwargs)
 
 
 # ==============================================================================

@@ -30,8 +30,8 @@
 
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta, time as dt_time
-from typing import Dict, List, Optional, Tuple, Union
+from datetime import datetime, timedelta, time as dt_time, date
+from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 from enum import Enum
 import pytz
@@ -43,6 +43,56 @@ import pytz
 import ftmo_daily_anchor
 import firm_rules
 from firm_rules import FirmRules
+
+# Coercion helpers for values pulled out of DataFrame rows.
+#
+# row['col'] from iterrows() is typed Series | ndarray | Any by the pandas
+# stubs, and float() will not accept that union directly. Taking Any and
+# converting inside keeps the call sites readable and puts the conversion
+# where it belongs -- at the boundary between untyped frame data and the
+# typed dataclasses downstream.
+def _f(v: Any) -> float:
+    return float(v)
+
+
+def _i(v: Any) -> int:
+    return int(v)
+
+
+def _b(v: Any) -> bool:
+    return bool(v)
+
+
+def _s(v: Any) -> str:
+    return str(v)
+
+
+def _dt(v: Any) -> Optional[datetime]:
+    """
+    Coerce a frame value to datetime, or None when it is not one.
+
+    NaT and missing values become None rather than propagating something that
+    renders as 'NaT' into a compliance report, where it would read as a real
+    date nobody recognises.
+    """
+    if v is None:
+        return None
+    try:
+        ts = pd.Timestamp(v)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(ts):
+        return None
+    # Built from components rather than ts.to_pydatetime(), which is declared
+    # as returning datetime | NaTType. The isna() guard above rules NaT out at
+    # runtime but does not narrow the type -- and NaTType subclasses datetime,
+    # so isinstance() cannot separate them either.
+    # int() on each component: the stubs type Timestamp.year and friends as
+    # int | float, which datetime() will not accept.
+    return datetime(int(ts.year), int(ts.month), int(ts.day),
+                    int(ts.hour), int(ts.minute), int(ts.second),
+                    int(ts.microsecond), tzinfo=ts.tzinfo)
+
 
 PRAGUE_TZ = pytz.timezone('Europe/Prague')
 UTC_TZ = pytz.UTC
@@ -196,7 +246,7 @@ def to_prague_time(dt: datetime) -> datetime:
     return dt.astimezone(PRAGUE_TZ)
 
 
-def get_prague_trading_day(dt: datetime) -> datetime.date:
+def get_prague_trading_day(dt: datetime) -> date:
     """Get the trading day in Prague timezone"""
     prague_dt = to_prague_time(dt)
     return prague_dt.date()
@@ -236,7 +286,7 @@ def calculate_trade_fees(
     entry_price: float,
     exit_price: float,
     is_long: bool,
-    fee_structure: FeeStructure = None
+    fee_structure: Optional[FeeStructure] = None
 ) -> Tuple[float, float, float]:
     """
     Calculate fees for a trade.
@@ -283,9 +333,9 @@ class FTMOComplianceChecker:
     
     def __init__(
         self,
-        custom_fees: Dict[AssetClass, FeeStructure] = None,
+        custom_fees: Optional[Dict[AssetClass, FeeStructure]] = None,
         spread_multiplier: float = 1.0,  # Increase for conservative estimates
-        rules: 'FirmRules' = None
+        rules: Optional['FirmRules'] = None
     ):
         """
         Args:
@@ -379,16 +429,16 @@ class FTMOComplianceChecker:
         
         fees_data = []
         for _, row in df.iterrows():
-            symbol = row.get('symbol', 'EUR-USD')
+            symbol = _s(row.get('symbol', 'EUR-USD'))
             asset_class = detect_asset_class(symbol)
             fee_struct = self.fee_structures[asset_class]
             
             commission, spread_cost, total_fees = calculate_trade_fees(
                 symbol=symbol,
-                size=row['size'],
-                entry_price=row['entry_price'],
-                exit_price=row['exit_price'],
-                is_long=row['is_long'],
+                size=_f(row['size']),
+                entry_price=_f(row['entry_price']),
+                exit_price=_f(row['exit_price']),
+                is_long=_b(row['is_long']),
                 fee_structure=fee_struct
             )
             
@@ -536,7 +586,7 @@ class FTMOComplianceChecker:
         self,
         trades_df: pd.DataFrame,
         initial_balance: float,
-        price_data: pd.DataFrame = None
+        price_data: Optional[pd.DataFrame] = None
     ) -> pd.DataFrame:
         """
         Build granular equity curve with unrealized PnL at each bar.
@@ -555,7 +605,7 @@ class FTMOComplianceChecker:
                 'timestamp': row['entry_date'],
                 'type': 'entry',
                 'trade_idx': idx,
-                'direction': 1 if row['is_long'] else -1,
+                'direction': 1 if _b(row['is_long']) else -1,
                 'size': abs(row['size']),
                 'price': row['entry_price'],
                 'entry_fees': row['total_fees'] / 2
@@ -566,7 +616,7 @@ class FTMOComplianceChecker:
                 'timestamp': row['exit_date'],
                 'type': 'exit',
                 'trade_idx': idx,
-                'direction': 1 if row['is_long'] else -1,
+                'direction': 1 if _b(row['is_long']) else -1,
                 'size': abs(row['size']),
                 'price': row['exit_price'],
                 'exit_fees': row['total_fees'] / 2,
@@ -721,7 +771,7 @@ class FTMOComplianceChecker:
         min_idx = equity_curve['equity'].idxmin()
         max_dd_timestamp = equity_curve.loc[min_idx, 'timestamp']
         
-        return max_drawdown_pct, max_dd_timestamp
+        return _f(max_drawdown_pct), _dt(max_dd_timestamp)
     
     def validate(
         self,
@@ -854,15 +904,15 @@ class FTMOComplianceChecker:
             min_days_ok=min_days_ok,
             profit_target_ok=profit_target_ok,
             passed=passed,
-            max_daily_loss_pct=max_daily_loss_pct,
+            max_daily_loss_pct=_f(max_daily_loss_pct),
             max_daily_loss_date=max_daily_loss_date,
             max_total_drawdown_pct=max_total_drawdown_pct,
             max_drawdown_date=max_drawdown_date,
-            trading_days=trading_days,
+            trading_days=_i(trading_days),
             final_equity=final_equity,
             final_return_pct=final_return_pct,
-            total_pnl=total_pnl,
-            total_fees=total_fees,
+            total_pnl=_f(total_pnl),
+            total_fees=_f(total_fees),
             daily_equity=daily_equity
         )
     
@@ -902,7 +952,7 @@ class FTMOComplianceChecker:
         report = intrabar_risk.analyze(
             trades_df, price_data,
             account_size=account_size,
-            max_daily_loss_pct=MAX_DAILY_LOSS_PCT * 100,
+            max_daily_loss_pct=self.rules.max_daily_loss_pct * 100,
             initial_balance=base.initial_balance,
         )
 
@@ -914,9 +964,15 @@ class FTMOComplianceChecker:
             base.intrabar_report = report
             return base
 
-        limit_pct = MAX_DAILY_LOSS_PCT * 100
+        # FIRM-RULES-PATCH-SIGNATURE-INTRABAR
+        # Reads the configured profile, not the module constants. Before
+        # this, validate() honoured a custom firm while validate_intrabar()
+        # applied FTMO's 5%/10% -- two verdicts on one account under
+        # different rules, with nothing reporting the discrepancy.
+        limit_pct = self.rules.max_daily_loss_pct * 100
         daily_ok = report.adverse_max_daily_loss_pct <= limit_pct
-        total_ok = report.adverse_max_drawdown_pct <= MAX_TOTAL_DRAWDOWN_PCT * 100
+        total_ok = (report.adverse_max_drawdown_pct
+                    <= self.rules.max_total_drawdown_pct * 100)
 
         base.max_daily_loss_pct = report.adverse_max_daily_loss_pct
         base.max_total_drawdown_pct = max(base.max_total_drawdown_pct,
@@ -1121,7 +1177,7 @@ class FTMOComplianceChecker:
             
             # Failure breakdown
             'fail_reasons': fail_reasons,
-            'primary_fail_reason': max(fail_reasons, key=fail_reasons.get) if any(fail_reasons.values()) else None,
+            'primary_fail_reason': max(fail_reasons, key=lambda k: fail_reasons[k]) if any(fail_reasons.values()) else None,
             
             # Drawdown distribution
             'max_dd_mean': float(np.mean(max_dd_array)),
@@ -1163,7 +1219,7 @@ class FTMOComplianceChecker:
     def generate_report(self, result: ComplianceResult, phase: str = 'challenge') -> str:
         """Generate detailed compliance report"""
         
-        profit_target = PROFIT_TARGETS[phase] * 100
+        profit_target = self.rules.profit_targets[phase] * 100
         
         lines = []
         lines.append("=" * 70)

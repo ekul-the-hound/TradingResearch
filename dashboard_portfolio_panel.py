@@ -28,21 +28,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-try:
-    import firm_rules
-    from firm_rules import Capability, FirmRules, IMPLEMENTED, CAPABILITY_NOTES
-    _RULES_OK = True
-except Exception as _e:                                   # pragma: no cover
-    _RULES_OK = False
-    _RULES_ERR = str(_e)
-
-try:
-    import portfolio_merge
-    from portfolio_merge import PortfolioMergeError
-    _MERGE_OK = True
-except Exception as _e:                                   # pragma: no cover
-    _MERGE_OK = False
-    _MERGE_ERR = str(_e)
+# Hard imports. These are sibling modules; if they cannot be imported
+# the install is broken and the right behaviour is to say so at import
+# time rather than render a dashboard whose every panel reports
+# 'unavailable'.
+import firm_rules
+from firm_rules import Capability, FirmRules, IMPLEMENTED, CAPABILITY_NOTES
+import portfolio_merge
+from portfolio_merge import PortfolioMergeError
 
 
 # ==============================================================================
@@ -360,9 +353,6 @@ CAPABILITY_LABELS: Dict[str, str] = {
 def build_firm_form(rules: "FirmRules") -> Tuple[List[FormField],
                                                  List[CapabilityToggle]]:
     """Descriptors for rendering the firm-rules editor."""
-    if not _RULES_OK:                                     # pragma: no cover
-        raise RuntimeError(f"firm_rules unavailable: {_RULES_ERR}")
-
     fields = [
         FormField(name=n, label=l, kind=k, value=getattr(rules, n, None),
                   help=h)
@@ -417,9 +407,6 @@ def apply_firm_form(
     coerces types and routes the message back to the right control, so the
     dashboard and any scripted caller reject the same profiles.
     """
-    if not _RULES_OK:                                     # pragma: no cover
-        raise RuntimeError(f"firm_rules unavailable: {_RULES_ERR}")
-
     # `base if base is not None else ...` rather than `base or ...`: the
     # explicit check narrows away the Optional, so the attribute access below
     # is provably safe rather than merely safe in practice.
@@ -700,6 +687,125 @@ def load_selection(db_path: str, backtest_ids: Sequence[int]):
 
 
 # ==============================================================================
+# CHALLENGE SIMULATION
+# ==============================================================================
+
+def try_challenge(
+    daily_df,
+    rules: "FirmRules",
+    account_size: float = 100_000.0,
+    n_simulations: int = 2000,
+    window_days: int = 45,
+    mean_block_days: float = 5.0,
+    random_seed: int = 42,
+) -> Dict[str, Any]:
+    """
+    Bootstrap the full multi-stage evaluation from a daily P&L matrix.
+
+    Takes the same `daily_pnl` frame the merge produces, so a single strategy
+    and a portfolio go through one path. Like try_merge, a failure comes back
+    as data with a reason rather than an exception the page has to catch.
+
+    The numbers here are NOT the same question as the merge diagnostics. The
+    merge says what happened over the tested window; this says what fraction
+    of resampled futures would clear every stage. Presenting either as the
+    other is how a backtest gets mistaken for a forecast.
+    """
+    # challenge_simulator imported here rather than at module scope: it is
+    # only needed by this function, and portfolio_merge already imports it,
+    # so a top-level import would add a second edge to the graph for no gain.
+    import challenge_simulator
+
+    if daily_df is None or len(daily_df) == 0:
+        return {'ok': False,
+                'reason': 'No daily P&L series to resample.'}
+    if len(daily_df) < 2:
+        return {'ok': False,
+                'reason': (f"Only {len(daily_df)} trading day(s) of history. "
+                           f"A bootstrap over that is resampling a single "
+                           f"point, not estimating a distribution.")}
+
+    try:
+        sims = portfolio_merge.joint_block_bootstrap(
+            daily_df, n_simulations=n_simulations, window_days=window_days,
+            mean_block_days=mean_block_days, random_seed=random_seed)
+        result = challenge_simulator.simulate_challenge(
+            sims, account_size=account_size, rules=rules,
+            random_seed=random_seed)
+    except portfolio_merge.PortfolioMergeError as e:
+        return {'ok': False, 'reason': str(e)}
+    except Exception as e:                                # pragma: no cover
+        return {'ok': False, 'reason': f"{type(e).__name__}: {e}"}
+
+    d = result.to_dict()
+
+    # Flag a thin history explicitly. The bootstrap will happily manufacture
+    # 2000 paths from three weeks of trading, and the resulting percentage
+    # looks exactly as authoritative as one built from three years.
+    notes: List[str] = list(result.warnings)
+    if len(daily_df) < window_days:
+        notes.append(
+            f"History is {len(daily_df)} day(s) but the simulated window is "
+            f"{window_days}. Every path reuses the same few days, so the "
+            f"spread between them understates real uncertainty.")
+
+    return {
+        'ok': True,
+        'result': result,
+        'summary': result.summary(),
+        'p_funded': result.p_funded,
+        'expected_attempts': result.expected_attempts(),
+        'median_days': result.median_days_to_funded(),
+        'p90_days': result.days_to_funded_percentile(90),
+        'p_within_90d': result.p_funded_within(90),
+        'stages': d['stages'],
+        'unchecked': list(result.unchecked_rules),
+        'is_complete': result.is_complete,
+        'notes': notes,
+        'n_history_days': int(len(daily_df)),
+        'window_days': window_days,
+    }
+
+
+def challenge_stage_rows(payload: Dict[str, Any]) -> List[List[str]]:
+    """
+    Flatten stage stats into display rows.
+
+    A stage nobody reached shows 'n/a', never '0.0%' -- a rate of zero says
+    everyone failed, which is a different claim from nobody having tried.
+    """
+    rows: List[List[str]] = []
+    for st in payload.get('stages', []):
+        pr = st.get('pass_rate')
+        rate = 'n/a' if pr is None else f"{pr * 100:.1f}%"
+        if not st.get('reliable') and st.get('n_entered'):
+            rate += '  (small sample)'
+        med = st.get('median_days')
+        rows.append([
+            st.get('name', ''),
+            str(st.get('n_entered', 0)),
+            str(st.get('n_passed', 0)),
+            rate,
+            '--' if med is None else f"{med:.0f}",
+        ])
+    return rows
+
+
+def challenge_failure_rows(payload: Dict[str, Any]) -> List[List[str]]:
+    """Per-stage failure attribution, ordered by frequency."""
+    rows: List[List[str]] = []
+    for st in payload.get('stages', []):
+        entered = st.get('n_entered', 0) or 1
+        for reason, n in sorted(st.get('outcomes', {}).items(),
+                                key=lambda kv: -kv[1]):
+            if reason == 'passed':
+                continue
+            rows.append([st.get('name', ''), reason, str(n),
+                         f"{100.0 * n / entered:.1f}%"])
+    return rows
+
+
+# ==============================================================================
 # MERGE HELPER
 # ==============================================================================
 
@@ -713,9 +819,6 @@ def try_merge(results: Sequence[Any], rules: "FirmRules",
     A failed merge is a first-class result with a reason attached, not an
     exception the page has to catch and turn into a blank panel.
     """
-    if not _MERGE_OK:                                     # pragma: no cover
-        return {'ok': False, 'reason': f"portfolio_merge unavailable: {_MERGE_ERR}"}
-
     try:
         res = portfolio_merge.merge_strategies(
             results, rules=rules, account_size=account_size,

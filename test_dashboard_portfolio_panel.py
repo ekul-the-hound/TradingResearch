@@ -8,6 +8,9 @@ import sys
 import unittest
 from typing import Optional, TypeVar
 
+import numpy as np
+import pandas as pd
+
 from canonical_result import CanonicalResult
 import firm_rules
 from firm_rules import Capability, FirmRules, IMPLEMENTED, ftmo, generic_trailing
@@ -374,6 +377,101 @@ class TestTryMerge(unittest.TestCase):
                         generic_trailing(), ACCOUNT)
         self.assertTrue(out['ok'])
         self.assertIn('trailing_drawdown_eod', out['unchecked'])
+
+
+# ==============================================================================
+# CHALLENGE SIMULATION HELPERS
+# ==============================================================================
+
+def daily_frame(n=200, seed=7):
+    rng = np.random.RandomState(seed)
+    return pd.DataFrame(
+        {'S': rng.standard_t(3, n) * 900 + 40},
+        index=pd.date_range('2024-01-01', periods=n, freq='D'))
+
+
+class TestTryChallenge(unittest.TestCase):
+
+    def setUp(self):
+        self.out = P.try_challenge(daily_frame(), ftmo(), 100_000.0,
+                                   n_simulations=400, window_days=45)
+
+    def test_returns_a_payload(self):
+        self.assertTrue(self.out['ok'])
+        for k in ('p_funded', 'stages', 'p_within_90d', 'unchecked'):
+            self.assertIn(k, self.out)
+
+    def test_probabilities_in_range(self):
+        self.assertGreaterEqual(self.out['p_funded'], 0.0)
+        self.assertLessEqual(self.out['p_funded'], 1.0)
+        self.assertLessEqual(self.out['p_within_90d'], self.out['p_funded'])
+
+    def test_empty_history_is_data_not_exception(self):
+        r = P.try_challenge(pd.DataFrame(), ftmo())
+        self.assertFalse(r['ok'])
+        self.assertIn('No daily', r['reason'])
+
+    def test_single_day_history_refused_with_a_reason(self):
+        """One day cannot support a bootstrap; say so rather than return 0%."""
+        r = P.try_challenge(daily_frame().iloc[:1], ftmo())
+        self.assertFalse(r['ok'])
+        self.assertIn('single point', r['reason'])
+
+    def test_thin_history_warns_without_refusing(self):
+        """
+        The bootstrap will happily make 400 paths from 20 days, and the
+        percentage looks as authoritative as one built from 3 years.
+        """
+        r = P.try_challenge(daily_frame().iloc[:20], ftmo(),
+                            n_simulations=200, window_days=45)
+        self.assertTrue(r['ok'])
+        self.assertTrue(any('reuses the same few days' in n
+                            for n in r['notes']))
+
+    def test_unchecked_rules_propagate(self):
+        r = P.try_challenge(daily_frame(), generic_trailing(),
+                            n_simulations=200, window_days=30)
+        self.assertFalse(r['is_complete'])
+        self.assertIn('trailing_drawdown_eod', r['unchecked'])
+
+
+class TestChallengeRows(unittest.TestCase):
+
+    def test_stage_rows_shape(self):
+        out = P.try_challenge(daily_frame(), ftmo(), n_simulations=400,
+                              window_days=45)
+        rows = P.challenge_stage_rows(out)
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(len(r) == 5 for r in rows))
+
+    def test_unentered_stage_shows_na_not_zero(self):
+        """
+        A 0.0% rate claims everyone failed. Nobody having tried is a
+        different statement and must not be rendered as the first.
+        """
+        rows = P.challenge_stage_rows({'stages': [
+            {'name': 'verification', 'n_entered': 0, 'n_passed': 0,
+             'pass_rate': None, 'reliable': False, 'median_days': None,
+             'outcomes': {}}]})
+        self.assertEqual(rows[0][3], 'n/a')
+
+    def test_small_sample_is_labelled(self):
+        rows = P.challenge_stage_rows({'stages': [
+            {'name': 'verification', 'n_entered': 4, 'n_passed': 1,
+             'pass_rate': 0.25, 'reliable': False, 'median_days': 9,
+             'outcomes': {}}]})
+        self.assertIn('small sample', rows[0][3])
+
+    def test_failure_rows_exclude_passes(self):
+        rows = P.challenge_failure_rows({'stages': [
+            {'name': 'challenge', 'n_entered': 100,
+             'outcomes': {'passed': 40, 'daily_loss': 60}}]})
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][1], 'daily_loss')
+        self.assertEqual(rows[0][3], '60.0%')
+
+    def test_failure_rows_empty_when_no_stages(self):
+        self.assertEqual(P.challenge_failure_rows({}), [])
 
 
 def main():

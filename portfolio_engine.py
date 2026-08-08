@@ -97,7 +97,7 @@ class PortfolioEngine:
         self,
         equity_curves: Dict[str, pd.Series],
         method: str = 'hrp',
-        target_volatility: float = None
+        target_volatility: Optional[float] = None
     ) -> PortfolioResult:
         """
         Build portfolio from strategy equity curves.
@@ -177,8 +177,10 @@ class PortfolioEngine:
         
         # Average and max correlation
         corr_values = corr_matrix.values[np.triu_indices_from(corr_matrix.values, k=1)]
-        avg_corr = np.mean(corr_values) if len(corr_values) > 0 else 0
-        max_corr = np.max(corr_values) if len(corr_values) > 0 else 0
+        # float() at the boundary: np.mean returns a numpy scalar and the
+        # fallback is an int literal, neither of which is a float.
+        avg_corr = float(np.mean(corr_values)) if len(corr_values) > 0 else 0.0
+        max_corr = float(np.max(corr_values)) if len(corr_values) > 0 else 0.0
         
         return PortfolioResult(
             weights=weights_dict,
@@ -311,10 +313,17 @@ class PortfolioEngine:
             corr = returns_df.corr()
             
             # Convert correlation to distance
-            dist = np.sqrt(0.5 * (1 - corr))
+            #
+            # .values taken on the DataFrame BEFORE the ufunc rather than
+            # after. np.sqrt(DataFrame) returns a DataFrame at runtime via
+            # pandas' __array_ufunc__, but it is declared as returning
+            # NDArray, so `dist.values` reads as an error. squareform wants
+            # an ndarray regardless, so doing the arithmetic in numpy is
+            # both what the call needs and what the annotation says.
+            dist = np.sqrt(0.5 * (1 - corr.values))
             
             # Hierarchical clustering
-            link = linkage(squareform(dist.values), method='ward')
+            link = linkage(squareform(dist), method='ward')
             sort_idx = leaves_list(link)
             
             # Reorder correlation matrix
@@ -407,7 +416,23 @@ class PortfolioEngine:
         normalized = aligned / aligned.iloc[0]
         
         # Apply weights
-        portfolio = sum(normalized[name] * weight for name, weight in weights.items())
+        #
+        # Guarded and accumulated rather than sum(generator): sum() starts
+        # from the integer 0, so empty weights returned int 0 and the
+        # pct_change() call below failed with an AttributeError blaming
+        # pandas for an empty-input problem.
+        if not weights:
+            raise ValueError(
+                'Cannot build a portfolio equity curve with no weights.')
+        missing = [n for n in weights if n not in normalized.columns]
+        if missing:
+            raise ValueError(
+                f'No equity curve supplied for: {sorted(missing)}. '
+                f'Available: {sorted(normalized.columns)}')
+
+        portfolio = pd.Series(0.0, index=normalized.index)
+        for name, weight in weights.items():
+            portfolio = portfolio + normalized[name] * float(weight)
         
         # Calculate returns
         returns = portfolio.pct_change().dropna()
@@ -415,7 +440,7 @@ class PortfolioEngine:
         # Calculate drawdown
         peak = portfolio.expanding().max()
         drawdown = (portfolio - peak) / peak
-        max_dd = drawdown.min() * 100
+        max_dd = float(drawdown.min() * 100)
         
         return portfolio, returns, drawdown, max_dd
     
