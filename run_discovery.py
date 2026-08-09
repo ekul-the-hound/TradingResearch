@@ -93,6 +93,37 @@ def print_status():
     print()
 
 
+def preflight(pipeline, force=False) -> bool:
+    """
+    Verify SearXNG, the LLM endpoints and the database before starting.
+
+    Returns True to proceed. With force=True a failure is reported and
+    then ignored, which is a choice the operator has to make explicitly
+    rather than the default.
+    """
+    try:
+        ok = pipeline.preflight_check()
+    except Exception as e:
+        log.error(f"Preflight itself failed: {e}")
+        ok = False
+
+    if ok:
+        return True
+
+    if force:
+        log.warning("Preflight FAILED; continuing because --force was "
+                    "given. Expect batches to produce nothing.")
+        return True
+
+    log.error("Preflight failed. Discovery needs SearXNG and the LLM "
+              "endpoints reachable.")
+    log.error("  Docker Desktop running, then: docker start searxng")
+    log.error("  Ollama running:               ollama serve")
+    log.error("  Check models are present:     ollama list")
+    log.error("Re-run with --force to proceed anyway.")
+    return False
+
+
 def run_single_batch(queries_only=False):
     """Run one batch of discovery."""
     try:
@@ -126,7 +157,8 @@ def run_single_batch(queries_only=False):
         return 0
 
 
-def run_continuous(interval=3600, max_runs=None, queries_only=False):
+def run_continuous(interval=3600, max_runs=None, queries_only=False,
+                   force=False):
     """Run discovery in a loop."""
     run_count = 0
     total_found = 0
@@ -136,6 +168,30 @@ def run_continuous(interval=3600, max_runs=None, queries_only=False):
     while _RUNNING:
         run_count += 1
         log.info(f"--- Batch {run_count} starting ---")
+
+        # Re-checked every batch, not just at launch. A loop left running
+        # overnight outlives Docker restarts and dropped connections, and a
+        # check at startup says nothing about batch 14. Skipping a batch and
+        # retrying next interval is better than burning an hour of requests
+        # against services that are down.
+        try:
+            from discovery_pipeline import DiscoveryPipeline
+            if not preflight(DiscoveryPipeline(), force=force):
+                log.warning(f"Batch {run_count} SKIPPED -- services "
+                            f"unavailable. Retrying after the interval.")
+                found = 0
+                total_found += found
+                if max_runs and run_count >= max_runs:
+                    break
+                if _RUNNING:
+                    for _ in range(interval):
+                        if not _RUNNING:
+                            break
+                        time.sleep(1)
+                continue
+        except Exception as e:
+            log.error(f"Could not construct pipeline for batch "
+                      f"{run_count}: {e}")
 
         found = run_single_batch(queries_only=queries_only)
         total_found += found
@@ -162,6 +218,10 @@ def main():
     parser.add_argument("--max-runs", type=int, default=None, help="Max number of batches")
     parser.add_argument("--queries-only", action="store_true", help="Only use custom_queries.txt")
     parser.add_argument("--status", action="store_true", help="Print DB stats and exit")
+    parser.add_argument("--force", action="store_true",
+                        help="Run even if preflight fails (services down)")
+    parser.add_argument("--check", action="store_true",
+                        help="Run preflight and exit")
     args = parser.parse_args()
 
     if args.status:
@@ -179,10 +239,22 @@ def main():
     print("=" * 60)
     print()
 
+    # --check: report and exit, for confirming a session is set up before
+    # committing to a long run.
+    if args.check:
+        from discovery_pipeline import DiscoveryPipeline
+        return 0 if preflight(DiscoveryPipeline(), force=False) else 1
+
     if args.continuous:
         run_continuous(interval=args.interval, max_runs=args.max_runs,
-                       queries_only=args.queries_only)
+                       queries_only=args.queries_only, force=args.force)
     else:
+        # Single batch: gate before doing any work. Discovering that SearXNG
+        # is down after the LLM has already been billed for extraction is a
+        # worse outcome than not starting.
+        from discovery_pipeline import DiscoveryPipeline
+        if not preflight(DiscoveryPipeline(), force=args.force):
+            return 1
         found = run_single_batch(queries_only=args.queries_only)
         print(f"\nDone. {found} strategies found.")
         print_status()

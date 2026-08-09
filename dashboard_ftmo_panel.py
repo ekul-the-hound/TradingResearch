@@ -310,8 +310,9 @@ def rows_from_results_db(
         ).fetchone()
         if not exists:
             return unavailable(
-                "backtest_trades table does not exist. Apply "
-                "apply_trade_persistence_patch.py and re-run the backtest.", sid)
+                "No backtest_trades table in the results database. Trade "
+                "persistence is applied but this database predates it -- "
+                "re-run a backtest to populate it.", sid)
 
         q = "SELECT id FROM backtest_results WHERE 1=1"
         p: List[Any] = []
@@ -416,10 +417,17 @@ def build_panel(
     if first_reason:
         return unavailable(first_reason, strategy_id)
 
+    # Names the tables the caller has to go and look at. The previous wording
+    # told them to apply apply_trade_persistence_patch.py, which no longer
+    # exists -- the patch is applied and the script was removed. Advice that
+    # points at a deleted file is worse than no advice: it sends someone
+    # looking for the wrong thing.
     return unavailable(
-        "Trade-level data is required for FTMO compliance. Apply "
-        "apply_trade_persistence_patch.py and re-run a backtest, or persist "
-        "trades via DecayCalculator.save_trades().",
+        "No trade-level data. FTMO compliance needs individual trades with "
+        "timestamps, not summary statistics. Check that backtest_results has "
+        "a row for this strategy and that backtest_trades has rows for that "
+        "backtest_id; if not, re-run the backtest, or persist trades via "
+        "DecayCalculator.save_trades().",
         strategy_id,
     )
 

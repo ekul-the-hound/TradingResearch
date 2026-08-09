@@ -12,7 +12,7 @@
 #
 # This tool separates them. It uses two independent signals:
 #
-#   1. FINGERPRINT PRESENT. Results written after apply_fingerprint_patch.py
+#   1. FINGERPRINT PRESENT. Results written after data fingerprinting
 #      carry a data hash. Anything without one predates fingerprinting, which
 #      means it also predates the timezone fix.
 #
@@ -111,7 +111,9 @@ def audit(db_path, tag=False):
     print(f"  Database: {db_path}")
     print(f"  Rows:     {len(rows)}")
     if not has_fp_col:
-        print("  [NOTE] No data_fingerprint column -- apply_fingerprint_patch.py")
+        print("  [NOTE] No data_fingerprint column. This database predates "
+              "data fingerprinting; results in it cannot be traced to a "
+              "dataset. Re-run backtests to populate it.")
         print("         has not been run. Every row here predates provenance")
         print("         tracking, and therefore predates the timezone fix.")
     print("=" * 78)

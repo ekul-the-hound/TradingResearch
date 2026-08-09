@@ -1,273 +1,279 @@
-# Phase 1: Foundation Completion
+# TradingLab / TradingResearch
 
-## Architecture
+A quantitative trading research platform: discover candidate strategies from
+public sources, put them through statistical validation designed to reject
+most of them, and — for the ones that survive — model whether they would pass
+a prop-firm evaluation and then trade them under runtime rule enforcement.
+
+**Goal:** pass a prop-firm funded-trading challenge, then trade the funded
+account. Those are two different optimisation problems and the platform treats
+them as such (see *System A vs System B* below).
+
+**Scale:** ~100 modules, 31 test suites, ~880 tests.
+
+---
+
+## The pipeline
+
+`run_pipeline.py` orchestrates eleven steps.
+
+| # | Step | Module(s) | What it does |
+|---|------|-----------|--------------|
+| 1 | Discovery | `discovery_pipeline.py` | SearXNG search → LLM extraction → candidate strategies |
+| 2 | Backtest & Filter | `backtester*.py`, `filtering_pipeline.py` | Backtrader run, hard filters |
+| 3 | Optimize | `multi_objective_optimizer.py` | NSGA-II **selection over the existing pool** |
+| 4 | Validate | `overfitting_detector.py`, `lookahead_detector.py`, `prohibited_patterns.py` | PBO / DSR / CSCV, lookahead, banned patterns |
+| 5 | Risk Analysis | `tail_risk.py`, `liquidity_stress.py`, `capacity_model.py` | Tail behaviour, capacity limits |
+| 6 | Diversification | `diversification_filter.py` | Correlation-based culling |
+| 7 | Split & Mutate | `mutate_strategy.py`, `genetic_operators.py` | Variant generation (the "mutation agent") |
+| 8 | Re-Validate Mutations | as step 4 | Mutants go back through the same gates |
+| 9 | Drift Baselines | `drift_detector.py`, `decay_calculator.py` | Reference points for edge decay |
+| 10 | Learning Loop | `learning_loop.py` | Outcomes feed back into discovery |
+| 11 | Analytics | `lineage_analytics.py`, `performance_attribution.py` | Lineage and attribution reporting |
+
+`--from-step` defaults to **2**, so discovery is opt-in. Use `--from-step 1` to
+include it.
+
+**Step 1 has six sub-steps** (`discovery_pipeline.py`): search → fetch →
+extract → deduplicate (FAISS) → validate → save. `preflight_check()` verifies
+SearXNG and the LLM endpoints are reachable before any of it starts.
+
+### Prop-firm layer
+
+Sits alongside steps 4–5 and downstream of them.
 
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │           phase1_pipeline.py                │
-                    │         (Integration Orchestrator)          │
-                    ├──────────┬──────────┬───────────┬───────────┤
-                    │  Step 1  │  Step 2  │  Step 3   │  Step 4   │
-                    │ Register │   PBO    │  Filter   │ Diversify │
-                    │          │ Analysis │  & Rank   │ & Select  │
-                    ├──────────┼──────────┼───────────┼───────────┤
-                    │ Module 1 │ Module 2 │ Module 3  │ Module 4  │
-                    │ lineage_ │ overfit_ │ filtering_│ diversif_ │
-                    │ tracker  │ detector │ pipeline  │ filter    │
-                    └──────┬───┴────┬─────┴─────┬─────┴─────┬─────┘
-                           │        │           │           │
-                    ┌──────┴───┐ ┌──┴────┐ ┌────┴───┐ ┌────┴───┐
-                    │  SQLite  │ │ scipy │ │ numpy  │ │ scipy  │
-                    │  MLflow  │ │joblib │ │        │ │cluster │
-                    │          │ │quant- │ │        │ │        │
-                    │          │ │ stats │ │        │ │        │
-                    └──────────┘ └───────┘ └────────┘ └────────┘
-```
-
-## Data Flow
-
-```
-strategies + returns (from Phase 5 Discovery or existing backtests)
+strategies (validated)
     │
-    ▼
-Module 1: Register in lineage tracker (SQLite + MLflow)
+    ├─ portfolio_merge.py ──── combine N strategies at TRADE level
+    │                          into one CanonicalResult
     │
-    ▼
-Module 2: PBO analysis (CSCV on returns matrix)
+    ├─ ftmo_compliance.py ──── backtest validator: did this comply?
     │
-    ▼
-Module 3: Hard filters → composite score → rank → top N
-    │    (Sharpe ≥ 0.3, DD ≤ 30%, trades ≥ 30, PBO ≤ 0.5)
-    │    500 strategies → 50–100 survivors
-    ▼
-Module 4: Correlation filter → greedy diversification
-    │    max pairwise |ρ| < 0.5, greedy by score
-    │    50–100 → final pool (ready for Phase 2)
-    ▼
-Output: Diversified strategy pool + lineage DB + JSON reports
+    ├─ challenge_simulator.py ─ multi-stage walk with early stopping;
+    │                          P(funded), not P(pass stage one)
+    │
+    ├─ consistency_rule.py ─── best-day share of net profit
+    │
+    └─ live_governor.py ────── runtime enforcer: may I trade right now?
+           │
+           └─ governed_broker.py ── wraps any BaseBroker so the
+                                    governor cannot be bypassed
+                    │
+                    └─ mt5_adapter.py ── MetaTrader 5
 ```
 
-## Four Modules
+`firm_rules.py` is the single source of truth for firm thresholds. Every
+component above reads from it; a test fails the build if a second copy appears.
 
-### Module 1: `lineage_tracker.py` — Strategy Genealogy
+---
 
-| Item       | Detail                                                              |
-|------------|---------------------------------------------------------------------|
-| **Role**   | Tracks every strategy's ancestry, mutations, and performance        |
-| **Inputs** | Strategy metadata, backtest metrics dicts                           |
-| **Outputs**| StrategyRecord, FamilyNode trees, mutation analytics                |
-| **GitHub** | [mlflow/mlflow](https://github.com/mlflow/mlflow) — experiment tracking, parent/child run linking |
+## Setup
 
-Key methods:
-- `register_strategy(name, origin, parent_id, mutation_type)` → strategy_id
-- `log_backtest(strategy_id, metrics)` → row_id
-- `get_family_tree(root_id)` → nested FamilyNode
-- `get_mutation_success_rates()` → {mutation_type: {count, avg_sharpe, ...}}
-- `update_status(strategy_id, status)` — pending→backtested→filtered→promoted→retired
+### One-time
 
-### Module 2: `overfitting_detector.py` — PBO & Deflated Sharpe
-
-| Item       | Detail                                                              |
-|------------|---------------------------------------------------------------------|
-| **Role**   | Detects backtest overfitting using statistical methods               |
-| **Inputs** | Returns DataFrame (T×N), observed Sharpe, trial count               |
-| **Outputs**| PBOResult, DSRResult, PSRResult, HTML tearsheets                    |
-| **GitHub** | Algorithm from Bailey et al. (2015) paper. [ranaroussi/quantstats](https://github.com/ranaroussi/quantstats) for tearsheets |
-
-Key methods:
-- `compute_pbo(returns_df, n_partitions)` → PBOResult (probability, logits, degradation)
-- `deflated_sharpe_ratio(sr, n_trials, T)` → DSRResult (deflated SR, p-value)
-- `probabilistic_sharpe_ratio(returns)` → PSRResult
-- `analyze_strategy(returns, n_trials)` → combined dict
-- `generate_tearsheet(returns, output_path)` → HTML file
-
-### Module 3: `filtering_pipeline.py` — Threshold Filters & Ranking
-
-| Item       | Detail                                                              |
-|------------|---------------------------------------------------------------------|
-| **Role**   | Chains hard filters → composite scoring → top-N selection           |
-| **Inputs** | List of strategy dicts with metrics, FilterConfig thresholds        |
-| **Outputs**| PipelineResult with ranked survivors and rejection reasons          |
-| **GitHub** | No external repos — pure orchestration of Modules 1 & 2            |
-
-Key methods:
-- `run(strategies, config, returns_matrix)` → PipelineResult
-- `save_results(result, path)` → JSON file
-- `load_from_database(db_path)` → list of strategy dicts
-
-### Module 4: `diversification_filter.py` — Correlation & Redundancy Removal
-
-| Item       | Detail                                                              |
-|------------|---------------------------------------------------------------------|
-| **Role**   | Removes redundant strategies via correlation + trade overlap        |
-| **Inputs** | Survivor list from Module 3, returns dict, DiversityConfig          |
-| **Outputs**| DiversificationResult with selected/removed, correlation matrix     |
-| **GitHub** | No external repos — numpy/scipy correlation + hierarchical clustering |
-
-Key methods:
-- `run(strategies, returns_dict, trade_dates_dict, config)` → DiversificationResult
-- `compute_trade_overlap(dates_a, dates_b)` → Jaccard similarity float
-
-## Module Interconnections
-
-```
-Module 1 (LineageTracker)
-    ↑ writes status         ↑ writes status
-    │                       │
-Module 3 (FilterPipeline)   Module 4 (DiversityFilter)
-    ↑ calls PBO/DSR             ↑ receives survivors
-    │                           │
-Module 2 (OverfitDetector)  Module 3 (FilterPipeline)
+```powershell
+conda env create -f environment.yml     # or: conda create -n quant2 python=3.12
+conda activate quant2
+pip install -r requirements.txt
 ```
 
-- Module 3 injects Module 1 (lineage_tracker) and Module 2 (overfitting_detector)
-- Module 4 injects Module 1 (lineage_tracker) for status updates
-- Phase1Pipeline wires all four together
+MetaTrader 5 (only needed for live execution) requires **both** the Python
+package and the desktop terminal:
 
-## Project Structure
-
-```
-phase1/
-├── lineage_tracker.py           # Module 1: Strategy genealogy (747 lines)
-├── overfitting_detector.py      # Module 2: PBO + DSR + PSR (280 lines)
-├── filtering_pipeline.py        # Module 3: Filters + scoring (260 lines)
-├── diversification_filter.py    # Module 4: Correlation filter (280 lines)
-├── phase1_pipeline.py           # Integration orchestrator (210 lines)
-├── test_phase1.py               # 32 tests across all modules (500 lines)
-├── requirements_phase1.txt      # Dependencies
-└── README.md                    # This file
+```powershell
+pip install MetaTrader5
+# then install the MT5 terminal from metatrader5.com and log in once
+python -c "import mt5_adapter as m; print(m.selftest_against_terminal())"
 ```
 
-Total: ~2,280 lines across 6 Python files.
+### Every session
 
-## Setup Instructions
+```powershell
+# 1. Docker Desktop must be running, then:
+docker start searxng
 
-### Prerequisites
+# 2. Ollama (see below)
+ollama serve
 
-- Python 3.9+
-- pip
-
-### 1. Install Dependencies
-
-```bash
-pip install -r requirements_phase1.txt
+# 3. Environment
+conda activate quant2
+cd "D:\Luke Files\Coding\Developer\TradingResearch"
+$env:PYTHONUTF8 = "1"
+$env:DISCOVERY_MODE = "hybrid"
 ```
 
-Or manually:
-```bash
-pip install numpy pandas scipy scikit-learn mlflow quantstats statsmodels joblib matplotlib seaborn
+### Ollama
+
+`DISCOVERY_MODE` selects a model preset in `discovery_config.py`:
+
+| Mode | Summarizer | Code generator | Notes |
+|------|-----------|----------------|-------|
+| `cloud` | `qwen3.5:cloud` | `qwen3-coder:480b-cloud` | 60k context |
+| `local` | `qwen2.5:7b-instruct` | `qwen2.5-coder:7b` | 12k context, slower |
+| `hybrid` | `minimax-m3:cloud` | `minimax-m3:cloud` | default working mode |
+
+```powershell
+ollama serve            # start the server (skip if running as a service)
+ollama list             # models available locally
+ollama ps               # models currently loaded in memory
 ```
 
-### 2. Configuration
+Endpoint is `http://localhost:11434/v1`, overridable via `OLLAMA_HOST`.
 
-No configuration needed for standalone testing. The modules auto-detect paths:
+---
 
-- **LineageTracker** defaults to `./data/lineage.db` (SQLite)
-- **MLflow** defaults to `./data/mlruns/` (local file store)
-- When integrated with the main project, modules import `config.py` for `BASE_DIR`
+## Running it
 
-### 3. Run Tests
+```powershell
+python run_discovery.py --status            # what is already in the DB
+python run_discovery.py --max-runs 1        # one discovery batch
+python run_discovery.py --continuous --interval 3600
 
-```bash
-# Full suite (32 tests, ~10 seconds)
-python test_phase1.py
-
-# Quick mode (8 critical tests, ~3 seconds)
-python test_phase1.py --quick
+python run_pipeline.py                      # steps 2-11 (no discovery)
+python run_pipeline.py --from-step 1        # everything
+python run_pipeline.py --from-step 4 --to-step 6
 ```
 
-### 4. Run the Pipeline
+Dashboard:
 
-```python
-from phase1_pipeline import Phase1Pipeline
-from filtering_pipeline import FilterConfig
-from diversification_filter import DiversityConfig
-
-pipeline = Phase1Pipeline(
-    db_path="data/lineage.db",
-    enable_mlflow=True,       # Set False to skip MLflow logging
-    filter_config=FilterConfig(
-        min_sharpe=0.3,
-        max_drawdown=30.0,
-        min_trades=50,
-        max_pbo=0.5,
-        top_n=100,
-    ),
-    diversity_config=DiversityConfig(
-        max_correlation=0.5,
-        max_strategies=50,
-    ),
-)
-
-result = pipeline.run(
-    strategies=your_strategy_list,    # list of dicts with metrics
-    returns_dict=your_returns_dict,   # {strategy_id: np.array}
-)
-
-print(result.summary())
+```powershell
+python react_dashboard2.py
 ```
 
-### 5. Browse MLflow Dashboard (Optional)
+---
 
-```bash
-mlflow ui --backend-store-uri file:///path/to/data/mlruns
-# Open http://localhost:5000
+## Tests
+
+```powershell
+python run_all_tests.py             # everything
+python run_all_tests.py -k merge    # filter by filename
+python run_all_tests.py --list      # what runs, and what is excluded and why
 ```
 
-### 6. CLI Tools
+Each suite runs in its own process, so a module that fails at import takes
+down only its own file rather than aborting collection for everything.
 
-```bash
-# Lineage tracker CLI
-python lineage_tracker.py --summary --db data/lineage.db
-python lineage_tracker.py --show-tree STRATEGY_ID
-python lineage_tracker.py --mutation-stats
-python lineage_tracker.py --generation-stats
-```
+**Two rules the runner enforces:**
 
-## Integration with Existing TradingLab
+- **Skips count as failures.** A skipped test is a test that did not run.
+- **A suite that reports no test count is `SILENT`, not `PASS`.** "Exited 0
+  with no summary" is indistinguishable from "ran nothing", and calling that
+  green is how a suite quietly stops testing anything.
 
-Copy the 4 module files into the project root alongside `config.py`:
+Exclusions are listed with a reason. An unexplained exclusion is the same
+problem in a different place.
 
-```bash
-cp lineage_tracker.py overfitting_detector.py \
-   filtering_pipeline.py diversification_filter.py \
-   phase1_pipeline.py /path/to/TradingLab/
-```
+---
 
-The modules auto-import `config.py` for `BASE_DIR` when available,
-and fall back to `Path(__file__).parent` when running standalone.
+## Design principles
 
-**Connecting to existing backtests:**
-```python
-from filtering_pipeline import FilteringPipeline
-pipe = FilteringPipeline()
-strategies = pipe.load_from_database("results/backtest_results.db")
-```
+These were arrived at by hitting the corresponding bug, and most have a test
+that fails if they are violated again.
 
-## Assumptions
+### Confident wrong numbers are the failure mode
 
-1. **Returns are daily.** Sharpe annualization uses √252. Adjust if using
-   intraday bars (√(252*bars_per_day)) or weekly (√52).
+The recurring defect in this codebase has not been crashes; it has been
+components producing plausible numbers with no way to signal uncertainty.
+Every significant fix has taken the same shape: make the absence of an answer
+representable, propagating, and loud.
 
-2. **PBO requires ≥ 4 strategies and ≥ 200 return observations.** Below
-   these thresholds, PBO is skipped and strategies are filtered on
-   hard metrics only.
+- `CanonicalResult.returns_source` distinguishes real trade data from
+  synthetic; `require_returns()` refuses the latter.
+- `ConsistencyResult.passed` is `Optional`. When there is no profit, "what
+  share came from the best day" has no answer, and both `True` and `False`
+  would be fabrications.
+- `StageStats.pass_rate` is `None` when nobody reached that stage — different
+  from `0.0`, which claims everyone failed.
+- `FirmRules.unsupported()` lists rules the engine does **not** check. A PASS
+  carrying a non-empty list is a partial answer and renders as one.
 
-3. **pypbo is not used as a dependency.** The CSCV/PBO algorithm is
-   implemented directly from the Bailey et al. (2015) paper. This
-   eliminates dependence on an unmaintained package (esvhd/pypbo is
-   not on PyPI and has stale deps).
+### One source of truth for firm thresholds
 
-4. **SQLite is the sole database.** No PostgreSQL or external DB server
-   needed. MLflow uses a local file-based tracking store.
+Prop-firm limits once lived in four places. `test_single_source_of_truth.py`
+scans the source and fails if any method reads a module constant instead of
+the configured profile — behavioural tests only catch that if someone
+remembers to write one for each new method.
 
-5. **All filtering thresholds are configurable.** The defaults
-   (Sharpe ≥ 0.3, DD ≤ 30%, trades ≥ 30, PBO ≤ 0.5) are conservative
-   starting points. Tune via FilterConfig.
+### Numbers are configurable; semantics are not
 
-6. **Strategies are passed as plain dicts.** This matches the existing
-   database.py and results_analyzer.py patterns. No class wrappers needed.
+In `firm_rules.py`, a threshold is a float you can edit freely. Static vs
+trailing drawdown is a different *algorithm*, so it is a capability gated
+behind an `IMPLEMENTED` whitelist. The dashboard greys out what has no code
+behind it and says why.
 
-7. **Phase 2 consumes the output directly.** The diversified pool from
-   `DiversificationResult.selected` is a list of dicts ready to serve
-   as the initial population for NSGA-II.
+### The live governor acts before the limit, not at it
+
+In a backtest a breach is a data point. Live, it is terminal — account failed,
+fee gone, no later trading undoes it. The governor halts at a fraction of each
+limit, and every uncertainty resolves toward halting: stale account state,
+missing daily anchor, or an exception inside the governor itself all stop
+trading.
+
+### Early stopping is not optional in challenge simulation
+
+A trader who reaches the target stops. Evaluating a fixed window and checking
+final equity fails paths that had already won and then gave it back. This
+understated pass rates by up to 2.5×. It also interacts with the consistency
+rule: stopping early concentrates profit into fewer days, making the best day a
+larger share of the total.
+
+### System A vs System B
+
+Passing the evaluation and profitably trading the funded account are different
+objectives with different fitness functions. Consistency rules may structurally
+prohibit the burst-style strategies that optimise best for System A.
+
+---
+
+## Data
+
+| Asset class | Source | Status |
+|-------------|--------|--------|
+| Forex | HistData.com yearly files, `E:\TradingData` | Usable |
+| Crypto | — | **~100 bars, not usable** |
+| Indices | — | **0 files** |
+
+HistData timestamps are Prague-local; the daily-loss anchor depends on getting
+that conversion right. `verify_histdata_timezone.py` checks it.
+
+---
+
+## Known gaps
+
+Live trading is blocked on:
+
+- **MT5 terminal** not installed; the adapter is unverified past `initialize`.
+  Its 54 tests run against an injected fake.
+- **Target prop firm** unconfirmed — blocks consistency-cap calibration and
+  per-firm configuration.
+- **Dashboard registration** — `dashboard_compare_page.py` needs four lines in
+  `react_dashboard2.py` (`NAV`, `TITLES`, `PAGES`, plus the factory call).
+
+Data and configuration:
+
+- Crypto and indices datasets are effectively empty.
+- `CLAUDE_API_KEY` unset, blocking the adversarial-review gate.
+- ~117 stored results predate the timezone fix. Run
+  `audit_result_provenance.py --tag`, then decide discard vs re-run.
+- Holdout cutoff never pinned (10 / 15 / 20%).
+- Parameter-stability gate built but not wired into promotion.
+
+Known behaviour worth remembering:
+
+- **The compliance checker recomputes P&L from prices** and ignores the
+  ledger's `pnl` column. Invisible when prices imply the P&L; silently
+  substitutes its own number when they do not.
+- **`multi_objective_optimizer` is selection, not parameter optimisation.** It
+  chooses among already-backtested strategies. There is no parameter sweep
+  anywhere in the codebase.
+- Merge totals are **gross**; compliance totals are **net of fees**. The
+  difference is correct.
+
+---
+
+## Stack
+
+Python 3.12 / conda (`quant2`) · Backtrader · pandas / numpy · pymoo (NSGA-II)
+· SQLite · ReactPy + Plotly · SearXNG (Docker) · Ollama · FAISS · hypothesis ·
+MetaTrader5

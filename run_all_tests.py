@@ -1,227 +1,264 @@
-#!/usr/bin/env python
 # ==============================================================================
-# run_all_tests.py
+# run_discovery.py -- Standalone Strategy Discovery Runner
 # ==============================================================================
-# One command for the whole suite.
+# Run this on your VPS independently from the rest of the system.
+# It continuously scrapes, extracts, and deduplicates trading strategies,
+# saving them to discovery.db. The main pipeline reads from this DB later.
 #
-# Each test file runs in a SEPARATE PROCESS. That costs a second or two of
-# interpreter startup and buys two things worth more:
+# Usage:
+#   python run_discovery.py                    # Single batch run
+#   python run_discovery.py --continuous       # Run forever in loop
+#   python run_discovery.py --interval 3600    # Custom interval (seconds)
+#   python run_discovery.py --max-runs 10      # Stop after N batches
+#   python run_discovery.py --queries-only     # Only use custom_queries.txt
+#   python run_discovery.py --status           # Print DB stats and exit
 #
-#   1. A module that fails at import, or crashes the interpreter, takes down
-#      its own file and nothing else. Under a shared process one bad import
-#      aborts collection and the rest silently never run -- reported as a
-#      smaller total, which looks like success if nobody is counting.
-#   2. Module-level state cannot leak between files.
+# Requires:
+#   - SearXNG running (docker, port 8080)
+#   - Ollama running with llama3.1:8b and/or deepseek-coder-v2:16b
 #
-# SKIPS COUNT AS FAILURES. A skipped test is a test that did not run, and a
-# green summary containing skips is a green summary that checked less than it
-# appears to. Same rule the individual suites already apply.
-#
-#     python run_all_tests.py                 # everything
-#     python run_all_tests.py -k portfolio    # filter by filename
-#     python run_all_tests.py --list          # show what would run
-#     python run_all_tests.py --quiet         # totals only
+# This script does NOT run backtests -- it only discovers strategy ideas.
 # ==============================================================================
 
-import argparse
-import glob
-import os
-import re
-import subprocess
 import sys
 import time
-from typing import Dict, List, Optional, Tuple
+import json
+import argparse
+import signal
+import logging
+from datetime import datetime
+from pathlib import Path
 
-# Files that are not unittest suites despite the name, or that need resources
-# unavailable in a normal run. Each needs a stated reason -- an unexplained
-# exclusion is how a suite quietly stops being run.
-EXCLUDE: Dict[str, str] = {
-    'test_api_key.py': 'requires CLAUDE_API_KEY and network',
-    'test_data_download.py': 'downloads market data over the network',
-    'test_live_trading.py': 'requires a live broker connection',
-}
+sys.path.insert(0, str(Path(__file__).parent))
 
-SUMMARY_RE = re.compile(
-    r'ran\s+(\d+)\s*\|\s*failures\s+(\d+)\s*\|\s*errors\s+(\d+)\s*\|'
-    r'\s*skipped\s+(\d+)')
-UNITTEST_RE = re.compile(r'^Ran (\d+) tests? in', re.M)
-FAILED_RE = re.compile(r'^FAILED \((.*)\)', re.M)
+from discovery_config import DISCOVERY_CONFIG as cfg, STRATEGIES_DIR
+from research_db import ResearchDatabase
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger("discovery_runner")
 
-class Outcome:
-    def __init__(self, path: str):
-        self.path = path
-        self.ran = 0
-        self.failures = 0
-        self.errors = 0
-        self.skipped = 0
-        self.seconds = 0.0
-        self.returncode = 0
-        self.parsed = False
-        self.output = ''
-
-    @property
-    def ok(self) -> bool:
-        # Skips are failures. So is a non-zero exit we could not attribute.
-        return (self.returncode == 0 and self.failures == 0
-                and self.errors == 0 and self.skipped == 0)
-
-    @property
-    def status(self) -> str:
-        if self.ok:
-            return 'PASS'
-        if not self.parsed:
-            return 'CRASH'
-        if self.skipped and not (self.failures or self.errors):
-            return 'SKIPS'
-        return 'FAIL'
+# Graceful shutdown
+_RUNNING = True
+def _handle_signal(sig, frame):
+    global _RUNNING
+    log.info("Shutdown signal received -- finishing current batch...")
+    _RUNNING = False
+signal.signal(signal.SIGINT, _handle_signal)
+signal.signal(signal.SIGTERM, _handle_signal)
 
 
-def discover(pattern: Optional[str]) -> List[str]:
-    files = sorted(f for f in glob.glob('test_*.py')
-                   if f not in EXCLUDE)
-    if pattern:
-        files = [f for f in files if pattern.lower() in f.lower()]
-    return files
+def print_status():
+    """Print current discovery database statistics."""
+    db = ResearchDatabase()
+    conn = db._get_conn()
+
+    docs = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+    strats = conn.execute("SELECT COUNT(*) FROM strategies").fetchone()[0]
+    unique = conn.execute("SELECT COUNT(*) FROM strategies WHERE is_duplicate=0").fetchone()[0]
+    validated = conn.execute("SELECT COUNT(*) FROM strategies WHERE code_validates=1").fetchone()[0]
+    manual = conn.execute("SELECT COUNT(*) FROM strategies WHERE origin_source='manual'").fetchone()[0]
+
+    avg_q = conn.execute("SELECT AVG(quality_score) FROM strategies WHERE quality_score > 0").fetchone()[0]
+    avg_q = f"{avg_q:.1f}" if avg_q else "N/A"
+
+    # Top strategies
+    top = conn.execute(
+        "SELECT strategy_name, quality_score, origin_source, status "
+        "FROM strategies WHERE is_duplicate=0 ORDER BY quality_score DESC LIMIT 10"
+    ).fetchall()
+
+    conn.close()
+
+    print()
+    print("=" * 60)
+    print("  DISCOVERY DATABASE STATUS")
+    print("=" * 60)
+    print(f"  Documents scraped:     {docs}")
+    print(f"  Strategies extracted:  {strats}")
+    print(f"  Unique (not dupes):    {unique}")
+    print(f"  Code validated:        {validated}")
+    print(f"  Manual entries:        {manual}")
+    print(f"  Avg quality score:     {avg_q}")
+    print("-" * 60)
+    if top:
+        print("  Top 10 Strategies:")
+        for name, score, origin, status in top:
+            tag = f"[{origin}]" if origin != "scraped" else ""
+            print(f"    {score:5.0f}  {name[:40]}  {tag}  ({status})")
+    print("=" * 60)
+    print()
 
 
-def parse(text: str, out: Outcome) -> None:
+def preflight(pipeline, force=False) -> bool:
     """
-    Read a suite's own summary line, falling back to unittest's.
+    Verify SearXNG, the LLM endpoints and the database before starting.
 
-    Suites in this project print 'ran N | failures N | errors N | skipped N'.
-    Older ones only emit unittest's default output, so both are handled --
-    an unparsed file is reported as CRASH rather than assumed to be zero
-    tests, because "no tests found" and "the file exploded" must not look
-    the same.
+    Returns True to proceed. With force=True a failure is reported and
+    then ignored, which is a choice the operator has to make explicitly
+    rather than the default.
     """
-    m = SUMMARY_RE.search(text)
-    if m:
-        out.ran, out.failures, out.errors, out.skipped = (
-            int(g) for g in m.groups())
-        out.parsed = True
+    try:
+        ok = pipeline.preflight_check()
+    except Exception as e:
+        log.error(f"Preflight itself failed: {e}")
+        ok = False
+
+    if ok:
+        return True
+
+    if force:
+        log.warning("Preflight FAILED; continuing because --force was "
+                    "given. Expect batches to produce nothing.")
+        return True
+
+    log.error("Preflight failed. Discovery needs SearXNG and the LLM "
+              "endpoints reachable.")
+    log.error("  Docker Desktop running, then: docker start searxng")
+    log.error("  Ollama running:               ollama serve")
+    log.error("  Check models are present:     ollama list")
+    log.error("Re-run with --force to proceed anyway.")
+    return False
+
+
+def run_single_batch(queries_only=False):
+    """Run one batch of discovery."""
+    try:
+        from discovery_pipeline import DiscoveryPipeline
+        pipeline = DiscoveryPipeline()
+
+        if queries_only:
+            # Only use custom queries
+            from discovery_config import CUSTOM_QUERIES_FILE
+            if CUSTOM_QUERIES_FILE.exists():
+                with open(CUSTOM_QUERIES_FILE, encoding='utf-8') as f:
+                    lines = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+                queries = [{"query": q, "source_type": "general", "bias": "unknown"} for q in lines]
+                if not queries:
+                    log.warning("No custom queries found in custom_queries.txt")
+                    return 0
+                log.info(f"Running with {len(queries)} custom queries")
+                pipeline.run(queries=queries)
+            else:
+                log.warning("custom_queries.txt not found")
+                return 0
+        else:
+            pipeline.run()
+
+        return pipeline.run_stats.get("strategies_extracted", 0)
+
+    except Exception as e:
+        log.error(f"Batch failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0
+
+
+def run_continuous(interval=3600, max_runs=None, queries_only=False,
+                   force=False):
+    """Run discovery in a loop."""
+    run_count = 0
+    total_found = 0
+
+    log.info(f"Starting continuous discovery (interval={interval}s, max_runs={max_runs or 'unlimited'})")
+
+    while _RUNNING:
+        run_count += 1
+        log.info(f"--- Batch {run_count} starting ---")
+
+        # Re-checked every batch, not just at launch. A loop left running
+        # overnight outlives Docker restarts and dropped connections, and a
+        # check at startup says nothing about batch 14. Skipping a batch and
+        # retrying next interval is better than burning an hour of requests
+        # against services that are down.
+        try:
+            from discovery_pipeline import DiscoveryPipeline
+            if not preflight(DiscoveryPipeline(), force=force):
+                log.warning(f"Batch {run_count} SKIPPED -- services "
+                            f"unavailable. Retrying after the interval.")
+                found = 0
+                total_found += found
+                if max_runs and run_count >= max_runs:
+                    break
+                if _RUNNING:
+                    for _ in range(interval):
+                        if not _RUNNING:
+                            break
+                        time.sleep(1)
+                continue
+        except Exception as e:
+            log.error(f"Could not construct pipeline for batch "
+                      f"{run_count}: {e}")
+
+        found = run_single_batch(queries_only=queries_only)
+        total_found += found
+        log.info(f"Batch {run_count} complete: {found} strategies found ({total_found} total)")
+
+        if max_runs and run_count >= max_runs:
+            log.info(f"Reached max_runs={max_runs}, stopping.")
+            break
+
+        if _RUNNING:
+            log.info(f"Sleeping {interval}s until next batch...")
+            for _ in range(interval):
+                if not _RUNNING:
+                    break
+                time.sleep(1)
+
+    log.info(f"Discovery runner finished. {run_count} batches, {total_found} strategies found.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="TradingLab Strategy Discovery Runner")
+    parser.add_argument("--continuous", action="store_true", help="Run in continuous loop")
+    parser.add_argument("--interval", type=int, default=3600, help="Seconds between batches (default: 3600)")
+    parser.add_argument("--max-runs", type=int, default=None, help="Max number of batches")
+    parser.add_argument("--queries-only", action="store_true", help="Only use custom_queries.txt")
+    parser.add_argument("--status", action="store_true", help="Print DB stats and exit")
+    parser.add_argument("--force", action="store_true",
+                        help="Run even if preflight fails (services down)")
+    parser.add_argument("--check", action="store_true",
+                        help="Run preflight and exit")
+    args = parser.parse_args()
+
+    if args.status:
+        print_status()
         return
 
-    m2 = UNITTEST_RE.search(text)
-    if m2:
-        out.ran = int(m2.group(1))
-        out.parsed = True
-        f = FAILED_RE.search(text)
-        if f:
-            for part in f.group(1).split(','):
-                part = part.strip()
-                if part.startswith('failures='):
-                    out.failures = int(part.split('=')[1])
-                elif part.startswith('errors='):
-                    out.errors = int(part.split('=')[1])
-                elif part.startswith('skipped='):
-                    out.skipped = int(part.split('=')[1])
-        sk = re.search(r'skipped=(\d+)', text)
-        if sk and not out.skipped:
-            out.skipped = int(sk.group(1))
+    print()
+    print("=" * 60)
+    print("  TradingLab Strategy Discovery Runner")
+    print("=" * 60)
+    print(f"  Mode:     {'Continuous' if args.continuous else 'Single batch'}")
+    print(f"  Interval: {args.interval}s")
+    print(f"  Queries:  {'Custom only' if args.queries_only else 'All (built-in + custom)'}")
+    print(f"  DB:       {cfg.db_path}")
+    print("=" * 60)
+    print()
+
+    # --check: report and exit, for confirming a session is set up before
+    # committing to a long run.
+    if args.check:
+        from discovery_pipeline import DiscoveryPipeline
+        return 0 if preflight(DiscoveryPipeline(), force=False) else 1
+
+    if args.continuous:
+        run_continuous(interval=args.interval, max_runs=args.max_runs,
+                       queries_only=args.queries_only, force=args.force)
+    else:
+        # Single batch: gate before doing any work. Discovering that SearXNG
+        # is down after the LLM has already been billed for extraction is a
+        # worse outcome than not starting.
+        from discovery_pipeline import DiscoveryPipeline
+        if not preflight(DiscoveryPipeline(), force=args.force):
+            return 1
+        found = run_single_batch(queries_only=args.queries_only)
+        print(f"\nDone. {found} strategies found.")
+        print_status()
 
 
-def run_one(path: str, timeout: int) -> Outcome:
-    out = Outcome(path)
-    t0 = time.time()
-    try:
-        proc = subprocess.run(
-            [sys.executable, path], capture_output=True, text=True,
-            timeout=timeout)
-        out.output = (proc.stdout or '') + (proc.stderr or '')
-        out.returncode = proc.returncode
-    except subprocess.TimeoutExpired:
-        out.output = f'TIMEOUT after {timeout}s'
-        out.returncode = -1
-    out.seconds = time.time() - t0
-    parse(out.output, out)
-    return out
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument('-k', dest='pattern', default=None,
-                    help='only files whose name contains this')
-    ap.add_argument('--list', action='store_true',
-                    help='show what would run, then exit')
-    ap.add_argument('--quiet', action='store_true', help='totals only')
-    ap.add_argument('--timeout', type=int, default=600)
-    args = ap.parse_args()
-
-    files = discover(args.pattern)
-    if not files:
-        print('No test files matched.')
-        return 1
-
-    if args.list:
-        for f in files:
-            print(f'  {f}')
-        if EXCLUDE:
-            print('\nexcluded:')
-            for f, why in sorted(EXCLUDE.items()):
-                print(f'  {f:34} {why}')
-        return 0
-
-    print(f'Running {len(files)} suite(s), one process each.\n')
-    results: List[Outcome] = []
-
-    for f in files:
-        out = run_one(f, args.timeout)
-        results.append(out)
-        if not args.quiet:
-            bits = f"{out.ran:>4} tests"
-            if out.failures:
-                bits += f", {out.failures} failed"
-            if out.errors:
-                bits += f", {out.errors} errors"
-            if out.skipped:
-                bits += f", {out.skipped} SKIPPED"
-            print(f'  [{out.status:<5}] {f:<40} {bits:<34} '
-                  f'{out.seconds:5.1f}s')
-
-    total_ran = sum(o.ran for o in results)
-    total_fail = sum(o.failures for o in results)
-    total_err = sum(o.errors for o in results)
-    total_skip = sum(o.skipped for o in results)
-    bad = [o for o in results if not o.ok]
-
-    print('\n' + '=' * 72)
-    print(f'  suites {len(results)}   tests {total_ran}   '
-          f'failures {total_fail}   errors {total_err}   skipped {total_skip}')
-    print('=' * 72)
-
-    if not bad:
-        print('  ALL GREEN')
-        return 0
-
-    print(f'  {len(bad)} suite(s) not clean:\n')
-    for o in bad:
-        print(f'  --- {o.path} [{o.status}] ---')
-        if o.status == 'CRASH':
-            # No parseable summary means the file did not get far enough to
-            # produce one; the tail of its output is the only evidence.
-            tail = [ln for ln in o.output.strip().splitlines() if ln.strip()]
-            for ln in tail[-12:]:
-                print(f'      {ln}')
-        else:
-            detail = [ln for ln in o.output.splitlines()
-                      if ln.startswith(('FAIL:', 'ERROR:', 'SKIPPED',
-                                        '    - ', 'AssertionError'))]
-            if not detail:
-                # A suite can report skips in its summary without naming them
-                # (verbosity=0). Echo the summary rather than printing an
-                # empty block, which reads as "not clean, but no reason".
-                detail = [ln for ln in o.output.splitlines()
-                          if SUMMARY_RE.search(ln)] or ['(no detail emitted)']
-            for ln in detail:
-                print(f'      {ln.strip()}')
-        print()
-
-    if total_skip:
-        print('  NOTE: skipped tests are counted as failures. A skipped test')
-        print('  is a test that did not run.')
-    return 1
-
-
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__ == "__main__":
+    main()

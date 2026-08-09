@@ -287,10 +287,36 @@ class TestConnection(unittest.TestCase):
         self.assertFalse(b.is_connected)
 
     def test_missing_package_message_is_specific(self):
-        b = MT5Broker()
-        with self.assertRaises(MT5Error) as ctx:
-            _ = b.mt5
-        self.assertIn('Windows-only', str(ctx.exception))
+        """
+        Blocks the import rather than relying on the package being absent.
+
+        The original asserted that `import MetaTrader5` fails, which is a
+        statement about the machine, not the code. It passed on a box without
+        the package and failed the moment one was installed -- a test whose
+        result depends on the environment tests the environment.
+        """
+        import sys as _sys
+        # sys.modules bound through an Any local: setting an entry to None to
+        # force ImportError is documented CPython behaviour that the typeshed
+        # stubs do not model (they require a ModuleType).
+        mods: Any = _sys.modules
+        saved = mods.get('MetaTrader5', '<<absent>>')
+        mods['MetaTrader5'] = None              # forces ImportError
+        try:
+            b = MT5Broker()
+            with self.assertRaises(MT5Error) as ctx:
+                _ = b.mt5
+            self.assertIn('Windows-only', str(ctx.exception))
+        finally:
+            if saved == '<<absent>>':
+                mods.pop('MetaTrader5', None)
+            else:
+                mods['MetaTrader5'] = saved
+
+    def test_injected_module_bypasses_the_import(self):
+        """An injected terminal must not touch sys.modules at all."""
+        b, fake = broker()
+        self.assertIs(b.mt5, fake)
 
 
 class TestSymbols(unittest.TestCase):
