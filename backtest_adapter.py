@@ -41,7 +41,7 @@ import sys
 import traceback
 import numpy as np
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Type
+from typing import Optional, List, Dict, Any, Type, Tuple
 
 # Import from your existing system
 sys.path.insert(0, str(Path(__file__).parent))
@@ -89,24 +89,39 @@ class BacktestAdapter:
 
     def _init_backtester(self):
         """Initialize whichever backtester is available."""
+        self.engine_name = None
+        self.engine_error = None
         if MultiTimeframeBacktester is not None:
             try:
                 self._mtf = MultiTimeframeBacktester()
+                self.engine_name = 'MultiTimeframeBacktester'
                 if self.verbose:
                     print("[OK] BacktestAdapter: Using MultiTimeframeBacktester")
                 return
             except Exception as e:
-                if self.verbose:
-                    print(f"[WARN]  MultiTimeframeBacktester init failed: {e}")
+                self.engine_error = f'MTF init failed: {e}'
+                # Not verbose-gated: a failed engine init is the difference
+                # between a working run and one that silently does nothing.
+                print(f"[WARN]  MultiTimeframeBacktester init failed: {e}")
 
         if StrategyBacktester is not None:
             try:
                 self._simple = StrategyBacktester()
+                self.engine_name = 'StrategyBacktester'
                 if self.verbose:
                     print("[OK] BacktestAdapter: Using StrategyBacktester")
                 return
-            except Exception:
-                pass
+            except Exception as e:
+                self.engine_error = f'Simple init failed: {e}'
+                print(f"[WARN]  StrategyBacktester init failed: {e}")
+
+        # Reached only if neither engine loaded. This is fatal to the whole
+        # point of the adapter, so it is never silent.
+        if self.engine_name is None:
+            print("[FAIL] BacktestAdapter: NO backtest engine available. "
+                  "Every backtest will return no result. "
+                  f"(MTF import: {'ok' if MultiTimeframeBacktester else 'MISSING'}, "
+                  f"simple import: {'ok' if StrategyBacktester else 'MISSING'})")
 
         if self.verbose:
             print("[WARN]  BacktestAdapter: No backtester available (dry-run mode)")
@@ -147,9 +162,13 @@ class BacktestAdapter:
             params_str = "_".join(f"{k}{v}" for k, v in sorted(param_vector.items()))
             strategy_id = f"{strategy_class.__name__}_{params_str}_{sym}_{tf}"
 
-        raw = self._run_backtest(strategy_class, sym, tf, param_vector)
-
-        cr = CanonicalResult.from_backtest(raw, strategy_id=strategy_id)
+        raw, reason = self._run_backtest(strategy_class, sym, tf, param_vector)
+        if raw is None:
+            if reason:
+                print(f"   [FAIL] {strategy_id}: {reason}")
+            cr = CanonicalResult(strategy_id=strategy_id, strategy_name='FAILED')
+        else:
+            cr = CanonicalResult.from_backtest(raw, strategy_id=strategy_id)
         cr.strategy_params = dict(param_vector)
         return cr
 
@@ -204,12 +223,30 @@ class BacktestAdapter:
         params = strategy_params or {}
 
         results = []
+        failures = []
         for sym in syms:
             for tf in tfs:
                 sid = strategy_id or f"{strategy_class.__name__}_{sym}_{tf}"
-                raw = self._run_backtest(strategy_class, sym, tf, params)
-                cr = CanonicalResult.from_backtest(raw, strategy_id=sid)
-                results.append(cr)
+                raw, reason = self._run_backtest(
+                    strategy_class, sym, tf, params)
+                if raw is None:
+                    # A failed backtest is recorded as a failure, not
+                    # appended as an empty CanonicalResult that flows
+                    # downstream looking like a real (but losing) strategy.
+                    failures.append((sid, reason))
+                    continue
+                results.append(
+                    CanonicalResult.from_backtest(raw, strategy_id=sid))
+
+        if failures:
+            print(f"   [FAIL] {len(failures)} of "
+                  f"{len(failures) + len(results)} backtests produced no "
+                  f"result for {strategy_class.__name__}:")
+            for sid, reason in failures[:5]:
+                print(f"           - {sid}: {reason}")
+            if len(failures) > 5:
+                print(f"           ... and {len(failures) - 5} more")
+        self.last_failures = failures
 
         return results
 
@@ -233,6 +270,9 @@ class BacktestAdapter:
         # Dynamic import
         try:
             spec = importlib.util.spec_from_file_location(path.stem, path)
+            if spec is None or spec.loader is None:
+                return CanonicalResult(strategy_id=path.stem,
+                                       strategy_name='NOT_IMPORTABLE')
             module = importlib.util.module_from_spec(spec)
             sys.modules[spec.name] = module
             spec.loader.exec_module(module)
@@ -256,9 +296,12 @@ class BacktestAdapter:
         sym = symbol or self.default_symbols[0]
         tf = timeframe or self.default_timeframes[0]
 
-        raw = self._run_backtest(strategy_class, sym, tf, {})
-        cr = CanonicalResult.from_backtest(raw, strategy_id=path.stem)
-        return cr
+        raw, reason = self._run_backtest(strategy_class, sym, tf, {})
+        if raw is None:
+            if reason:
+                print(f"   [FAIL] {path.stem}: {reason}")
+            return CanonicalResult(strategy_id=path.stem, strategy_name='FAILED')
+        return CanonicalResult.from_backtest(raw, strategy_id=path.stem)
 
     # ------------------------------------------------------------------
     # MODE 4: Callable for optimization_pipeline.py
@@ -297,7 +340,7 @@ class BacktestAdapter:
         symbol: str,
         timeframe: str,
         strategy_params: Dict,
-    ) -> Optional[Dict]:
+    ) -> 'Tuple[Optional[Dict], Optional[str]]':
         """Run backtest using whichever engine is available."""
 
         # Multi-timeframe backtester (preferred)
@@ -312,11 +355,13 @@ class BacktestAdapter:
                     strategy_params=strategy_params if strategy_params else None,
                     extract_trades=self.extract_trades,
                 )
-                return result
+                if result is None:
+                    return None, f'MTF ran but returned nothing '\
+                                 f'({symbol} {timeframe}) -- likely no data'
+                return result, None
             except Exception as e:
-                if self.verbose:
-                    print(f"   [FAIL] Backtest failed ({symbol} {timeframe}): {e}")
-                return None
+                return None, f'MTF raised ({symbol} {timeframe}): '\
+                             f'{type(e).__name__}: {e}'
 
         # Simple backtester fallback (uses yfinance, no timeframe/forex support)
         if self._simple is not None:
@@ -330,14 +375,14 @@ class BacktestAdapter:
                     commission=self.default_commission,
                     strategy_params=strategy_params if strategy_params else None,
                 )
-                return result
+                if result is None:
+                    return None, f'simple engine returned nothing ({symbol})'
+                return result, None
             except Exception as e:
-                if self.verbose:
-                    print(f"   [FAIL] Simple backtest failed: {e}")
-                return None
+                return None, f'simple engine raised ({symbol}): '\
+                             f'{type(e).__name__}: {e}'
 
-        # No backtester -- return None (CanonicalResult handles gracefully)
-        return None
+        return None, 'no backtest engine available'
 
     # ------------------------------------------------------------------
     # AGGREGATION

@@ -1,0 +1,5 @@
+Could not integrate AgenticFactorInvesting.py.
+
+TYPE ERROR: line 127: Operator "**" not supported for types "object*" and "Literal[2]"
+
+TYPE ERROR: line 127: Operator "**" not supported for types "object*" and "Literal[2]"

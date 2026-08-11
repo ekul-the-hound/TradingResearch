@@ -110,7 +110,8 @@ def test_scoring_standard_baseline() -> Tuple[int, int]:
     scores = DecayCalculator.compute_decay_scores(base, dict(base))
     for k in ("win_rate", "trade_frequency", "profit_factor",
               "win_loss_ratio", "expectancy", "composite"):
-        if scores[k] is None or abs(scores[k] - 100.0) > 0.01:
+        v = scores[k]
+        if v is None or abs(v - 100.0) > 0.01:
             return _failed("identical baseline", f"{k}={scores[k]}")
     return _passed("identical baseline scores 100")
 
@@ -126,12 +127,13 @@ def test_scoring_decay_detected() -> Tuple[int, int]:
               "max_consecutive_losses": 6, "avg_trade_duration_hours": 8.0,
               "expectancy": 5.0}
     scores = DecayCalculator.compute_decay_scores(base, recent)
-    if scores["composite"] is None or scores["composite"] >= 70.0:
+    _comp = scores["composite"]
+    if _comp is None or _comp >= 70.0:
         return _failed("decay composite", f"got {scores['composite']}")
     # inverted (lower better)
-    if scores["max_consecutive_losses"] >= 100:
+    if (scores["max_consecutive_losses"] or 0) >= 100:
         return _failed("max_consec_losses inverted", "should drop below 100")
-    if scores["avg_trade_duration"] >= 100:
+    if (scores["avg_trade_duration"] or 0) >= 100:
         return _failed("avg_duration inverted", "should drop below 100")
     return _passed("decay correctly detected")
 
@@ -243,6 +245,7 @@ def test_windowing_fractions() -> Tuple[int, int]:
         trades = _series(60.0, 1000, datetime(2024, 1, 1))
         dc.save_trades("wnd", "EUR-USD", trades)
         snap = dc.generate_snapshot("wnd", "EUR-USD")
+        assert snap is not None  # narrow for type checker
         expected_base = int(1000 * BASELINE_FRAC)
         expected_rec = int(1000 * RECENT_FRAC)
         if snap["baseline_trade_count"] != expected_base:

@@ -26,10 +26,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import time
 import config
+from typing import TYPE_CHECKING
 
 # CCXT for crypto data (fallback)
-try:
+if TYPE_CHECKING:
+    # Checker always sees ccxt; CCXT_AVAILABLE governs runtime use.
     import ccxt
+
+
+try:
+    import ccxt  # noqa: F811
     CCXT_AVAILABLE = True
 except ImportError:
     CCXT_AVAILABLE = False
@@ -435,8 +441,9 @@ class DataManager:
             df = df.sort_index()
             
             # Normalize timezone
-            if df.index.tz is not None:
-                df.index = df.index.tz_convert("UTC").tz_localize(None)
+            _idx = pd.DatetimeIndex(df.index)
+            if _idx.tz is not None:
+                df.index = _idx.tz_convert("UTC").tz_localize(None)
             
             return df
         
@@ -594,8 +601,9 @@ class DataManager:
             # Normalize timezone.
             # Post-fix this is a no-op: the file is already naive UTC on disk.
             # Kept as a guard in case a tz-aware CSV is ever hand-placed here.
-            if df.index.tz is not None:
-                df.index = df.index.tz_convert("UTC").tz_localize(None)
+            _idx = pd.DatetimeIndex(df.index)
+            if _idx.tz is not None:
+                df.index = _idx.tz_convert("UTC").tz_localize(None)
             
             # If requesting 1-minute data, return it directly
             if timeframe == '1min':

@@ -23,17 +23,17 @@ class SimpleMovingAverageCrossover(bt.Strategy):
     
     def __init__(self):
         # Calculate the two moving averages
-        self.fast_ma = bt.indicators.SimpleMovingAverage(
+        self.fast_ma = bt.indicators.SimpleMovingAverage(  # type: ignore
             self.data.close, 
-            period=self.params.fast_period
+            period=self.params.fast_period  # type: ignore
         )
-        self.slow_ma = bt.indicators.SimpleMovingAverage(
+        self.slow_ma = bt.indicators.SimpleMovingAverage(  # type: ignore
             self.data.close, 
-            period=self.params.slow_period
+            period=self.params.slow_period  # type: ignore
         )
         
         # Crossover signal
-        self.crossover = bt.indicators.CrossOver(self.fast_ma, self.slow_ma)
+        self.crossover = bt.indicators.CrossOver(self.fast_ma, self.slow_ma)  # type: ignore
     
     def next(self):
         # This runs every day/candle

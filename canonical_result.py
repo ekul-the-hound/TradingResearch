@@ -113,7 +113,7 @@ class CanonicalResult:
     # CONSTRUCTORS
     # ------------------------------------------------------------------
     @classmethod
-    def from_backtest(cls, result: Dict[str, Any], strategy_id: str = "") -> "CanonicalResult":
+    def from_backtest(cls, result: Optional[Dict[str, Any]], strategy_id: str = "") -> "CanonicalResult":
         """
         Build from your backtester's result dict.
         Works with both backtester.py and backtester_multi_timeframe.py output.

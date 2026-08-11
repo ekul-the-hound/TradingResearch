@@ -30,7 +30,7 @@
 import json
 import os
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from collections import Counter
@@ -75,7 +75,7 @@ class FailuresTracker:
         'LATENCY_SENSITIVE': 'Requires unrealistic execution speed',
     }
     
-    def __init__(self, failures_file: str = None):
+    def __init__(self, failures_file: Optional[Union[str, Path]] = None):
         """
         Args:
             failures_file: Path to JSON file storing failures
@@ -131,9 +131,9 @@ class FailuresTracker:
         failure_type: str,
         metrics: Dict[str, Any],
         reason: str,
-        variant_id: str = None,
-        lessons_learned: str = None,
-        code_snippet: str = None
+        variant_id: Optional[str] = None,
+        lessons_learned: Optional[str] = None,
+        code_snippet: Optional[str] = None
     ) -> FailureRecord:
         """
         Log a strategy failure.
@@ -176,9 +176,9 @@ class FailuresTracker:
     def log_from_backtest_result(
         self,
         result: Dict,
-        failure_type: str = None,
-        reason: str = None,
-        lessons_learned: str = None
+        failure_type: Optional[str] = None,
+        reason: Optional[str] = None,
+        lessons_learned: Optional[str] = None
     ) -> Optional[FailureRecord]:
         """
         Log a failure from a backtest result dict.
@@ -365,7 +365,7 @@ class FailuresTracker:
     # GENERATE FAILURES.MD
     # =========================================================================
     
-    def generate_failures_md(self, output_path: str = None) -> str:
+    def generate_failures_md(self, output_path: Optional[Union[str, Path]] = None) -> str:
         """
         Generate FAILURES.md file documenting all failures.
         

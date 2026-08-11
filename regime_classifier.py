@@ -223,7 +223,7 @@ class RegimeClassifier:
         """Classify a single bar into a regime"""
         
         # Handle NaN values (early bars without enough data)
-        if pd.isna(row.get('adx')) or pd.isna(row.get('atr_ratio')):
+        if bool(pd.isna(row.get('adx'))) or bool(pd.isna(row.get('atr_ratio'))):
             return MarketRegime.UNKNOWN.value
         
         # =====================================================================
@@ -240,7 +240,7 @@ class RegimeClassifier:
         # =====================================================================
         # PRIORITY 2: RECOVERY (after crash/oversold)
         # =====================================================================
-        if row['was_oversold'] and row['rsi_rising'] and row['returns'] > 0:
+        if bool(row['was_oversold']) and bool(row['rsi_rising']) and row['returns'] > 0:
             if row['rsi'] < 50:  # Still in recovery zone
                 return MarketRegime.RECOVERY.value
         
@@ -263,9 +263,9 @@ class RegimeClassifier:
         # PRIORITY 5: TRENDING (BULL or BEAR)
         # =====================================================================
         if row['adx'] > self.adx_trend_threshold:
-            if row['above_slow_ma'] and row['ma_distance'] > self.trend_threshold:
+            if bool(row['above_slow_ma']) and row['ma_distance'] > self.trend_threshold:
                 return MarketRegime.BULL.value
-            elif not row['above_slow_ma'] and row['ma_distance'] < -self.trend_threshold:
+            elif not bool(row['above_slow_ma']) and row['ma_distance'] < -self.trend_threshold:
                 return MarketRegime.BEAR.value
         
         # =====================================================================
@@ -463,7 +463,7 @@ if __name__ == "__main__":
         regime_df = df[df['regime'] == regime.value]
         if len(regime_df) > 0:
             print(f"\n{regime.value}: {len(regime_df)} bars")
-            print(regime_df[['close', 'returns', 'adx', 'atr_ratio', 'regime']].head(3))
+            print(pd.DataFrame(regime_df[['close', 'returns', 'adx', 'atr_ratio', 'regime']]).head(3))
     
     print("\n" + "="*70)
     print("[OK] Regime classifier working!")

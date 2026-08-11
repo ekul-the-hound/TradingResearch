@@ -234,6 +234,7 @@ class TestPassRateSimulator(unittest.TestCase):
         r = self.prs.simulate_pass_rate(
             self.checker, self.trades.head(2), n_simulations=5, verbose=False)
         self.assertIsNotNone(r.error)
+        assert r.error is not None  # narrow for type checker
         self.assertIn('at least 4', r.error)
 
     def test_invalid_mode_rejected(self):

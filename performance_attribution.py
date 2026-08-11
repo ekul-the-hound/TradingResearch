@@ -32,6 +32,16 @@ from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass, field
 
 
+
+
+
+def _pa_f(v: Any) -> float:
+
+    """Coerce a scipy/numpy scalar (version-dependent type) to float."""
+
+    return float(v)
+
+
 # ==============================================================================
 # RESULT
 # ==============================================================================
@@ -186,10 +196,10 @@ class PerformanceAttributor:
 
         b = bench[:len(r)]
         # OLS: r = alpha + beta * bench + epsilon
-        slope, intercept, r_val, p_val, std_err = sp_stats.linregress(b, r)
-        beta = float(slope)
-        alpha_daily = float(intercept)
-        r2 = float(r_val ** 2)
+        _lr = sp_stats.linregress(b, r)
+        beta = _pa_f(_lr.slope)  # type: ignore[attr-defined]
+        alpha_daily = _pa_f(_lr.intercept)  # type: ignore[attr-defined]
+        r2 = _pa_f(_lr.rvalue) ** 2  # type: ignore[attr-defined]
 
         beta_return = float(np.prod(1 + b * beta) - 1)
         total = float(np.prod(1 + r) - 1)
@@ -255,8 +265,10 @@ class PerformanceAttributor:
             ret_by_regime[name] = float(np.sum(regime_r))
             count_by_regime[name] = int(np.sum(mask))
 
-        best = max(ret_by_regime, key=ret_by_regime.get) if ret_by_regime else "unknown"
-        worst = min(ret_by_regime, key=ret_by_regime.get) if ret_by_regime else "unknown"
+        best = (max(ret_by_regime, key=lambda k: ret_by_regime[k])
+                if ret_by_regime else "unknown")
+        worst = (min(ret_by_regime, key=lambda k: ret_by_regime[k])
+                 if ret_by_regime else "unknown")
 
         return ret_by_regime, count_by_regime, best, worst
 
@@ -294,11 +306,12 @@ class PerformanceAttributor:
 
         # Hold duration: do longer holds perform better?
         if len(hold_durations) > 5:
-            corr, _ = sp_stats.pearsonr(
+            _pr = sp_stats.pearsonr(
                 hold_durations[:len(entry_returns)],
                 entry_returns[:len(hold_durations)],
             )
-            hold_value = float(corr) if np.isfinite(corr) else 0.0
+            corr = _pa_f(_pr[0])
+            hold_value = corr if np.isfinite(corr) else 0.0
         else:
             hold_value = 0.0
 

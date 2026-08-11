@@ -15,6 +15,7 @@ import unittest
 from datetime import datetime, timedelta
 
 import pandas as pd
+from typing import cast, Any
 import pytz
 
 import ftmo_daily_anchor as anchor
@@ -52,7 +53,8 @@ class TestPragueMidnight(unittest.TestCase):
         """Documents the size of the bug being fixed."""
         for date, expected_gap_h in ((datetime(2024, 1, 15), 1), (datetime(2024, 7, 15), 2)):
             correct = anchor.prague_midnight_utc(date.date())
-            old = pd.Timestamp(date).normalize().to_pydatetime()  # 00:00 UTC
+            _ts = cast(Any, pd.Timestamp(date)).normalize()
+            old = _ts.to_pydatetime()  # 00:00 UTC
             gap = (old - correct).total_seconds() / 3600
             self.assertEqual(gap, expected_gap_h,
                              f"old checkpoint sat {gap}h inside the Prague day")

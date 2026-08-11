@@ -28,6 +28,7 @@
 # Each step can also be run independently -- the orchestrator just chains them.
 # ==============================================================================
 
+import os
 import sys
 import json
 import time
@@ -265,6 +266,16 @@ class Pipeline:
             verbose=cfg.verbose,
         )
 
+        # State the engine up front. 'no backtests ran' is almost always
+        # 'no engine loaded' or 'no data', and both are visible from here.
+        engine = getattr(adapter, 'engine_name', None)
+        if engine is None:
+            self._log('  [FAIL] No backtest engine loaded. Nothing can be '
+                      'backtested. Check backtester_multi_timeframe and '
+                      'backtester import without error.')
+        else:
+            self._log(f'  [ENGINE] {engine}')
+
         # Collect strategy classes to test
         strategies = self._collect_strategies()
         if not strategies:
@@ -284,6 +295,21 @@ class Pipeline:
             all_results.extend(results)
 
         self._log(f"  [STATS] Ran {len(all_results)} backtests across {len(strategies)} strategies")
+
+        # LOOKAHEAD + PROHIBITED-PATTERN GATE
+        # Runs before the metric filter, so a strategy that reads future
+        # bars cannot be promoted on the inflated numbers that reading them
+        # produces.
+        before_gate = len(all_results)
+        all_results, gate_rejected = self._lookahead_gate(all_results)
+        if gate_rejected:
+            self._log(f"  [GATE]  {len(gate_rejected)} of {before_gate} rejected by the")
+            self._log(f"          lookahead / prohibited-pattern scan:")
+            for item in gate_rejected[:10]:
+                self._log(f"            - {item}")
+            if len(gate_rejected) > 10:
+                self._log(f"            ... and {len(gate_rejected) - 10} more")
+        self._results["step2_gate_rejected"] = gate_rejected
 
         # Filter
         survivors = []
@@ -376,10 +402,27 @@ class Pipeline:
                 if (cr.returns is not None and len(cr.returns) > 30
                         and not getattr(cr, "returns_synthetic", False)):
                     self._log(f"  [TEST] Validating {cr.strategy_id}...")
+
+                    # monte_carlo_equity and bootstrap_sharpe both operate
+                    # on a TRADES DataFrame with a return_pct column, not on
+                    # the cr.returns array. Build it from the trade list;
+                    # skip validation for a result that has no trades rather
+                    # than feeding the methods something they will
+                    # misread.
+                    trades_df = self._trades_frame(cr)
+                    if trades_df is None or trades_df.empty:
+                        self._log(f"  [SKIP]  {cr.strategy_id}: no trade "
+                                  f"list to validate against")
+                        continue
+
                     # Monte Carlo
-                    mc = vf.monte_carlo_equity(cr.returns, n_simulations=self.config.monte_carlo_runs)
-                    # Bootstrap
-                    bs = vf.bootstrap_sharpe(cr.returns, n_bootstrap=self.config.bootstrap_samples)
+                    mc = vf.monte_carlo_equity(
+                        trades_df,
+                        n_simulations=self.config.monte_carlo_runs)
+                    # Bootstrap (kwarg is n_samples, not n_bootstrap)
+                    bs = vf.bootstrap_sharpe(
+                        trades_df,
+                        n_samples=self.config.bootstrap_samples)
 
                     cr.strategy_params["mc_mean_sharpe"] = getattr(mc, "sharpe_ratio_mean", 0)
                     cr.strategy_params["bootstrap_ci_low"] = getattr(bs, "ci_lower", 0)
@@ -539,17 +582,20 @@ class Pipeline:
         self._log(f"  [TROPHY] Top pool: {len(top_pool)} strategies")
         self._log(f"  [LIST] Validation pool: {len(validation_pool)} strategies")
 
-        # Mutation -- use existing mutation agent if available
+        # Mutation.
+        # NOT wired into the pipeline. mutate_strategy.py exists but its
+        # entry point is call_mutation_agent()/parse_variants(), and it is
+        # mid-migration from the Anthropic API to local models. The old
+        # code here imported a generate_variants() that never existed,
+        # relying on the resulting ImportError to look like a skip while
+        # the loop body did no mutating regardless.
+        #
+        # Run it manually for now:  python mutate_strategy.py
         mutations = []
-        try:
-            from mutate_strategy import generate_variants
-            for cr in top_pool:
-                self._log(f"  [DNA] Generating {self.config.variants_per_strategy} variants of {cr.strategy_id}...")
-                # The mutation agent writes .py files -- we just note them
-                mutations.append(cr.strategy_id)
-        except ImportError:
-            self._log("  [WARN]  mutate_strategy not available for auto-mutation")
-            self._log("     Run manually: python mutate_strategy.py")
+        self._log(f"  [SKIP]  Auto-mutation is not wired into the pipeline "
+                  f"yet (local-model agent pending).")
+        self._log(f"          {len(top_pool)} strateg(ies) are eligible; "
+                  f"run: python mutate_strategy.py")
 
         # Shadow trading setup for validation pool
         try:
@@ -774,6 +820,13 @@ class Pipeline:
                 continue
             try:
                 spec = importlib.util.spec_from_file_location(f.stem, f)
+                if spec is None or spec.loader is None:
+                    # Names the file. The old code crashed with
+                    # "'NoneType' has no attribute 'loader'", which says
+                    # nothing about which strategy failed to load.
+                    self._log(f"  [WARN]  Cannot load {f.name}: no import "
+                              f"spec (is it valid Python?)")
+                    continue
                 mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
                 for attr_name in dir(mod):
@@ -809,10 +862,152 @@ class Pipeline:
             ("Mutation winners", len(self._results.get("step8_validated_mutations", []))),
         ]
         self._log(f"\n  Strategy Funnel:")
+
+        # Every stage is printed, zeros included. The first stage to reach
+        # zero after a non-zero one is where the pool died, and that is the
+        # line worth reading.
+        died_at = None
+        seen_any = False
         for label, count in counts:
+            marker = ""
             if count > 0:
-                self._log(f"    {label:25s} -> {count}")
+                seen_any = True
+            elif seen_any and died_at is None:
+                died_at = label
+                marker = "   <-- pool emptied here"
+            self._log(f"    {label:25s} -> {count}{marker}")
+
+        self._log("")
+        if not seen_any:
+            self._log("  [NO OUTPUT] Every stage produced zero strategies.")
+            self._log("    Nothing was backtested, so nothing downstream ran.")
+            self._log("    Check strategies/variants/ has .py files, and that")
+            self._log("    step 1 ran (default --from-step is 2, which skips")
+            self._log("    discovery entirely).")
+        elif died_at:
+            self._log(f"  [PARTIAL] The pool emptied at '{died_at}'. Stages")
+            self._log("    after it ran against nothing. This is a normal")
+            self._log("    outcome when filters reject everything -- but it is")
+            self._log("    NOT the same as the pipeline having produced a result.")
+        else:
+            final = counts[-1][1]
+            self._log(f"  [OK] {final} strategy/strategies survived every stage.")
         self._log(f"{'='*70}\n")
+
+    def preflight(self, from_step: int) -> bool:
+        """
+        Cheap checks before any backtest time is spent.
+
+        Returns True if the run can sensibly proceed. Every check that
+        fails is reported; the method does not stop at the first. The point
+        is to surface a setup problem in the first second rather than after
+        step 2 has already run for minutes and then found nothing.
+        """
+        self._log('\n' + '=' * 70)
+        self._log('  PIPELINE PREFLIGHT')
+        self._log('=' * 70)
+        ok = True
+
+        # 1. Output dir writable.
+        try:
+            self.config.output_dir.mkdir(parents=True, exist_ok=True)
+            probe = self.config.output_dir / '.write_probe'
+            probe.write_text('ok', encoding='utf-8')
+            probe.unlink()
+            self._log(f'  [OK]   output dir writable: '
+                      f'{self.config.output_dir}')
+        except Exception as e:
+            self._log(f'  [FAIL] output dir not writable: {e}')
+            ok = False
+
+        # 2. Strategies to work on, unless discovery will produce them.
+        if from_step >= 2:
+            try:
+                strategies = self._collect_strategies()
+                n = len(strategies)
+            except Exception as e:
+                self._log(f'  [FAIL] could not collect strategies: {e}')
+                strategies, n = [], 0
+                ok = False
+            if n == 0:
+                self._log('  [FAIL] no strategies found, and starting at '
+                          'step 2 skips discovery. Nothing would run.')
+                self._log('         Add .py files to strategies/variants/, '
+                          'or use --from-step 1.')
+                ok = False
+            else:
+                self._log(f'  [OK]   {n} strateg(ies) available to backtest')
+        else:
+            # Discovery is in scope; it needs SearXNG + Ollama. Reuse the
+            # discovery pipeline's own preflight rather than duplicating it.
+            try:
+                from discovery_pipeline import DiscoveryPipeline
+                if DiscoveryPipeline().preflight_check():
+                    self._log('  [OK]   discovery services reachable')
+                else:
+                    self._log('  [FAIL] discovery requested (--from-step 1) '
+                              'but its services are not reachable.')
+                    ok = False
+            except Exception as e:
+                self._log(f'  [WARN] could not run discovery preflight: {e}')
+
+        # 3. Market data present (a warning, not a failure -- adapters may
+        #    resolve data from elsewhere).
+        try:
+            import config as _cfg
+            data_root = getattr(_cfg, 'DATA_ROOT', None)
+            if data_root and not os.path.exists(str(data_root)):
+                self._log(f'  [WARN] configured data root does not exist: '
+                          f'{data_root}')
+        except Exception:
+            pass
+
+        self._log('=' * 70)
+        self._log(f'  PREFLIGHT: {"PASS" if ok else "FAIL"}')
+        self._log('=' * 70 + '\n')
+        return ok
+
+    def _trades_frame(self, cr):
+        """
+        Build the trades DataFrame the validation framework expects.
+
+        It reads a 'return_pct' column. CanonicalResult stores trades as a
+        list of dicts whose per-trade return may be under any of a few
+        keys depending on where the result came from, so this normalises
+        to return_pct and returns None when there is nothing usable --
+        never a fabricated single row.
+        """
+        trades = getattr(cr, 'trade_list', None)
+        if not trades:
+            return None
+        import pandas as pd
+        df = pd.DataFrame(trades)
+        if 'return_pct' in df.columns:
+            return df
+        for alt in ('return', 'pnl_pct', 'ret', 'return_percent'):
+            if alt in df.columns:
+                df['return_pct'] = df[alt]
+                return df
+        # Derive from pnl and size if that is all there is.
+        if 'pnl' in df.columns and 'size' in df.columns:
+            denom = df['size'].replace(0, float('nan'))
+            df['return_pct'] = (df['pnl'] / denom) * 100.0
+            return df
+        return None
+
+    def produced_output(self) -> bool:
+        """
+        Did anything survive to the end?
+
+        'The pipeline completed' and 'the pipeline produced something' are
+        different claims. Only this one is worth scheduling against.
+        """
+        for key in ('step8_validated_mutations', 'step7_top_pool',
+                    'step6_diversified', 'step5_risk_assessed',
+                    'step4_validated'):
+            if self._results.get(key):
+                return True
+        return False
 
     def _save_state(self):
         """Save pipeline state for resume/analysis."""
@@ -849,6 +1044,10 @@ def main():
                         help="Override timeframes (e.g. 1hour 4hour)")
     parser.add_argument("--min-sharpe", type=float, default=None)
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--check", action="store_true",
+                        help="Run preflight checks and exit")
+    parser.add_argument("--force", action="store_true",
+                        help="Run even if preflight fails")
     args = parser.parse_args()
 
     cfg = PipelineConfig()
@@ -862,8 +1061,23 @@ def main():
         cfg.verbose = False
 
     pipeline = Pipeline(cfg)
+
+    passed = pipeline.preflight(args.from_step)
+    if args.check:
+        return 0 if passed else 1
+    if not passed and not args.force:
+        pipeline._log('Preflight failed. Fix the above, or re-run with '
+                      '--force to proceed anyway.')
+        return 1
+
     pipeline.run(from_step=args.from_step, to_step=args.to_step)
+
+    # 0 = produced a pool, 2 = ran cleanly but produced nothing.
+    # Distinct from 1, which callers generally read as 'it crashed'.
+    return 0 if pipeline.produced_output() else 2
 
 
 if __name__ == "__main__":
-    main()
+    # sys.exit so the return value actually becomes the process exit
+    # code. Bare main() discards it and always exits 0.
+    sys.exit(main())

@@ -53,6 +53,19 @@ class AdversarialReview:
     full_analysis: str
 
 
+def _response_text(response) -> str:
+    """
+    Text out of an Anthropic response. content[0] is a block union whose
+    .text attribute exists only on TextBlock; getattr keeps this correct for
+    a tool-use or other block without a static type error.
+    """
+    try:
+        block = response.content[0]
+    except (AttributeError, IndexError):
+        return ""
+    return getattr(block, 'text', '') or ''
+
+
 class AdversarialReviewer:
     """
     Adversarial Reviewer Agent
@@ -151,6 +164,10 @@ Respond with a JSON object (no markdown code blocks):
 
 Be HARSH. Your job is to protect the user from losing money on a flawed strategy."""
 
+        # Bound before the try so the except handlers, which print
+        # response_text, cannot raise UnboundLocalError if the API call
+        # itself fails before assigning it -- which would mask the real error.
+        response_text = ""
         try:
             response = self.client.messages.create(
                 model=self.model,
@@ -158,7 +175,7 @@ Be HARSH. Your job is to protect the user from losing money on a flawed strategy
                 messages=[{"role": "user", "content": prompt}]
             )
             
-            response_text = response.content[0].text.strip()
+            response_text = _response_text(response).strip()
             
             # Parse JSON response
             # Handle potential markdown code blocks
@@ -298,6 +315,10 @@ Respond with a JSON object (no markdown code blocks):
 
 Be SKEPTICAL. Assume results are too good until proven otherwise."""
 
+        # Bound before the try so the except handlers, which print
+        # response_text, cannot raise UnboundLocalError if the API call
+        # itself fails before assigning it -- which would mask the real error.
+        response_text = ""
         try:
             response = self.client.messages.create(
                 model=self.model,
@@ -305,7 +326,7 @@ Be SKEPTICAL. Assume results are too good until proven otherwise."""
                 messages=[{"role": "user", "content": prompt}]
             )
             
-            response_text = response.content[0].text.strip()
+            response_text = _response_text(response).strip()
             
             # Parse JSON
             _start = response_text.find("{")
@@ -374,8 +395,8 @@ Be SKEPTICAL. Assume results are too good until proven otherwise."""
         self,
         strategy_code: str,
         backtest_results: Dict,
-        robustness_results: Dict = None,
-        validation_results: Dict = None,
+        robustness_results: Optional[Dict] = None,
+        validation_results: Optional[Dict] = None,
         strategy_name: str = "Unknown"
     ) -> AdversarialReview:
         """
@@ -456,6 +477,10 @@ Respond with a JSON object (no markdown code blocks):
 
 Remember: It's better to reject a good strategy than approve a bad one. Be CONSERVATIVE."""
 
+        # Bound before the try so the except handlers, which print
+        # response_text, cannot raise UnboundLocalError if the API call
+        # itself fails before assigning it -- which would mask the real error.
+        response_text = ""
         try:
             response = self.client.messages.create(
                 model=self.model,
@@ -463,7 +488,7 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
                 messages=[{"role": "user", "content": prompt}]
             )
             
-            response_text = response.content[0].text.strip()
+            response_text = _response_text(response).strip()
             
             # Parse JSON
             _start = response_text.find("{")
@@ -595,7 +620,7 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
     # SAVE REVIEWS
     # =========================================================================
     
-    def save_reviews(self, filepath: str = None):
+    def save_reviews(self, filepath: Optional[str] = None):
         """Save all reviews to a JSON file"""
         
         if filepath is None:
@@ -628,7 +653,7 @@ Remember: It's better to reject a good strategy than approve a bad one. Be CONSE
 
 def adversarial_review_strategy(
     strategy_path: str,
-    backtest_results: Dict = None
+    backtest_results: Optional[Dict] = None
 ) -> AdversarialReview:
     """
     Quick adversarial review of a strategy file.

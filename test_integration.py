@@ -148,6 +148,7 @@ def test_cr_13_equity_from_trades():
     raw = {"strategy_name": "t", "trades": trades, "starting_value": 10000,
            "total_return_pct": 3, "sharpe_ratio": 1, "max_drawdown_pct": 1, "total_trades": 2}
     cr = CanonicalResult.from_backtest(raw)
+    assert cr.equity_curve is not None
     assert cr.equity_curve[0] == 10000
     assert cr.equity_curve[-1] == 10300
 
@@ -234,6 +235,7 @@ def test_ba_07_aggregate():
     agg = adapter._aggregate_results(results, {"test": True}, "TestStrat")
     assert agg.sharpe_ratio == 1.75  # mean of 1.5 and 2.0
     assert agg.total_trades == 50
+    assert agg.returns is not None
     assert len(agg.returns) == 100  # concatenated
 
 def test_ba_08_strategy_id_gen():

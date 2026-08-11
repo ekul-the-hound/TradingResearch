@@ -245,10 +245,10 @@ class DecayCalculator:
                 entry_time,
                 exit_time,
                 float(pnl) if pnl is not None else 0.0,
-                float(t.get("pnlcomm")) if t.get("pnlcomm") is not None else None,
-                float(t.get("size")) if t.get("size") is not None else None,
+                _dc_f(t.get("pnlcomm")),
+                _dc_f(t.get("size")),
                 int(bool(t.get("is_long"))) if t.get("is_long") is not None else None,
-                float(t.get("return_pct")) if t.get("return_pct") is not None else None,
+                _dc_f(t.get("return_pct")),
                 duration_h,
             ))
 
@@ -445,7 +445,7 @@ class DecayCalculator:
         cls,
         baseline: Dict[str, Any],
         rolling: Dict[str, Any],
-    ) -> Dict[str, float]:
+    ) -> Dict[str, Optional[float]]:
         """Score every metric and produce the composite."""
         scores = {
             "win_rate": cls._score_standard(
@@ -468,7 +468,8 @@ class DecayCalculator:
                 rolling.get("avg_trade_duration_hours")),
         }
 
-        composite_vals = [scores[k] for k in COMPOSITE_METRICS if scores.get(k) is not None]
+        composite_vals = [float(v) for k in COMPOSITE_METRICS
+                          if (v := scores.get(k)) is not None]
         composite = (sum(composite_vals) / len(composite_vals)) if composite_vals else None
         scores["composite"] = composite
         return scores
@@ -668,6 +669,10 @@ class DecayCalculator:
 # ==============================================================================
 # UTILITIES
 # ==============================================================================
+
+def _dc_f(v):
+    """Any|None -> float|None, for row.get values behind a None-check."""
+    return None if v is None else float(v)
 
 def _as_iso(value: Any) -> Optional[str]:
     """Coerce a datetime-like into ISO 8601 text, or None."""

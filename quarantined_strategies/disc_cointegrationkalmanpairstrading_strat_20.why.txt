@@ -1,0 +1,20 @@
+Could not integrate disc_cointegrationkalmanpairstrading_strat_20.py.
+
+RUNTIME ERROR when the strategy was backtested on a tiny synthetic series:
+Traceback (most recent call last):
+  File "<string>", line 39, in <module>
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\cerebro.py", line 1222, in runstrategies
+    strat = stratcls(*sargs, **skwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\metabase.py", line 88, in __call__
+    _obj, args, kwargs = cls.doinit(_obj, *args, **kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\metabase.py", line 78, in doinit
+    _obj.__init__(*args, **kwargs)
+  File "D:\Luke Files\Coding\Developer\TradingResearch\discovered_strategies\disc_cointegrationkalmanpairstrading_strat_20.py", line 36, in __init__
+    self.data1 = self.datas[1]  # Asset B
+                 ~~~~~~~~~~^^^
+IndexError: list index out of range

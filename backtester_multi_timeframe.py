@@ -52,8 +52,15 @@ from database import ResultsDatabase
 from data_manager import DataManager
 
 # Try to import regime classifier (optional dependency)
-try:
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    # Checker always sees the real symbols; the runtime guard below
+    # decides availability. This resolves the possibly-unbound reports
+    # without forcing the import at runtime.
     from regime_classifier import RegimeClassifier, MarketRegime
+
+try:
+    from regime_classifier import RegimeClassifier, MarketRegime  # noqa: F811
     REGIME_AVAILABLE = True
 except ImportError:
     REGIME_AVAILABLE = False
@@ -275,14 +282,14 @@ class MultiTimeframeBacktester:
         
         # Prepare data feed
         data_feed = bt.feeds.PandasData(
-            dataname=data,
-            datetime=None,
-            open='open',
-            high='high',
-            low='low',
-            close='close',
-            volume='volume' if 'volume' in data.columns else None,
-            openinterest=-1
+            dataname=data,  # type: ignore
+            datetime=None,  # type: ignore
+            open='open',  # type: ignore
+            high='high',  # type: ignore
+            low='low',  # type: ignore
+            close='close',  # type: ignore
+            volume='volume' if 'volume' in data.columns else None,  # type: ignore
+            openinterest=-1  # type: ignore
         )
         cerebro.adddata(data_feed)
         
@@ -298,7 +305,7 @@ class MultiTimeframeBacktester:
         
         # Add analyzers
         cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe',
-                            timeframe=bt.TimeFrame.Days, compression=1,
+                            timeframe=bt.TimeFrame.Days, compression=1,  # type: ignore
                             riskfreerate=0.0, annualize=True)
         cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
         cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
@@ -362,8 +369,8 @@ class MultiTimeframeBacktester:
             'strategy_name': strategy_class.__name__,
             'symbol': symbol,
             'timeframe': timeframe,
-            'start_date': data.index[0].strftime('%Y-%m-%d'),
-            'end_date': data.index[-1].strftime('%Y-%m-%d'),
+            'start_date': pd.Timestamp(data.index[0]).strftime('%Y-%m-%d'),
+            'end_date': pd.Timestamp(data.index[-1]).strftime('%Y-%m-%d'),
             'bars_tested': len(data),
             'starting_value': starting_value,
             'ending_value': ending_value,
@@ -387,7 +394,9 @@ class MultiTimeframeBacktester:
             # =========================================================
             if result['trades'] and len(result['trades']) > 0:
                 trades_df = pd.DataFrame(result['trades'])
-                trading_days = max((data.index[-1] - data.index[0]).days, 1)
+                trading_days = max(
+                    (pd.Timestamp(data.index[-1])
+                     - pd.Timestamp(data.index[0])).days, 1)
                 
                 # Trades per day
                 result['trades_per_day'] = total_trades / trading_days
@@ -433,9 +442,9 @@ class MultiTimeframeBacktester:
         strategy_class,
         symbol: str,
         timeframe: str,
-        initial_cash: float = None,
-        commission: float = None,
-        strategy_params: Dict = None,
+        initial_cash: Optional[float] = None,
+        commission: Optional[float] = None,
+        strategy_params: Optional[Dict] = None,
         save_to_db: bool = True
     ) -> Optional[Dict]:
         """
@@ -472,6 +481,10 @@ class MultiTimeframeBacktester:
             print("[WARN]  No data for regime classification")
             return result
         
+        if self.regime_classifier is None:
+            print("[WARN]  Regime classifier not available; "
+                  "skipping regime analysis")
+            return result
         data_with_regimes = self.regime_classifier.classify(data)
         
         # Map trades to regimes
@@ -520,7 +533,9 @@ class MultiTimeframeBacktester:
             result['trades_df'] = pd.DataFrame()
         
         # Get regime summary for the data period
-        result['regime_summary'] = self.regime_classifier.get_regime_summary(data_with_regimes)
+        if self.regime_classifier is not None:
+            result['regime_summary'] = \
+                self.regime_classifier.get_regime_summary(data_with_regimes)
         
         # Save to database
         if save_to_db:
@@ -697,7 +712,7 @@ class MultiTimeframeBacktester:
                             timeframe=timeframe,
                             initial_cash=initial_cash,
                             commission=commission,
-                            strategy_params=strategy_params,
+                            strategy_params=strategy_params or {},
                             save_to_db=save_to_db
                         )
                     else:
@@ -707,7 +722,7 @@ class MultiTimeframeBacktester:
                             timeframe=timeframe,
                             initial_cash=initial_cash,
                             commission=commission,
-                            strategy_params=strategy_params,
+                            strategy_params=strategy_params or {},
                             extract_trades=extract_trades
                         )
                         
@@ -741,7 +756,7 @@ class MultiTimeframeBacktester:
     # TRADE EXTRACTION FOR VALIDATION
     # =========================================================================
     
-    def get_trades_for_validation(self, results: List[Dict] = None) -> pd.DataFrame:
+    def get_trades_for_validation(self, results: Optional[List[Dict]] = None) -> pd.DataFrame:
         """
         Extract all trades from batch results for validation framework.
         
@@ -910,9 +925,9 @@ if __name__ == "__main__":
             params = (('fast', 10), ('slow', 30))
             
             def __init__(self):
-                self.fast_ma = bt.indicators.SMA(self.data.close, period=self.p.fast)
-                self.slow_ma = bt.indicators.SMA(self.data.close, period=self.p.slow)
-                self.crossover = bt.indicators.CrossOver(self.fast_ma, self.slow_ma)
+                self.fast_ma = bt.indicators.SMA(self.data.close, period=self.p.fast)  # type: ignore
+                self.slow_ma = bt.indicators.SMA(self.data.close, period=self.p.slow)  # type: ignore
+                self.crossover = bt.indicators.CrossOver(self.fast_ma, self.slow_ma)  # type: ignore
             
             def next(self):
                 if not self.position:

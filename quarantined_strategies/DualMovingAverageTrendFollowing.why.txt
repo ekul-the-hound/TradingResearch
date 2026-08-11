@@ -1,0 +1,24 @@
+Could not integrate DualMovingAverageTrendFollowing.py.
+
+RUNTIME ERROR when the strategy was backtested on a tiny synthetic series:
+Traceback (most recent call last):
+  File "<string>", line 39, in <module>
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\cerebro.py", line 1298, in runstrategies
+    self._runonce(runstrats)
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\cerebro.py", line 1657, in _runonce
+    strat._once()
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\lineiterator.py", line 297, in _once
+    indicator._once()
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\lineiterator.py", line 297, in _once
+    indicator._once()
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\lineiterator.py", line 317, in _once
+    self.oncestart(self._minperiod - 1, self._minperiod)
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\lineiterator.py", line 327, in oncestart
+    self.once(start, end)
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\indicators\basicops.py", line 364, in once
+    dst[i] = math.fsum(src[i - period + 1:i + 1]) / period
+    ~~~^^^
+IndexError: array assignment index out of range

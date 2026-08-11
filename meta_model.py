@@ -171,7 +171,7 @@ class MetaModel:
     def _prepare_features(
         self,
         df: pd.DataFrame,
-        feature_cols: List[str] = None
+        feature_cols: Optional[List[str]] = None
     ) -> Tuple[np.ndarray, List[str]]:
         """Prepare feature matrix from DataFrame"""
         
@@ -188,13 +188,13 @@ class MetaModel:
             if X[col].dtype == bool:
                 X[col] = X[col].astype(int)
         
-        return X.values, list(X.columns)
+        return np.asarray(X.values), list(X.columns)
     
     def train(
         self,
         feature_df: pd.DataFrame,
         target: str,
-        feature_cols: List[str] = None,
+        feature_cols: Optional[List[str]] = None,
         test_size: float = 0.2,
         cv_folds: int = 5
     ) -> ModelMetrics:
@@ -237,7 +237,7 @@ class MetaModel:
         print(f"Target distribution: {np.bincount(y.astype(int))}")
         
         # Split FIRST, then fit scaler on train only (no test leakage)
-        _, _counts = np.unique(y, return_counts=True)
+        _, _counts = np.unique(np.asarray(y), return_counts=True)
         _strat = y if _counts.min() >= 2 else None
         if _strat is None:
             print("[WARN] Minority class < 2 samples -- stratification disabled")
@@ -254,14 +254,16 @@ class MetaModel:
         
         # Predictions
         y_pred = self.model.predict(X_test)
-        y_proba = self.model.predict_proba(X_test)[:, 1] if hasattr(self.model, 'predict_proba') else None
+        y_proba = (np.asarray(self.model.predict_proba(X_test))[:, 1]
+                   if hasattr(self.model, 'predict_proba') else None)
         
         # Calculate metrics
         accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred, zero_division=0)
-        recall = recall_score(y_test, y_pred, zero_division=0)
-        f1 = f1_score(y_test, y_pred, zero_division=0)
-        auc = roc_auc_score(y_test, y_proba) if y_proba is not None else None
+        precision = precision_score(y_test, y_pred, zero_division=0)  # type: ignore[arg-type]
+        recall = recall_score(y_test, y_pred, zero_division=0)  # type: ignore[arg-type]
+        f1 = f1_score(y_test, y_pred, zero_division=0)  # type: ignore[arg-type]
+        auc = (float(roc_auc_score(y_test, y_proba))
+               if y_proba is not None else None)
         conf_matrix = confusion_matrix(y_test, y_pred)
         
         # Cross-validation
@@ -321,6 +323,11 @@ class MetaModel:
         
         if not self.is_fitted:
             raise ValueError("Model not trained. Call train() first.")
+        # is_fitted implies these were set by train(); assert it so the
+        # type checker knows, and so a corrupted load fails here loudly
+        # rather than with an AttributeError deeper in.
+        assert self.model is not None and self.scaler is not None, \
+            "is_fitted is True but model/scaler are None -- corrupt state"
         
         # Convert dict to DataFrame if needed
         if isinstance(features, dict):
@@ -334,10 +341,10 @@ class MetaModel:
             X_scaled = self.scaler.transform(X)
             
             # Get prediction and probability
-            pred = self.model.predict(X_scaled)[0]
+            pred = np.asarray(self.model.predict(X_scaled))[0]
             
             if hasattr(self.model, 'predict_proba'):
-                proba = self.model.predict_proba(X_scaled)[0, 1]
+                proba = np.asarray(self.model.predict_proba(X_scaled))[0, 1]
             else:
                 proba = float(pred)
             
@@ -356,7 +363,7 @@ class MetaModel:
                 recommendation = 'REJECT'
             
             results.append(PredictionResult(
-                strategy_name=row.get('strategy_name', f'Strategy_{idx}'),
+                strategy_name=str(row.get('strategy_name', f'Strategy_{idx}')),
                 survival_probability=proba,
                 overfitting_risk=overfit_risk,
                 confidence=1 - abs(proba - 0.5) * 2,  # Higher near 0 or 1
@@ -372,31 +379,31 @@ class MetaModel:
         risk_factors = []
         
         # Check various thresholds
-        if row.get('total_trades', 0) < 30:
+        if float(row.get('total_trades', 0) or 0) < 30:
             risk_factors.append("Low trade count (<30)")
         
         if row.get('has_serial_dependence', False):
             risk_factors.append("Serial dependence in returns")
         
-        skew = row.get('skewness', 0)
+        skew = float(row.get('skewness', 0) or 0)
         if skew < -1:
             risk_factors.append(f"Negative skew ({skew:.2f}) - crash risk")
         
-        kurt = row.get('kurtosis', 0)
+        kurt = float(row.get('kurtosis', 0) or 0)
         if kurt > 3:
             risk_factors.append(f"High kurtosis ({kurt:.2f}) - fat tails")
         
-        if row.get('max_drawdown_pct', 0) > 20:
+        if float(row.get('max_drawdown_pct', 0) or 0) > 20:
             risk_factors.append("High max drawdown (>20%)")
         
-        if row.get('cost_ratio', 0) > 50:
+        if float(row.get('cost_ratio', 0) or 0) > 50:
             risk_factors.append("High cost ratio (>50%)")
         
-        garch = row.get('garch_persistence', 0)
+        garch = float(row.get('garch_persistence', 0) or 0)
         if garch > 0.95:
             risk_factors.append("High volatility persistence")
         
-        if row.get('latency_sensitivity', 0) > 2:
+        if float(row.get('latency_sensitivity', 0) or 0) > 2:
             risk_factors.append("Latency sensitive")
         
         sharpe = row.get('sharpe_ratio', 0)
@@ -412,7 +419,7 @@ class MetaModel:
         factors = 0
         
         # Low trade count
-        trades = row.get('total_trades', 0)
+        trades = float(row.get('total_trades', 0) or 0)
         if trades < 100:
             risk_score += 0.3 * (1 - trades / 100)
             factors += 1
@@ -434,12 +441,12 @@ class MetaModel:
             factors += 1
         
         # High cost ratio (edge may be illusory)
-        if row.get('cost_ratio', 0) > 30:
+        if float(row.get('cost_ratio', 0) or 0) > 30:
             risk_score += 0.1
             factors += 1
         
         # Low robustness
-        if row.get('combined_stress_survival', 100) < 50:
+        if float(row.get('combined_stress_survival', 100) or 100) < 50:
             risk_score += 0.2
             factors += 1
         
@@ -451,10 +458,17 @@ class MetaModel:
         if not self.is_fitted:
             raise ValueError("Model not trained. Call train() first.")
         
-        if hasattr(self.model, 'feature_importances_'):
-            importance = self.model.feature_importances_
-        elif hasattr(self.model, 'coef_'):
-            importance = np.abs(self.model.coef_[0])
+        if self.model is None:
+            raise ValueError("Model not trained. Call train() first.")
+        # getattr instead of attribute access: the concrete estimator type
+        # is only known at runtime, and different sklearn models expose
+        # importances under different names.
+        fi = getattr(self.model, 'feature_importances_', None)
+        coef = getattr(self.model, 'coef_', None)
+        if fi is not None:
+            importance = fi
+        elif coef is not None:
+            importance = np.abs(coef[0])
         else:
             return pd.DataFrame()
         
@@ -592,7 +606,7 @@ class EarlyKillFilter:
 # CONVENIENCE FUNCTIONS
 # ==============================================================================
 
-def quick_predict(features: pd.DataFrame, model_path: str = None) -> List[PredictionResult]:
+def quick_predict(features: pd.DataFrame, model_path: Optional[str] = None) -> List[PredictionResult]:
     """Quick prediction using saved or new model"""
     model = MetaModel()
     if model_path and Path(model_path).exists():
@@ -604,7 +618,7 @@ def quick_predict(features: pd.DataFrame, model_path: str = None) -> List[Predic
         for idx, row in features.iterrows():
             risk = model._calculate_overfit_risk(row)
             results.append(PredictionResult(
-                strategy_name=row.get('strategy_name', f'Strategy_{idx}'),
+                strategy_name=str(row.get('strategy_name', f'Strategy_{idx}')),
                 survival_probability=1 - risk,
                 overfitting_risk=risk,
                 confidence=0.5,

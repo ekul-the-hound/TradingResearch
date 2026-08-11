@@ -463,7 +463,7 @@ def save_variants(variants):
                 print(f"   [OK] Saved variant_{num:02d}.py")
         else:
             failed.append({'number': num, 'error': error})
-            print(f"   [FAIL] variant_{num:02d} failed validation: {error[:50]}...")
+            print(f"   [FAIL] variant_{num:02d} failed validation: {(error or '')[:50]}...")
     
     return saved, failed
 
@@ -513,7 +513,7 @@ def generate_variants_summary(variants, saved, failed):
     if failed:
         print(f"\n  [WARN]  Failed variants (syntax errors):")
         for f in failed:
-            print(f"    - variant_{f['number']:02d}: {f['error'][:40]}...")
+            print(f"    - variant_{f['number']:02d}: {(f['error'] or '')[:40]}...")
     
     print(f"\n{'='*70}")
     print("NEXT STEPS:")

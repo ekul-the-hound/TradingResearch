@@ -36,7 +36,7 @@
 import numpy as np
 import pandas as pd
 import backtrader as bt
-from typing import Type, Dict, List, Tuple, Optional, Any, Union
+from typing import Type, Dict, List, Tuple, Optional, Any, Union, Sequence, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -45,9 +45,15 @@ import config
 from data_manager import DataManager
 
 # Try to import plotting libraries
-try:
+if TYPE_CHECKING:
+    # Checker always sees these; the HAS_MATPLOTLIB guard governs runtime
+    # use. Resolves possibly-unbound without importing at runtime.
     import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
+
+try:
+    import matplotlib.pyplot as plt  # noqa: F811
+    import matplotlib.colors as mcolors  # noqa: F811
     HAS_MATPLOTLIB = True
 except ImportError:
     HAS_MATPLOTLIB = False
@@ -109,14 +115,14 @@ class ParameterSensitivity:
         self,
         strategy_class: Type[bt.Strategy],
         param_name: str,
-        param_range: List[Any],
+        param_range: Sequence[Any],
         symbol: str,
         timeframe: str = '1hour',
-        fixed_params: Dict = None,
-        initial_cash: float = None,
-        commission: float = None,
-        max_bars: int = None
-    ) -> SingleParamResult:
+        fixed_params: Optional[Dict] = None,
+        initial_cash: Optional[float] = None,
+        commission: Optional[float] = None,
+        max_bars: Optional[int] = None
+    ) -> Optional[SingleParamResult]:
         """
         Sweep a single parameter and measure performance.
         
@@ -136,9 +142,9 @@ class ParameterSensitivity:
         """
         
         if initial_cash is None:
-            initial_cash = config.DEFAULT_INITIAL_CASH
+            initial_cash = float(config.DEFAULT_INITIAL_CASH)
         if commission is None:
-            commission = config.DEFAULT_COMMISSION
+            commission = float(config.DEFAULT_COMMISSION)
         if fixed_params is None:
             fixed_params = {}
         
@@ -203,9 +209,9 @@ class ParameterSensitivity:
         # Based on how much the curve changes between adjacent values
         if len(returns) > 1:
             diffs = np.abs(np.diff(returns))
-            stability_score = np.mean(diffs)
+            stability_score = float(np.mean(diffs))
         else:
-            stability_score = 0
+            stability_score = 0.0
         
         result = SingleParamResult(
             strategy_name=strategy_class.__name__,
@@ -230,16 +236,16 @@ class ParameterSensitivity:
     def two_param_heatmap(
         self,
         strategy_class: Type[bt.Strategy],
-        param1: Tuple[str, List[Any]],
-        param2: Tuple[str, List[Any]],
+        param1: Tuple[str, Sequence[Any]],
+        param2: Tuple[str, Sequence[Any]],
         symbol: str,
         timeframe: str = '1hour',
-        fixed_params: Dict = None,
-        initial_cash: float = None,
-        commission: float = None,
-        max_bars: int = None,
+        fixed_params: Optional[Dict] = None,
+        initial_cash: Optional[float] = None,
+        commission: Optional[float] = None,
+        max_bars: Optional[int] = None,
         metric: str = 'return'
-    ) -> TwoParamResult:
+    ) -> Optional[TwoParamResult]:
         """
         Create a heatmap of performance across two parameters.
         
@@ -257,9 +263,9 @@ class ParameterSensitivity:
         """
         
         if initial_cash is None:
-            initial_cash = config.DEFAULT_INITIAL_CASH
+            initial_cash = float(config.DEFAULT_INITIAL_CASH)
         if commission is None:
-            commission = config.DEFAULT_COMMISSION
+            commission = float(config.DEFAULT_COMMISSION)
         if fixed_params is None:
             fixed_params = {}
         
@@ -353,7 +359,7 @@ class ParameterSensitivity:
         data: pd.DataFrame,
         initial_cash: float,
         commission: float,
-        strategy_params: Dict = None
+        strategy_params: Optional[Dict] = None
     ) -> Dict:
         """Run a single backtest"""
         
@@ -363,18 +369,19 @@ class ParameterSensitivity:
         data_copy = data.copy()
         data_copy.columns = [c.lower() for c in data_copy.columns]
         
-        if data_copy.index.tz is not None:
-            data_copy.index = data_copy.index.tz_convert("UTC").tz_localize(None)
+        _idx = pd.DatetimeIndex(data_copy.index)
+        if _idx.tz is not None:
+            data_copy.index = _idx.tz_convert("UTC").tz_localize(None)
         
         data_feed = bt.feeds.PandasData(
-            dataname=data_copy,
-            datetime=None,
-            open='open',
-            high='high', 
-            low='low',
-            close='close',
-            volume='volume' if 'volume' in data_copy.columns else None,
-            openinterest=-1
+            dataname=data_copy,  # type: ignore
+            datetime=None,  # type: ignore
+            open='open',  # type: ignore
+            high='high',  # type: ignore
+            low='low',  # type: ignore
+            close='close',  # type: ignore
+            volume='volume' if 'volume' in data_copy.columns else None,  # type: ignore
+            openinterest=-1  # type: ignore
         )
         cerebro.adddata(data_feed)
         
@@ -544,7 +551,7 @@ class ParameterSensitivity:
     def save_heatmap(
         self,
         result: TwoParamResult,
-        filepath: str = None,
+        filepath: Optional[str] = None,
         metric: str = 'return'
     ):
         """
@@ -610,9 +617,9 @@ class ParameterSensitivity:
 def quick_param_sweep(
     strategy_class: Type[bt.Strategy],
     param_name: str,
-    param_range: List[Any],
+    param_range: Sequence[Any],
     symbol: str = 'EUR-USD'
-) -> SingleParamResult:
+) -> Optional[SingleParamResult]:
     """Quick single parameter sweep"""
     
     analyzer = ParameterSensitivity()
@@ -626,10 +633,10 @@ def quick_param_sweep(
 
 def quick_heatmap(
     strategy_class: Type[bt.Strategy],
-    param1: Tuple[str, List],
-    param2: Tuple[str, List],
+    param1: Tuple[str, Sequence],
+    param2: Tuple[str, Sequence],
     symbol: str = 'EUR-USD'
-) -> TwoParamResult:
+) -> Optional[TwoParamResult]:
     """Quick two parameter heatmap"""
     
     analyzer = ParameterSensitivity()

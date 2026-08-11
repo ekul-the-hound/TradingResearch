@@ -358,7 +358,9 @@ class CCXTBroker(BaseBroker):
 
     def _spot_positions_from_balance(self) -> List[BrokerPosition]:
         """Spot exchanges have no positions endpoint -- derive holdings from balances."""
-        result = []
+        result: List[BrokerPosition] = []
+        if not self._exchange:
+            return result
         try:
             bal = self._exchange.fetch_balance()
             for asset, amount in (bal.get("total") or {}).items():

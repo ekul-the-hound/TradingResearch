@@ -1,0 +1,7 @@
+Could not integrate VolatilityCausalLeadLag.py.
+
+TYPE ERROR: line 145: "price" is not a known attribute of "None"
+
+TYPE ERROR: line 155: "size" is not a known attribute of "None"
+
+TYPE ERROR: line 159: "size" is not a known attribute of "None"

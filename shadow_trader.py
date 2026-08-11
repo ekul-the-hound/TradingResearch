@@ -214,19 +214,22 @@ class ShadowTrader:
 
     def _process_fill(self, order: ShadowOrder):
         """Update position and PnL from a filled order."""
-        commission = order.fill_price * order.size * self.commission_pct
+        assert order.fill_price is not None, \
+            "_process_fill called on an unfilled order (fill_price is None)"
+        fill_price = order.fill_price
+        commission = fill_price * order.size * self.commission_pct
 
         if order.side == OrderSide.BUY:
             if self.position.side == PositionSide.SHORT:
                 # Closing short
-                pnl = (self.position.entry_price - order.fill_price) * min(order.size, self.position.size)
+                pnl = (self.position.entry_price - fill_price) * min(order.size, self.position.size)
                 pnl -= commission
                 self._record_trade(pnl, order)
                 remaining = order.size - self.position.size
                 if remaining > 0:
                     self.position.side = PositionSide.LONG
                     self.position.size = remaining
-                    self.position.entry_price = order.fill_price
+                    self.position.entry_price = fill_price
                 elif remaining < 0:
                     self.position.size = -remaining
                 else:
@@ -238,26 +241,26 @@ class ShadowTrader:
                     total = self.position.size + order.size
                     self.position.entry_price = (
                         self.position.entry_price * self.position.size +
-                        order.fill_price * order.size
+                        fill_price * order.size
                     ) / total
                     self.position.size = total
                 else:
                     self.position.side = PositionSide.LONG
                     self.position.size = order.size
-                    self.position.entry_price = order.fill_price
+                    self.position.entry_price = fill_price
                 self.capital -= commission
 
         elif order.side == OrderSide.SELL:
             if self.position.side == PositionSide.LONG:
                 # Closing long
-                pnl = (order.fill_price - self.position.entry_price) * min(order.size, self.position.size)
+                pnl = (fill_price - self.position.entry_price) * min(order.size, self.position.size)
                 pnl -= commission
                 self._record_trade(pnl, order)
                 remaining = order.size - self.position.size
                 if remaining > 0:
                     self.position.side = PositionSide.SHORT
                     self.position.size = remaining
-                    self.position.entry_price = order.fill_price
+                    self.position.entry_price = fill_price
                 elif remaining < 0:
                     self.position.size = -remaining
                 else:
@@ -269,13 +272,13 @@ class ShadowTrader:
                     total = self.position.size + order.size
                     self.position.entry_price = (
                         self.position.entry_price * self.position.size +
-                        order.fill_price * order.size
+                        fill_price * order.size
                     ) / total
                     self.position.size = total
                 else:
                     self.position.side = PositionSide.SHORT
                     self.position.size = order.size
-                    self.position.entry_price = order.fill_price
+                    self.position.entry_price = fill_price
                 self.capital -= commission
 
     def _record_trade(self, pnl: float, order: ShadowOrder):

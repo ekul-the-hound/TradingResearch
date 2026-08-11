@@ -1,0 +1,7 @@
+Could not integrate MeanReversion.py.
+
+TYPE ERROR: line 110: Cannot access attribute "top" for class "tuple[Literal['mid'], Literal['top'], Literal['bot']]"
+  Attribute "top" is unknown
+
+TYPE ERROR: line 111: Cannot access attribute "bot" for class "tuple[Literal['mid'], Literal['top'], Literal['bot']]"
+  Attribute "bot" is unknown

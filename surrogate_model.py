@@ -167,6 +167,7 @@ class SurrogateModel:
         else:
             X_fit, y_fit = X, y
 
+        assert self.model is not None, "model not initialised"
         self.model.fit(X_fit, y_fit)
         self._X_train = X
         self._y_train = y
@@ -237,15 +238,16 @@ class SurrogateModel:
             sigma: (N,) standard deviations (if return_std=True).
         """
         assert self.is_fitted, "Model not fitted. Call fit() first."
+        assert self.model is not None
         X = np.atleast_2d(np.asarray(X, dtype=np.float64))
 
         if return_std:
             if self.model_type == "gp":
-                mu, sigma = self.model.predict(X, return_std=True)
+                mu, sigma = self.model.predict(X, return_std=True)  # type: ignore[call-arg]
                 return mu, sigma
             elif self.model_type == "rf":
                 # Use tree variance as uncertainty proxy
-                preds = np.array([t.predict(X) for t in self.model.estimators_])
+                preds = np.array([t.predict(X) for t in self.model.estimators_])  # type: ignore[attr-defined]
                 mu = preds.mean(axis=0)
                 sigma = preds.std(axis=0)
                 return mu, sigma
@@ -268,7 +270,7 @@ class SurrogateModel:
         """Add new data points and refit."""
         X_new = np.atleast_2d(X_new)
         y_new = np.atleast_1d(y_new)
-        if self._X_train is not None:
+        if self._X_train is not None and self._y_train is not None:
             X_all = np.vstack([self._X_train, X_new])
             y_all = np.concatenate([self._y_train, y_new])
         else:
@@ -284,7 +286,8 @@ class SurrogateModel:
         if not self.is_fitted:
             return {}
         if self.model_type in ("rf", "gb"):
-            imp = self.model.feature_importances_
+            assert self.model is not None
+            imp = np.asarray(self.model.feature_importances_)  # type: ignore[attr-defined]
             names = self._feature_names or [f"f{i}" for i in range(len(imp))]
             return dict(sorted(zip(names, imp), key=lambda x: -x[1]))
         return {}

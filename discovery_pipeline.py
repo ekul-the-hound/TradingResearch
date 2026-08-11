@@ -68,7 +68,7 @@ class DiscoveryPipeline:
 
         # Pipeline stats
         self.run_start = None
-        self.run_stats = {
+        self.run_stats: dict = {
             "search_results": 0,
             "documents_fetched": 0,
             "quality_passed": 0,
@@ -166,7 +166,7 @@ class DiscoveryPipeline:
         return doc_ids
 
     def step_3_extract(self, doc_ids: Optional[List[str]] = None,
-                       limit: int = None) -> List[Dict]:
+                       limit: Optional[int] = None) -> List[Dict]:
         """
         Step 3: Extract strategies from documents using LLM.
 
@@ -426,7 +426,7 @@ class DiscoveryPipeline:
                 'close': close, 'volume': volume,
             }, index=dates)
 
-            data = bt.feeds.PandasData(dataname=df)
+            data = bt.feeds.PandasData(dataname=df)  # type: ignore[call-arg]
             cerebro.adddata(data)
             # Second correlated dummy feed so pairs/spread strategies can validate.
             # Single-feed strategies simply ignore it.
@@ -439,7 +439,7 @@ class DiscoveryPipeline:
                 'open': open2, 'high': high2, 'low': low2,
                 'close': close2, 'volume': volume2,
             }, index=dates)
-            data2 = bt.feeds.PandasData(dataname=df2)
+            data2 = bt.feeds.PandasData(dataname=df2)  # type: ignore[call-arg]
             cerebro.adddata(data2)
             cerebro.broker.setcash(10000)
 
@@ -490,7 +490,7 @@ class DiscoveryPipeline:
 
     def run(self, skip_search: bool = False,
             skip_fetch: bool = False,
-            limit: int = None,
+            limit: Optional[int] = None,
             queries: Optional[List[Dict]] = None) -> Dict[str, Any]:
         """
         Run the full discovery pipeline.
@@ -537,7 +537,7 @@ class DiscoveryPipeline:
 
         return self.run_stats
 
-    def run_extract_only(self, limit: int = None) -> Dict[str, Any]:
+    def run_extract_only(self, limit: Optional[int] = None) -> Dict[str, Any]:
         """
         Run extraction + dedup + validation on existing documents.
 

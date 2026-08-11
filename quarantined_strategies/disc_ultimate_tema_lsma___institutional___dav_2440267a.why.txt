@@ -1,0 +1,262 @@
+Could not integrate disc_ultimate_tema_lsma___institutional___dav_2440267a.py.
+
+RUNTIME ERROR when the strategy was backtested on a tiny synthetic series:
+Traceback (most recent call last):
+  File "<string>", line 39, in <module>
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\cerebro.py", line 1222, in runstrategies
+    strat = stratcls(*sargs, **skwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\metabase.py", line 88, in __call__
+    _obj, args, kwargs = cls.doinit(_obj, *args, **kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\metabase.py", line 78, in doinit
+    _obj.__init__(*args, **kwargs)
+  File "D:\Luke Files\Coding\Developer\TradingResearch\discovered_strategies\disc_ultimate_tema_lsma___institutional___dav_2440267a.py", line 703, in __init__
+    self.signal = self.data.signal
+                  ^^^^^^^^^^^^^^^^
+  File "C:\Users\Luke\anaconda3\envs\quant2\Lib\site-packages\backtrader\lineseries.py", line 461, in __getattr__
+    return getattr(self.lines, name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Lines_LineSeries_DataSeries_OHLC_OHLCDateTime_AbstractDataBase_DataBase_PandasData' object has no attribute 'signal'
+
+TYPE ERROR: line 112: Type "DataFrame | Series" is not assignable to return type "Series"
+  Type "DataFrame | Series" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 117: Type "DataFrame | Series | Any | Unknown | ndarray[_Shape, Unknown] | NDArray[Unknown]" is not assignable to return type "Series"
+  Type "DataFrame | Series | Any | Unknown | ndarray[_Shape, Unknown] | NDArray[Unknown]" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 137: No overloads for "polyfit" match the provided arguments
+
+TYPE ERROR: line 137: Argument of type "ExtensionArray | ndarray[_Shape, Unknown]" cannot be assigned to parameter "y" of type "_ArrayLikeComplex_co" in function "polyfit"
+  Type "ExtensionArray | ndarray[_Shape, Unknown]" is not assignable to type "_ArrayLikeComplex_co"
+    Type "ExtensionArray" is not assignable to type "_ArrayLikeComplex_co"
+      "ExtensionArray" is incompatible with protocol "_SupportsArray[dtype[numpy.bool[builtins.bool]] | dtype[integer[Any]] | dtype[floating[Any]] | dtype[complexfloating[Any, Any]]]"
+        "__array__" is not present
+      "ExtensionArray" is incompatible with protocol "_NestedSequence[_SupportsArray[dtype[numpy.bool[builtins.bool]] | dtype[integer[Any]] | dtype[floating[Any]] | dtype[complexfloating[Any, Any]]]]"
+        "__reversed__" is not present
+        "count" is not present
+        "index" is not present
+  ...
+
+TYPE ERROR: line 156: Type "DataFrame | Series" is not assignable to return type "Series"
+  Type "DataFrame | Series" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 167: Type "float" is not assignable to return type "Series"
+  "float" is not assignable to "Series"
+
+TYPE ERROR: line 217: No overloads for "amax" match the provided arguments
+
+TYPE ERROR: line 217: Argument of type "ExtensionArray | ndarray[_Shape, Unknown]" cannot be assigned to parameter "a" of type "ArrayLike" in function "amax"
+  Type "ExtensionArray | ndarray[_Shape, Unknown]" is not assignable to type "ArrayLike"
+    Type "ExtensionArray" is not assignable to type "ArrayLike"
+      "ExtensionArray" is incompatible with protocol "Buffer"
+        "__buffer__" is not present
+      "ExtensionArray" is incompatible with protocol "_SupportsArray[dtype[Any]]"
+        "__array__" is not present
+      "ExtensionArray" is incompatible with protocol "_NestedSequence[_SupportsArray[dtype[Any]]]"
+        "__reversed__" is not present
+  ...
+
+TYPE ERROR: line 229: No overloads for "amin" match the provided arguments
+
+TYPE ERROR: line 229: Argument of type "ExtensionArray | ndarray[_Shape, Unknown]" cannot be assigned to parameter "a" of type "ArrayLike" in function "amin"
+  Type "ExtensionArray | ndarray[_Shape, Unknown]" is not assignable to type "ArrayLike"
+    Type "ExtensionArray" is not assignable to type "ArrayLike"
+      "ExtensionArray" is incompatible with protocol "Buffer"
+        "__buffer__" is not present
+      "ExtensionArray" is incompatible with protocol "_SupportsArray[dtype[Any]]"
+        "__array__" is not present
+      "ExtensionArray" is incompatible with protocol "_NestedSequence[_SupportsArray[dtype[Any]]]"
+        "__reversed__" is not present
+  ...
+
+TYPE ERROR: line 282: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "tema"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 283: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "lsma"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 284: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "ema"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 285: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "high" of type "Series" in function "atr"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 285: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "low" of type "Series" in function "atr"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 285: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "close" of type "Series" in function "atr"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 286: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "rsi"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 287: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "sma"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 288: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "high" of type "Series" in function "vwap_cumulative"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 288: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "low" of type "Series" in function "vwap_cumulative"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 288: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "close" of type "Series" in function "vwap_cumulative"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 288: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "volume" of type "Series" in function "vwap_cumulative"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 291: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "sma"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 292: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "sma"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 297: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "rsi"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 298: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "close" of type "Series" in function "stochastic"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 298: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "high" of type "Series" in function "stochastic"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 298: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "low" of type "Series" in function "stochastic"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 300: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "sma"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 301: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "rsi"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 305: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "macd"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 306: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "high" of type "Series" in function "williams_r"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 306: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "low" of type "Series" in function "williams_r"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 306: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "close" of type "Series" in function "williams_r"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 307: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "close" of type "Series" in function "cci"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 328: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "series" of type "Series" in function "ema"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 348: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "high" of type "Series" in function "pivot_high"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 349: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "low" of type "Series" in function "pivot_low"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 354: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "high" of type "Series" in function "pivot_high"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 355: Argument of type "Series | Unknown | DataFrame" cannot be assigned to parameter "low" of type "Series" in function "pivot_low"
+  Type "Series | Unknown | DataFrame" is not assignable to type "Series"
+    "DataFrame" is not assignable to "Series"
+
+TYPE ERROR: line 778: Cannot access attribute "empty" for class "ndarray[_Shape, Unknown]"
+  Attribute "empty" is unknown
+
+TYPE ERROR: line 778: Cannot access attribute "empty" for class "NDArray[Unknown]"
+  Attribute "empty" is unknown
+
+TYPE ERROR: line 791: Cannot access attribute "strftime" for class "Hashable"
+  Attribute "strftime" is unknown
+
+TYPE ERROR: line 849: "empty" is not a known attribute of "None"
+
+TYPE ERROR: line 853: "columns" is not a known attribute of "None"
+
+TYPE ERROR: line 854: "columns" is not a known attribute of "None"
+
+TYPE ERROR: line 854: "columns" is not a known attribute of "None"
+
+TYPE ERROR: line 856: Object of type "None" is not subscriptable
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "Index"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "Index*"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "tuple[Unknown, ...]"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "MultiIndex"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "RangeIndex"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "int"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "Index"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "Index*"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "tuple[Unknown, ...]"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "MultiIndex"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "RangeIndex"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 858: Cannot access attribute "date" for class "int"
+  Attribute "date" is unknown
+
+TYPE ERROR: line 862: Argument of type "DataFrame | Series | Unknown" cannot be assigned to parameter "df" of type "DataFrame" in function "compute_signals"
+  Type "DataFrame | Series | Unknown" is not assignable to type "DataFrame"
+    "Series" is not assignable to "DataFrame"
+
+TYPE ERROR: line 888: No parameter named "signal"
+
+TYPE ERROR: line 889: No parameter named "signal_source"
+
+TYPE ERROR: line 890: No parameter named "atr"

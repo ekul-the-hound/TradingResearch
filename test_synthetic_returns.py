@@ -67,6 +67,7 @@ class TestFabricationIsGone(unittest.TestCase):
     def test_trade_list_still_produces_real_returns(self):
         cr = CanonicalResult.from_backtest(result_with_trades(), strategy_id='s2')
         self.assertIsNotNone(cr.returns)
+        assert cr.returns is not None  # narrow for type checker
         self.assertEqual(cr.returns_source, 'trade_list')
         self.assertTrue(cr.has_real_returns)
         self.assertEqual(len(cr.returns), 40)
@@ -76,6 +77,7 @@ class TestFabricationIsGone(unittest.TestCase):
         try:
             cr = CanonicalResult.from_backtest(summary_only_result(), strategy_id='s3')
             self.assertIsNotNone(cr.returns)
+            assert cr.returns is not None  # narrow for type checker
             self.assertEqual(len(cr.returns), 252)
             self.assertTrue(cr.returns_synthetic)
             self.assertEqual(cr.returns_source, 'synthetic')
@@ -114,6 +116,7 @@ class TestWhyFabricationWasDangerous(unittest.TestCase):
             cr = CanonicalResult.from_backtest(
                 summary_only_result(bars=5000), strategy_id='s4')
             r = cr.returns
+            assert r is not None  # narrow for type checker
             m, s = r.mean(), r.std()
             skew = float(np.mean(((r - m) / s) ** 3))
             exkurt = float(np.mean(((r - m) / s) ** 4)) - 3.0
@@ -134,6 +137,7 @@ class TestWhyFabricationWasDangerous(unittest.TestCase):
         try:
             cr = CanonicalResult.from_backtest(
                 summary_only_result(bars=4000), strategy_id='s5')
+            assert cr.returns is not None  # narrow for type checker
             blocks = np.array_split(cr.returns, 8)
             means = [b.mean() for b in blocks]
             spread = (max(means) - min(means)) / (abs(np.mean(means)) + 1e-12)
@@ -224,6 +228,7 @@ class TestProvenanceSurvivesAggregation(unittest.TestCase):
 
         self.assertEqual(agg.returns_source, 'mixed',
                          "aggregate must not claim to be clean")
+        assert agg.returns is not None and real.returns is not None
         self.assertEqual(len(agg.returns), len(real.returns),
                          "synthetic series must be excluded, not concatenated")
         with self.assertRaises(SyntheticReturnsError):
@@ -241,6 +246,7 @@ class TestProvenanceSurvivesAggregation(unittest.TestCase):
             BacktestAdapter.__new__(BacktestAdapter), [a, b], {}, 'clean')
 
         self.assertEqual(agg.returns_source, 'trade_list')
+        assert agg.returns is not None  # narrow for type checker
         self.assertEqual(len(agg.returns), 50)
         self.assertIsNotNone(agg.require_returns('CSCV'))
 

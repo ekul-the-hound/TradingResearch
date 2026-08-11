@@ -78,12 +78,12 @@ class PermutationTester:
         metric: str = 'sharpe',
         n_permutations: int = 100,
         significance_level: float = 0.05,
-        initial_cash: float = None,
-        commission: float = None,
-        strategy_params: Dict = None,
-        max_bars: int = None,
+        initial_cash: Optional[float] = None,
+        commission: Optional[float] = None,
+        strategy_params: Optional[Dict] = None,
+        max_bars: Optional[int] = None,
         permutation_method: str = 'returns'
-    ) -> PermutationResult:
+    ) -> Optional[PermutationResult]:
         """
         Run permutation test on a strategy.
         
@@ -105,9 +105,9 @@ class PermutationTester:
         """
         
         if initial_cash is None:
-            initial_cash = config.DEFAULT_INITIAL_CASH
+            initial_cash = float(config.DEFAULT_INITIAL_CASH)
         if commission is None:
-            commission = config.DEFAULT_COMMISSION
+            commission = float(config.DEFAULT_COMMISSION)
         
         print(f"\n{'='*60}")
         print(f"PERMUTATION TEST")
@@ -160,8 +160,8 @@ class PermutationTester:
         permutation_values = np.array(permutation_values)
         
         # Calculate statistics
-        perm_mean = np.mean(permutation_values)
-        perm_std = np.std(permutation_values)
+        perm_mean = float(np.mean(permutation_values))
+        perm_std = float(np.std(permutation_values))
         
         # Calculate p-value (proportion of permutations >= real value)
         # For metrics where higher is better (Sharpe, return)
@@ -172,10 +172,10 @@ class PermutationTester:
         p_value = (1 + np.sum(np.asarray(permutation_values) >= real_value)) / (len(permutation_values) + 1)
         
         # Percentile rank of real value
-        percentile_rank = np.mean(permutation_values < real_value) * 100
+        percentile_rank = float(np.mean(permutation_values < real_value) * 100)
         
         # Is it significant?
-        is_significant = p_value < significance_level
+        is_significant = bool(p_value < significance_level)
         
         result = PermutationResult(
             strategy_name=strategy_class.__name__,
@@ -218,7 +218,7 @@ class PermutationTester:
             returns = df['close'].pct_change().dropna().values
             
             # Shuffle returns
-            returns = self._rng.permutation(returns)  # copy: .values can be read-only (pandas CoW)
+            returns = self._rng.permutation(np.asarray(returns, dtype=float))  # copy: .values can be read-only (pandas CoW)
             
             # Reconstruct prices from shuffled returns
             initial_price = df['close'].iloc[0]
@@ -270,7 +270,7 @@ class PermutationTester:
         data: pd.DataFrame,
         initial_cash: float,
         commission: float,
-        strategy_params: Dict = None
+        strategy_params: Optional[Dict] = None
     ) -> Dict:
         """Run a single backtest"""
         
@@ -280,18 +280,19 @@ class PermutationTester:
         data_copy = data.copy()
         data_copy.columns = [c.lower() for c in data_copy.columns]
         
-        if data_copy.index.tz is not None:
-            data_copy.index = data_copy.index.tz_convert("UTC").tz_localize(None)
+        _idx = pd.DatetimeIndex(data_copy.index)
+        if _idx.tz is not None:
+            data_copy.index = _idx.tz_convert("UTC").tz_localize(None)
         
         data_feed = bt.feeds.PandasData(
-            dataname=data_copy,
-            datetime=None,
-            open='open',
-            high='high',
-            low='low',
-            close='close',
-            volume='volume' if 'volume' in data_copy.columns else None,
-            openinterest=-1
+            dataname=data_copy,  # type: ignore
+            datetime=None,  # type: ignore
+            open='open',  # type: ignore
+            high='high',  # type: ignore
+            low='low',  # type: ignore
+            close='close',  # type: ignore
+            volume='volume' if 'volume' in data_copy.columns else None,  # type: ignore
+            openinterest=-1  # type: ignore
         )
         cerebro.adddata(data_feed)
         
@@ -308,7 +309,7 @@ class PermutationTester:
         # Add analyzers
         cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
         cerebro.addanalyzer(bt.analyzers.Returns, _name='returns')
-        cerebro.addanalyzer(bt.analyzers.SortinoRatio, _name='sortino')
+        cerebro.addanalyzer(bt.analyzers.SortinoRatio, _name='sortino')  # type: ignore
         
         # Run
         starting = cerebro.broker.getvalue()
@@ -374,7 +375,7 @@ def quick_permutation_test(
     symbol: str = 'EUR-USD',
     timeframe: str = '1hour',
     n_permutations: int = 100
-) -> PermutationResult:
+) -> Optional[PermutationResult]:
     """Quick permutation test with defaults"""
     
     tester = PermutationTester()

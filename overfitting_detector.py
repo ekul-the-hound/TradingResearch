@@ -43,13 +43,16 @@ import numpy as np
 import pandas as pd
 from scipy import stats as sp_stats
 from itertools import combinations
-from typing import Optional, Dict, List, Union
+from typing import Optional, Dict, List, Union, Callable, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from pathlib import Path
 from joblib import Parallel, delayed
 
-try:
+if TYPE_CHECKING:
     import quantstats as qs
+
+try:
+    import quantstats as qs  # noqa: F811
     QUANTSTATS_AVAILABLE = True
 except ImportError:
     QUANTSTATS_AVAILABLE = False
@@ -150,7 +153,7 @@ class OverfittingDetector:
         self,
         returns_df: pd.DataFrame,
         n_partitions: int = 16,
-        metric_func: Optional[callable] = None,
+        metric_func: Optional[Callable] = None,
         threshold: float = 0.0,
     ) -> PBOResult:
         """
@@ -185,18 +188,20 @@ class OverfittingDetector:
             is_idx = np.concatenate([partitions[i] for i in combo])
             oos_idx = np.concatenate([partitions[i] for i in range(n_partitions) if i not in combo])
 
-            is_m = returns_df.iloc[is_idx].apply(metric_func).values
-            oos_m = returns_df.iloc[oos_idx].apply(metric_func).values
+            is_m = np.asarray(returns_df.iloc[is_idx].apply(metric_func).values, dtype=float)
+            oos_m = np.asarray(returns_df.iloc[oos_idx].apply(metric_func).values, dtype=float)
 
             best = np.argmax(is_m)
             rank = sp_stats.rankdata(oos_m)[best]
             rank_pct = np.clip(rank / N, 1e-6, 1 - 1e-6)
             logit = np.log(rank_pct / (1 - rank_pct))
-            corr = sp_stats.spearmanr(is_m, oos_m).statistic
+            corr = float(sp_stats.spearmanr(is_m, oos_m)[0])  # type: ignore[index]
             under = 1.0 if oos_m[best] < threshold else 0.0
             return logit, corr, under
 
-        results = Parallel(n_jobs=self.n_jobs)(delayed(_eval)(c) for c in combos)
+        _raw = Parallel(n_jobs=self.n_jobs)(
+            delayed(_eval)(c) for c in combos)
+        results = [r for r in (_raw or []) if r is not None]
 
         logits = np.array([r[0] for r in results])
         corrs  = np.array([r[1] for r in results])

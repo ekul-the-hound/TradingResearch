@@ -95,14 +95,14 @@ class StrategyBacktester:
         
         # Add data
         data_feed = bt.feeds.PandasData(
-            dataname=data,
-            datetime=None,
-            open='open',
-            high='high',
-            low='low',
-            close='close',
-            volume='volume',
-            openinterest=-1
+            dataname=data,  # type: ignore
+            datetime=None,  # type: ignore
+            open='open',  # type: ignore
+            high='high',  # type: ignore
+            low='low',  # type: ignore
+            close='close',  # type: ignore
+            volume='volume',  # type: ignore
+            openinterest=-1  # type: ignore
         )
         cerebro.adddata(data_feed)
         
@@ -143,7 +143,7 @@ class StrategyBacktester:
         
         # Calculate metrics
         total_return = ((ending_value - starting_value) / starting_value) * 100
-        def _ta_get(node, *keys, default=0):
+        def _ta_get(node, *keys, default: float = 0.0):
             """Safely walk TradeAnalyzer's AutoOrderedDict; return default for missing/empty."""
             for k in keys:
                 node = node.get(k, None) if hasattr(node, 'get') else None
@@ -289,6 +289,8 @@ class StrategyBacktester:
     
     def get_claude_analysis(self, results, strategy_name):
         """Use Claude to analyze backtest results"""
+        if self.claude is None:
+            return "Claude analysis unavailable: no API key configured."
         
         # Prepare results summary for Claude
         summary = {

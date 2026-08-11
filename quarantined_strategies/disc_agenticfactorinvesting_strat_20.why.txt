@@ -1,0 +1,5 @@
+Could not integrate disc_agenticfactorinvesting_strat_20.py.
+
+TYPE ERROR: line 120: Operator "**" not supported for types "object*" and "Literal[2]"
+
+TYPE ERROR: line 120: Operator "**" not supported for types "object*" and "Literal[2]"

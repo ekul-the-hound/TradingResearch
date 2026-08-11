@@ -184,12 +184,12 @@ class FeatureEngineer:
     def build_features(
         self,
         backtest_result: Dict,
-        trades_df: pd.DataFrame = None,
-        price_data: pd.DataFrame = None,
-        robustness_results: Dict = None,
+        trades_df: Optional[pd.DataFrame] = None,
+        price_data: Optional[pd.DataFrame] = None,
+        robustness_results: Optional[Dict] = None,
         permutation_result: Any = None,
-        regime_results: Dict = None,
-        ftmo_pass_rate: float = None,
+        regime_results: Optional[Dict] = None,
+        ftmo_pass_rate: Optional[float] = None,
         run_statistical_analysis: bool = True,
         run_ftmo_simulation: bool = False,
         ftmo_n_simulations: int = 100
@@ -219,7 +219,7 @@ class FeatureEngineer:
         
         # Get returns array for statistical analysis
         if len(trades_df) > 0 and 'return_pct' in trades_df.columns:
-            returns = trades_df['return_pct'].dropna().values
+            returns = np.asarray(trades_df['return_pct'].dropna().values, dtype=float)
         else:
             returns = np.array([])
         
@@ -511,7 +511,7 @@ class FeatureEngineer:
 # CONVENIENCE FUNCTIONS
 # ==============================================================================
 
-def quick_features(backtest_result: Dict, trades_df: pd.DataFrame = None) -> StrategyFeatures:
+def quick_features(backtest_result: Dict, trades_df: Optional[pd.DataFrame] = None) -> StrategyFeatures:
     """Quick feature extraction from a backtest result"""
     engineer = FeatureEngineer()
     return engineer.build_features(backtest_result, trades_df=trades_df)

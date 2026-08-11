@@ -167,7 +167,7 @@ def compare_variants(show_individual=True):
         print("[FAIL] No backtest results found in database.")
         print("   Run: python run_backtests.py")
         print("   Then: python run_variant_backtests.py")
-        return
+        return [], []
     
     print(f"\n[FOLDER] Loaded {len(results)} backtest results from database")
     

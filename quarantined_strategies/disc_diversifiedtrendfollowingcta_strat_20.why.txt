@@ -1,0 +1,34 @@
+Could not integrate disc_diversifiedtrendfollowingcta_strat_20.py.
+
+TYPE ERROR: line 60: Cannot access attribute "momentum_lookback" for class "dict[str, float | str]"
+  Attribute "momentum_lookback" is unknown
+
+TYPE ERROR: line 70: Cannot access attribute "vol_lookback" for class "dict[str, float | str]"
+  Attribute "vol_lookback" is unknown
+
+TYPE ERROR: line 86: Cannot access attribute "momentum_lookback" for class "dict[str, float | str]"
+  Attribute "momentum_lookback" is unknown
+
+TYPE ERROR: line 86: Cannot access attribute "vol_lookback" for class "dict[str, float | str]"
+  Attribute "vol_lookback" is unknown
+
+TYPE ERROR: line 100: Cannot access attribute "rebalance_days" for class "dict[str, float | str]"
+  Attribute "rebalance_days" is unknown
+
+TYPE ERROR: line 114: Cannot access attribute "min_vol" for class "dict[str, float | str]"
+  Attribute "min_vol" is unknown
+
+TYPE ERROR: line 119: Cannot access attribute "annualization" for class "dict[str, float | str]"
+  Attribute "annualization" is unknown
+
+TYPE ERROR: line 124: Cannot access attribute "target_vol" for class "dict[str, float | str]"
+  Attribute "target_vol" is unknown
+
+TYPE ERROR: line 127: Cannot access attribute "use_carry" for class "dict[str, float | str]"
+  Attribute "use_carry" is unknown
+
+TYPE ERROR: line 128: Cannot access attribute "carry_allocation" for class "dict[str, float | str]"
+  Attribute "carry_allocation" is unknown
+
+TYPE ERROR: line 131: Cannot access attribute "max_leverage" for class "dict[str, float | str]"
+  Attribute "max_leverage" is unknown

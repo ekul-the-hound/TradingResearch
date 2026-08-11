@@ -1,0 +1,7 @@
+Could not integrate disc_meanreversion_strat_20.py.
+
+TYPE ERROR: line 103: Cannot access attribute "top" for class "tuple[Literal['mid'], Literal['top'], Literal['bot']]"
+  Attribute "top" is unknown
+
+TYPE ERROR: line 104: Cannot access attribute "bot" for class "tuple[Literal['mid'], Literal['top'], Literal['bot']]"
+  Attribute "bot" is unknown

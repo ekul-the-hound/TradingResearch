@@ -17,6 +17,11 @@ from datetime import datetime, timedelta
 import warnings
 
 
+def _vf_f(x: Any) -> float:
+    """np scalar (floating[Any]) -> float, for dataclass fields."""
+    return float(x)
+
+
 @dataclass
 class BootstrapResult:
     """Results from bootstrap validation"""
@@ -103,26 +108,26 @@ class ValidationFramework:
         if metric not in trades.columns:
             raise ValueError(f"Metric '{metric}' not found in trades DataFrame")
         
-        values = trades[metric].dropna().values
+        values = np.asarray(trades[metric].dropna().values, dtype=float)
         n_trades = len(values)
         
         if n_trades < 10:
             warnings.warn(f"Only {n_trades} trades - bootstrap may be unreliable")
         
-        original_mean = np.mean(values)
+        original_mean = _vf_f(np.mean(values))
         bootstrap_means = np.zeros(n_samples)
         
         for i in range(n_samples):
             sample = self._rng.choice(values, size=n_trades, replace=True)
             bootstrap_means[i] = np.mean(sample)
         
-        mean = np.mean(bootstrap_means)
-        std = np.std(bootstrap_means)
+        mean = _vf_f(np.mean(bootstrap_means))
+        std = _vf_f(np.std(bootstrap_means))
         
         alpha = 1 - self.confidence_level
         ci_lower = np.percentile(bootstrap_means, alpha/2 * 100)
         ci_upper = np.percentile(bootstrap_means, (1 - alpha/2) * 100)
-        p_value = np.mean(bootstrap_means <= 0)
+        p_value = _vf_f(np.mean(bootstrap_means <= 0))
         
         return BootstrapResult(
             metric_name=metric,
@@ -146,13 +151,13 @@ class ValidationFramework:
         if n_samples is None:
             n_samples = self.n_bootstrap
         
-        values = trades[return_col].dropna().values
+        values = np.asarray(trades[return_col].dropna().values, dtype=float)
         n_trades = len(values)
         
         if n_trades < 10:
             warnings.warn(f"Only {n_trades} trades - bootstrap may be unreliable")
         
-        original_sharpe = np.mean(values) / np.std(values) if np.std(values) > 0 else 0
+        original_sharpe = _vf_f(np.mean(values) / np.std(values)) if np.std(values) > 0 else 0.0
         bootstrap_sharpes = np.zeros(n_samples)
         
         for i in range(n_samples):
@@ -160,13 +165,13 @@ class ValidationFramework:
             std = np.std(sample)
             bootstrap_sharpes[i] = np.mean(sample) / std if std > 0 else 0
         
-        mean = np.mean(bootstrap_sharpes)
-        std = np.std(bootstrap_sharpes)
+        mean = _vf_f(np.mean(bootstrap_sharpes))
+        std = _vf_f(np.std(bootstrap_sharpes))
         
         alpha = 1 - self.confidence_level
         ci_lower = np.percentile(bootstrap_sharpes, alpha/2 * 100)
         ci_upper = np.percentile(bootstrap_sharpes, (1 - alpha/2) * 100)
-        p_value = np.mean(bootstrap_sharpes <= 0)
+        p_value = _vf_f(np.mean(bootstrap_sharpes <= 0))
         
         return BootstrapResult(
             metric_name='sharpe_ratio',
@@ -207,7 +212,7 @@ class ValidationFramework:
     ) -> BootstrapResult:
         """Bootstrap profit factor specifically"""
         
-        values = trades[return_col].dropna().values
+        values = np.asarray(trades[return_col].dropna().values, dtype=float)
         n_trades = len(values)
         
         gains = values[values > 0].sum()
@@ -222,13 +227,13 @@ class ValidationFramework:
             losses = abs(sample[sample < 0].sum())
             bootstrap_pfs[i] = gains / losses if losses > 0 else 10
         
-        mean = np.mean(bootstrap_pfs)
-        std = np.std(bootstrap_pfs)
+        mean = _vf_f(np.mean(bootstrap_pfs))
+        std = _vf_f(np.std(bootstrap_pfs))
         
         alpha = 1 - self.confidence_level
         ci_lower = np.percentile(bootstrap_pfs, alpha/2 * 100)
         ci_upper = np.percentile(bootstrap_pfs, (1 - alpha/2) * 100)
-        p_value = np.mean(bootstrap_pfs <= 1)
+        p_value = _vf_f(np.mean(bootstrap_pfs <= 1))
         
         return BootstrapResult(
             metric_name='profit_factor',
@@ -257,7 +262,7 @@ class ValidationFramework:
         if n_simulations is None:
             n_simulations = self.n_monte_carlo
         
-        returns = trades[return_col].dropna().values
+        returns = np.asarray(trades[return_col].dropna().values, dtype=float)
         n_trades = len(returns)
         
         if n_trades < 5:
@@ -284,12 +289,12 @@ class ValidationFramework:
             max_drawdowns[sim] = max_dd
         
         returns_pct = (final_equities / initial_capital - 1) * 100
-        prob_ruin = np.mean(max_drawdowns >= self.ruin_threshold)
-        prob_profit = np.mean(final_equities > initial_capital)
+        prob_ruin = _vf_f(np.mean(max_drawdowns >= self.ruin_threshold))
+        prob_profit = _vf_f(np.mean(final_equities > initial_capital))
         
-        mean_return = np.mean(returns_pct)
+        mean_return = _vf_f(np.mean(returns_pct))
         std_return = np.std(returns_pct)
-        sharpe = mean_return / std_return if std_return > 0 else 0
+        sharpe = _vf_f(mean_return / std_return) if std_return > 0 else 0.0
         
         alpha = 1 - self.confidence_level
         ci_lower = np.percentile(final_equities, alpha/2 * 100)
@@ -298,14 +303,14 @@ class ValidationFramework:
         return MonteCarloResult(
             initial_capital=initial_capital,
             n_simulations=n_simulations,
-            mean_final_equity=np.mean(final_equities),
-            median_final_equity=np.median(final_equities),
-            std_final_equity=np.std(final_equities),
+            mean_final_equity=_vf_f(np.mean(final_equities)),
+            median_final_equity=_vf_f(np.median(final_equities)),
+            std_final_equity=_vf_f(np.std(final_equities)),
             ci_lower=ci_lower,
             ci_upper=ci_upper,
             probability_of_profit=prob_profit,
             probability_of_ruin=prob_ruin,
-            max_drawdown_mean=np.mean(max_drawdowns) * 100,
+            max_drawdown_mean=_vf_f(np.mean(max_drawdowns) * 100),
             max_drawdown_95th=np.percentile(max_drawdowns, 95) * 100,
             mean_return=mean_return,
             median_return=np.median(returns_pct),
@@ -408,17 +413,17 @@ class ValidationFramework:
         if not is_returns:
             raise ValueError("No valid walk-forward windows completed")
         
-        return_degradation = np.mean(is_returns) - np.mean(oos_returns)
-        sharpe_degradation = np.mean(is_sharpes) - np.mean(oos_sharpes)
-        oos_positive_pct = np.mean([r > 0 for r in oos_returns]) * 100
+        return_degradation = _vf_f(np.mean(is_returns) - np.mean(oos_returns))
+        sharpe_degradation = _vf_f(np.mean(is_sharpes) - np.mean(oos_sharpes))
+        oos_positive_pct = _vf_f(np.mean([r > 0 for r in oos_returns]) * 100)
         
         if len(is_returns) >= 3:
             correlation = np.corrcoef(is_returns, oos_returns)[0, 1]
         else:
             correlation = 0
         
-        total_oos_return = np.prod([1 + r/100 for r in oos_returns_raw]) * 100 - 100
-        total_oos_sharpe = np.mean(oos_sharpes)
+        total_oos_return = _vf_f(np.prod([1 + r/100 for r in oos_returns_raw]) * 100 - 100)
+        total_oos_sharpe = _vf_f(np.mean(oos_sharpes))
         
         return WalkForwardResult(
             n_windows=len(is_returns),
@@ -650,9 +655,9 @@ class StatisticalAnalysis:
         
         # p-value from chi-squared distribution
         from scipy import stats
-        lb_pvalue = 1 - stats.chi2.cdf(lb_stat, df=max_lags)
+        lb_pvalue = _vf_f(1 - stats.chi2.cdf(lb_stat, df=max_lags))
         
-        has_dependence = lb_pvalue < 0.05
+        has_dependence = bool(lb_pvalue < 0.05)
         
         if has_dependence:
             interpretation = (
@@ -709,17 +714,17 @@ class StatisticalAnalysis:
                 interpretation="Insufficient data for distribution analysis"
             )
         
-        mean = np.mean(returns)
-        std = np.std(returns)
+        mean = _vf_f(np.mean(returns))
+        std = _vf_f(np.std(returns))
         skew = stats.skew(returns)
         kurt = stats.kurtosis(returns)  # Excess kurtosis (Fisher's)
         
         # Jarque-Bera test
         n = len(returns)
         jb_stat = (n / 6) * (skew**2 + (kurt**2) / 4)
-        jb_pvalue = 1 - stats.chi2.cdf(jb_stat, df=2)
+        jb_pvalue = _vf_f(1 - stats.chi2.cdf(jb_stat, df=2))
         
-        is_normal = jb_pvalue > 0.05
+        is_normal = bool(jb_pvalue > 0.05)
         
         # Build interpretation
         interp_parts = []
@@ -786,8 +791,8 @@ class StatisticalAnalysis:
         if len(returns) < 50:
             return GARCHResult(
                 omega=0, alpha=0, beta=0, persistence=0,
-                unconditional_vol=np.std(returns) if len(returns) > 0 else 0,
-                forecast_vol_1day=np.std(returns) if len(returns) > 0 else 0,
+                unconditional_vol=_vf_f(np.std(returns)) if len(returns) > 0 else 0.0,
+                forecast_vol_1day=_vf_f(np.std(returns)) if len(returns) > 0 else 0.0,
                 aic=0, model_fit=False,
                 interpretation="Insufficient data for GARCH (need 50+ observations)"
             )
@@ -814,9 +819,9 @@ class StatisticalAnalysis:
             # Unconditional variance
             if persistence < 1:
                 uncond_var = omega / (1 - persistence)
-                uncond_vol = np.sqrt(uncond_var)
+                uncond_vol = _vf_f(np.sqrt(uncond_var))
             else:
-                uncond_vol = np.std(scaled_returns)
+                uncond_vol = _vf_f(np.std(scaled_returns))
             
             # 1-day ahead forecast
             forecast = result.forecast(horizon=1)
@@ -848,7 +853,7 @@ class StatisticalAnalysis:
             
         except ImportError:
             # arch library not installed
-            simple_vol = np.std(returns)
+            simple_vol = _vf_f(np.std(returns))
             return GARCHResult(
                 omega=0, alpha=0, beta=0, persistence=0,
                 unconditional_vol=simple_vol,
@@ -857,7 +862,7 @@ class StatisticalAnalysis:
                 interpretation="GARCH requires 'arch' library. Install with: pip install arch"
             )
         except Exception as e:
-            simple_vol = np.std(returns)
+            simple_vol = _vf_f(np.std(returns))
             return GARCHResult(
                 omega=0, alpha=0, beta=0, persistence=0,
                 unconditional_vol=simple_vol,
@@ -873,7 +878,7 @@ class StatisticalAnalysis:
     def calculate_var(
         self,
         returns: np.ndarray,
-        confidence_level: float = None
+        confidence_level: Optional[float] = None
     ) -> VaRResult:
         """
         Calculate Value at Risk using multiple methods.
@@ -913,10 +918,10 @@ class StatisticalAnalysis:
         hist_var = np.percentile(returns, alpha * 100)
         
         # Parametric VaR (assumes normal)
-        mean = np.mean(returns)
-        std = np.std(returns)
+        mean = _vf_f(np.mean(returns))
+        std = _vf_f(np.std(returns))
         z_score = stats.norm.ppf(alpha)
-        param_var = mean + z_score * std
+        param_var = _vf_f(mean + z_score * std)
         
         # Cornish-Fisher VaR (adjusted for skew/kurtosis)
         skew = stats.skew(returns)
@@ -933,7 +938,7 @@ class StatisticalAnalysis:
         # CVaR / Expected Shortfall (average of losses beyond VaR)
         losses_beyond_var = returns[returns <= hist_var]
         if len(losses_beyond_var) > 0:
-            cvar = np.mean(losses_beyond_var)
+            cvar = _vf_f(np.mean(losses_beyond_var))
         else:
             cvar = hist_var
         

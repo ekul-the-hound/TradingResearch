@@ -36,6 +36,16 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Callable, Any
+
+
+def _ee_f(v: Any) -> float:
+    """Row value (Series | Any) -> float."""
+    return float(v)
+
+
+def _ee_i(v: Any) -> int:
+    """Row value (Series | Any) -> int."""
+    return int(v)
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -190,7 +200,7 @@ class PaperTrader:
     def __init__(
         self,
         initial_capital: float = 100000,
-        config: ExecutionConfig = None
+        config: Optional[ExecutionConfig] = None
     ):
         self.initial_capital = initial_capital
         self.config = config or ExecutionConfig()
@@ -216,7 +226,7 @@ class PaperTrader:
         self.current_time = datetime.now()
         self.day_start_equity = initial_capital
     
-    def update_price(self, symbol: str, price: float, timestamp: datetime = None):
+    def update_price(self, symbol: str, price: float, timestamp: Optional[datetime] = None):
         """Update price for a symbol"""
         self.prices[symbol] = price
         
@@ -239,8 +249,8 @@ class PaperTrader:
         side: str,
         size: float,
         order_type: str = 'MARKET',
-        limit_price: float = None,
-        stop_price: float = None
+        limit_price: Optional[float] = None,
+        stop_price: Optional[float] = None
     ) -> Order:
         """
         Submit a trading order.
@@ -318,8 +328,8 @@ class PaperTrader:
         side: str,
         size: float,
         order_type: str,
-        limit_price: float,
-        stop_price: float
+        limit_price: Optional[float] = None,
+        stop_price: Optional[float] = None
     ) -> Order:
         """Create order object"""
         self.order_counter += 1
@@ -485,12 +495,20 @@ class PaperTrader:
                 continue
             
             if order.order_type == OrderType.LIMIT:
+                if order.limit_price is None:
+                    print(f"[WARN]  LIMIT order {order.order_id} has no "
+                          f"limit_price; skipping")
+                    continue
                 if order.side == OrderSide.BUY and price <= order.limit_price:
                     self._fill_order(order, order.limit_price)
                 elif order.side == OrderSide.SELL and price >= order.limit_price:
                     self._fill_order(order, order.limit_price)
             
             elif order.order_type == OrderType.STOP:
+                if order.stop_price is None:
+                    print(f"[WARN]  STOP order {order.order_id} has no "
+                          f"stop_price; skipping")
+                    continue
                 if order.side == OrderSide.BUY and price >= order.stop_price:
                     self._fill_order(order, price)
                 elif order.side == OrderSide.SELL and price <= order.stop_price:
@@ -528,7 +546,7 @@ class PaperTrader:
             return False
         
         # Cash sufficiency check for BUY orders
-        side_str = side.value if hasattr(side, 'value') else str(side)
+        side_str = getattr(side, 'value', None) or str(side)
         if side_str.upper() in ('BUY', 'SELL'):
             current_price = self.prices.get(symbol, 0)
             if current_price > 0:
@@ -623,7 +641,7 @@ class ExecutionEngine:
         self,
         mode: str = 'paper',
         initial_capital: float = 100000,
-        config: ExecutionConfig = None
+        config: Optional[ExecutionConfig] = None
     ):
         self.mode = mode
         self.initial_capital = initial_capital
@@ -647,13 +665,13 @@ class ExecutionEngine:
         symbol: str,
         signal: int,  # 1 = long, -1 = short, 0 = flat
         price: float,
-        size: float = None,
-        timestamp: datetime = None,
+        size: Optional[float] = None,
+        timestamp: Optional[datetime] = None,
         # SIZING-FIX-SIGNATURE: keyword-only so existing positional callers
         # are unaffected. Pass stop_price for real risk-based sizing.
         *,
-        stop_price: float = None,
-        stop_distance: float = None
+        stop_price: Optional[float] = None,
+        stop_distance: Optional[float] = None
     ):
         """
         Process a trading signal.
@@ -706,8 +724,8 @@ class ExecutionEngine:
                 self.trader.submit_order(symbol, 'SELL', order_size)
     
     def _calculate_size(self, symbol: str, price: float,
-                        stop_price: float = None,
-                        stop_distance: float = None) -> float:
+                        stop_price: Optional[float] = None,
+                        stop_distance: Optional[float] = None) -> float:
         """
         Calculate position size from the distance to the actual stop.
 
@@ -775,22 +793,26 @@ class ExecutionEngine:
         print(f"Period: {signals.index[0]} to {signals.index[-1]}")
         
         # Get symbol from data if available
-        symbol = signals.get('symbol', pd.Series(['UNKNOWN'])).iloc[0]
+        _sym_series = signals.get('symbol')
+        if _sym_series is not None and len(_sym_series) > 0:
+            symbol = str(_sym_series.iloc[0])
+        else:
+            symbol = 'UNKNOWN'
         if symbol == 'UNKNOWN':
             symbol = 'EUR-USD'  # Default
         
         equity_curve = []
         
         for timestamp, row in signals.iterrows():
-            price = row[price_col]
-            signal = row[signal_col]
+            price = _ee_f(row[price_col])
+            signal = _ee_i(row[signal_col])
             
             # Process signal
             self.process_signal(
                 symbol=symbol,
-                signal=int(signal),
+                signal=signal,
                 price=price,
-                timestamp=timestamp
+                timestamp=pd.Timestamp(timestamp).to_pydatetime()  # type: ignore[arg-type]
             )
             
             # Track equity
@@ -866,7 +888,11 @@ if __name__ == "__main__":
     
     # Close position
     close_order = trader.close_position('EUR-USD')
-    print(f"Close Order: {close_order.order_id}, Fill: {close_order.filled_price}")
+    if close_order is not None:
+        print(f"Close Order: {close_order.order_id}, "
+              f"Fill: {close_order.filled_price}")
+    else:
+        print("Close Order: no open position to close")
     
     # Summary
     trader.print_summary()

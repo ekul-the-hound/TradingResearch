@@ -14,6 +14,7 @@
 
 import sys
 import unittest
+from typing import Any, cast
 from datetime import timedelta
 
 import numpy as np
@@ -146,7 +147,7 @@ class TestVerdictChanges(unittest.TestCase):
     def test_report_is_attached_for_inspection(self):
         trades, prices = self._spiky_history()
         intra = self.checker.validate_intrabar(trades, prices, account_size=100_000)
-        rep = intra.intrabar_report
+        rep: Any = cast(Any, intra.intrabar_report)
         self.assertIsNotNone(rep)
         self.assertTrue(rep.days_flipped)
         self.assertIn('BREACH', rep.summary())
