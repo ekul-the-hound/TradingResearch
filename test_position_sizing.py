@@ -198,7 +198,9 @@ class TestVolatilityTracker(unittest.TestCase):
             p2 *= 1.0 + (0.02 if i % 2 else -0.02)
             calm.update('X', p1)
             wild.update('X', p2)
-        self.assertLess(calm.sigma('X'), wild.sigma('X'))
+        _cs, _ws = calm.sigma('X'), wild.sigma('X')
+        assert _cs is not None and _ws is not None
+        self.assertLess(_cs, _ws)
 
     def test_ignores_bad_prices(self):
         vt = ps.VolatilityTracker()

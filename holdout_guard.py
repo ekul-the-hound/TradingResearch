@@ -212,7 +212,7 @@ class HoldoutGuard:
         # make every comparison False and silently disable the guard, so treat
         # it as "not configured" rather than letting it through. isna() rather
         # than `is pd.NaT` so the checker sees the narrowing.
-        if pd.isna(ts):
+        if bool(pd.isna(ts)):
             return None
         # cast: pd.isna is not a TypeGuard, so the narrowing above is invisible
         # to the checker even though it is real at runtime.

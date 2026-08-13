@@ -325,7 +325,7 @@ class TestEdgeCases(unittest.TestCase):
     
     def test_empty_trades(self):
         """Empty trade list should fail gracefully"""
-        trades = pd.DataFrame(columns=['entry_date', 'exit_date', 'entry_price', 'size', 'symbol'])
+        trades = pd.DataFrame(columns=['entry_date', 'exit_date', 'entry_price', 'size', 'symbol'])  # type: ignore[arg-type]
         
         result = self.checker.validate(trades, account_size=100000, phase='challenge')
         

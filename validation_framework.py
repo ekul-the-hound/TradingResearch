@@ -125,8 +125,8 @@ class ValidationFramework:
         std = _vf_f(np.std(bootstrap_means))
         
         alpha = 1 - self.confidence_level
-        ci_lower = np.percentile(bootstrap_means, alpha/2 * 100)
-        ci_upper = np.percentile(bootstrap_means, (1 - alpha/2) * 100)
+        ci_lower = _vf_f(np.percentile(bootstrap_means, alpha/2 * 100))
+        ci_upper = _vf_f(np.percentile(bootstrap_means, (1 - alpha/2) * 100))
         p_value = _vf_f(np.mean(bootstrap_means <= 0))
         
         return BootstrapResult(
@@ -169,8 +169,8 @@ class ValidationFramework:
         std = _vf_f(np.std(bootstrap_sharpes))
         
         alpha = 1 - self.confidence_level
-        ci_lower = np.percentile(bootstrap_sharpes, alpha/2 * 100)
-        ci_upper = np.percentile(bootstrap_sharpes, (1 - alpha/2) * 100)
+        ci_lower = _vf_f(np.percentile(bootstrap_sharpes, alpha/2 * 100))
+        ci_upper = _vf_f(np.percentile(bootstrap_sharpes, (1 - alpha/2) * 100))
         p_value = _vf_f(np.mean(bootstrap_sharpes <= 0))
         
         return BootstrapResult(
@@ -231,8 +231,8 @@ class ValidationFramework:
         std = _vf_f(np.std(bootstrap_pfs))
         
         alpha = 1 - self.confidence_level
-        ci_lower = np.percentile(bootstrap_pfs, alpha/2 * 100)
-        ci_upper = np.percentile(bootstrap_pfs, (1 - alpha/2) * 100)
+        ci_lower = _vf_f(np.percentile(bootstrap_pfs, alpha/2 * 100))
+        ci_upper = _vf_f(np.percentile(bootstrap_pfs, (1 - alpha/2) * 100))
         p_value = _vf_f(np.mean(bootstrap_pfs <= 1))
         
         return BootstrapResult(
@@ -297,8 +297,8 @@ class ValidationFramework:
         sharpe = _vf_f(mean_return / std_return) if std_return > 0 else 0.0
         
         alpha = 1 - self.confidence_level
-        ci_lower = np.percentile(final_equities, alpha/2 * 100)
-        ci_upper = np.percentile(final_equities, (1 - alpha/2) * 100)
+        ci_lower = _vf_f(np.percentile(final_equities, alpha/2 * 100))
+        ci_upper = _vf_f(np.percentile(final_equities, (1 - alpha/2) * 100))
         
         return MonteCarloResult(
             initial_capital=initial_capital,
@@ -311,9 +311,9 @@ class ValidationFramework:
             probability_of_profit=prob_profit,
             probability_of_ruin=prob_ruin,
             max_drawdown_mean=_vf_f(np.mean(max_drawdowns) * 100),
-            max_drawdown_95th=np.percentile(max_drawdowns, 95) * 100,
+            max_drawdown_95th=_vf_f(np.percentile(max_drawdowns, 95) * 100),
             mean_return=mean_return,
-            median_return=np.median(returns_pct),
+            median_return=_vf_f(np.median(returns_pct)),
             sharpe_ratio_mean=sharpe,
             final_equities=final_equities,
             max_drawdowns=max_drawdowns
@@ -808,12 +808,12 @@ class StatisticalAnalysis:
                 # Likely decimal returns, convert to percentage
                 scaled_returns = returns * 100
             
-            model = arch_model(scaled_returns, vol='Garch', p=p, q=q, rescale=False)
+            model = arch_model(scaled_returns, vol='GARCH', p=p, q=q, rescale=False)
             result = model.fit(disp='off', show_warning=False)
             
-            omega = result.params.get('omega', 0)
-            alpha = result.params.get('alpha[1]', 0)
-            beta = result.params.get('beta[1]', 0)
+            omega = float(result.params.get('omega', 0) or 0)
+            alpha = float(result.params.get('alpha[1]', 0) or 0)
+            beta = float(result.params.get('beta[1]', 0) or 0)
             persistence = alpha + beta
             
             # Unconditional variance
@@ -915,7 +915,7 @@ class StatisticalAnalysis:
         alpha = 1 - confidence_level  # e.g., 0.05 for 95% VaR
         
         # Historical VaR (percentile)
-        hist_var = np.percentile(returns, alpha * 100)
+        hist_var = _vf_f(np.percentile(returns, alpha * 100))
         
         # Parametric VaR (assumes normal)
         mean = _vf_f(np.mean(returns))

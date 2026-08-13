@@ -185,10 +185,12 @@ def test_sm_5_update():
     y = X[:, 0] + np.random.normal(0, 0.1, 50)
     m = SurrogateModel("rf")
     m.fit(X, y)
+    assert m.metrics is not None
     r2_before = m.metrics.r2
     X_new = np.random.randn(10, 5)
     y_new = X_new[:, 0] + np.random.normal(0, 0.1, 10)
     m.update(X_new, y_new)
+    assert m.metrics is not None
     assert m.metrics.n_train == 60
 
 def test_sm_6_multi_objective():

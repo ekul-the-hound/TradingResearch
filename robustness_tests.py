@@ -128,9 +128,9 @@ class DelayedExecutionStrategy(bt.Strategy):
         else:
             fast, slow = 10, 30
             
-        self.fast_ma = bt.indicators.SMA(self.data.close, period=fast)
-        self.slow_ma = bt.indicators.SMA(self.data.close, period=slow)
-        self.crossover = bt.indicators.CrossOver(self.fast_ma, self.slow_ma)
+        self.fast_ma = bt.indicators.SMA(self.data.close, period=fast)  # type: ignore
+        self.slow_ma = bt.indicators.SMA(self.data.close, period=slow)  # type: ignore
+        self.crossover = bt.indicators.CrossOver(self.fast_ma, self.slow_ma)  # type: ignore
         
         # Bar counter
         self.bar_count = 0
@@ -196,11 +196,11 @@ class RobustnessTests:
         symbol: str,
         timeframe: str,
         delay_bars: List[int] = [0, 1, 2, 3],
-        initial_cash: float = None,
-        commission: float = None,
-        strategy_params: Dict = None,
-        max_bars: int = None
-    ) -> LatencyTestResult:
+        initial_cash: Optional[float] = None,
+        commission: Optional[float] = None,
+        strategy_params: Optional[Dict] = None,
+        max_bars: Optional[int] = None
+    ) -> Optional[LatencyTestResult]:
         """
         Test how strategy performance degrades with execution delay.
         
@@ -219,9 +219,9 @@ class RobustnessTests:
         """
         
         if initial_cash is None:
-            initial_cash = config.DEFAULT_INITIAL_CASH
+            initial_cash = float(config.DEFAULT_INITIAL_CASH)
         if commission is None:
-            commission = config.DEFAULT_COMMISSION
+            commission = float(config.DEFAULT_COMMISSION)
         
         print(f"\n{'='*60}")
         print(f"LATENCY SENSITIVITY TEST")
@@ -315,11 +315,11 @@ class RobustnessTests:
         symbol: str,
         timeframe: str,
         cost_multipliers: List[float] = [1.0, 1.5, 2.0, 3.0, 5.0],
-        initial_cash: float = None,
-        base_commission: float = None,
-        strategy_params: Dict = None,
-        max_bars: int = None
-    ) -> SlippageTestResult:
+        initial_cash: Optional[float] = None,
+        base_commission: Optional[float] = None,
+        strategy_params: Optional[Dict] = None,
+        max_bars: Optional[int] = None
+    ) -> Optional[SlippageTestResult]:
         """
         Test how strategy performance degrades with higher transaction costs.
         
@@ -338,9 +338,9 @@ class RobustnessTests:
         """
         
         if initial_cash is None:
-            initial_cash = config.DEFAULT_INITIAL_CASH
+            initial_cash = float(config.DEFAULT_INITIAL_CASH)
         if base_commission is None:
-            base_commission = config.DEFAULT_COMMISSION
+            base_commission = float(config.DEFAULT_COMMISSION)
         
         print(f"\n{'='*60}")
         print(f"SLIPPAGE STRESS TEST")
@@ -432,11 +432,11 @@ class RobustnessTests:
         timeframe: str,
         delay_bars: List[int] = [0, 1, 2],
         cost_multipliers: List[float] = [1.0, 2.0, 3.0],
-        initial_cash: float = None,
-        base_commission: float = None,
-        strategy_params: Dict = None,
-        max_bars: int = None
-    ) -> CombinedStressResult:
+        initial_cash: Optional[float] = None,
+        base_commission: Optional[float] = None,
+        strategy_params: Optional[Dict] = None,
+        max_bars: Optional[int] = None
+    ) -> Optional[CombinedStressResult]:
         """
         Test all combinations of latency AND slippage.
         
@@ -445,9 +445,9 @@ class RobustnessTests:
         """
         
         if initial_cash is None:
-            initial_cash = config.DEFAULT_INITIAL_CASH
+            initial_cash = float(config.DEFAULT_INITIAL_CASH)
         if base_commission is None:
-            base_commission = config.DEFAULT_COMMISSION
+            base_commission = float(config.DEFAULT_COMMISSION)
         
         print(f"\n{'='*60}")
         print(f"COMBINED STRESS TEST")
@@ -513,7 +513,7 @@ class RobustnessTests:
         )
         
         # Calculate summary stats
-        returns = df['return_pct'].values
+        returns = np.asarray(df['return_pct'].values, dtype=float)
         worst_case = returns.min()
         best_case = returns.max()
         survival_rate = (returns > 0).mean() * 100
@@ -558,7 +558,7 @@ class RobustnessTests:
         data: pd.DataFrame,
         initial_cash: float,
         commission: float,
-        strategy_params: Dict = None,
+        strategy_params: Optional[Dict] = None,
         delay_bars: int = 0
     ) -> Dict:
         """Run a single backtest with optional delay"""
@@ -570,18 +570,19 @@ class RobustnessTests:
         data_copy = data.copy()
         data_copy.columns = [c.lower() for c in data_copy.columns]
         
-        if data_copy.index.tz is not None:
-            data_copy.index = data_copy.index.tz_convert("UTC").tz_localize(None)
+        _idx = pd.DatetimeIndex(data_copy.index)
+        if _idx.tz is not None:
+            data_copy.index = _idx.tz_convert("UTC").tz_localize(None)
         
         data_feed = bt.feeds.PandasData(
-            dataname=data_copy,
-            datetime=None,
-            open='open',
-            high='high',
-            low='low',
-            close='close',
-            volume='volume' if 'volume' in data_copy.columns else None,
-            openinterest=-1
+            dataname=data_copy,  # type: ignore
+            datetime=None,  # type: ignore
+            open='open',  # type: ignore
+            high='high',  # type: ignore
+            low='low',  # type: ignore
+            close='close',  # type: ignore
+            volume='volume' if 'volume' in data_copy.columns else None,  # type: ignore
+            openinterest=-1  # type: ignore
         )
         cerebro.adddata(data_feed)
         
@@ -633,9 +634,9 @@ class RobustnessTests:
     
     def print_robustness_report(
         self,
-        latency_result: LatencyTestResult = None,
-        slippage_result: SlippageTestResult = None,
-        combined_result: CombinedStressResult = None
+        latency_result: Optional[LatencyTestResult] = None,
+        slippage_result: Optional[SlippageTestResult] = None,
+        combined_result: Optional[CombinedStressResult] = None
     ):
         """Print a comprehensive robustness report"""
         

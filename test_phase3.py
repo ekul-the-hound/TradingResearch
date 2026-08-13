@@ -76,6 +76,7 @@ def test_cap_3_strong_beats_weak():
 def test_cap_4_regime():
     r = CapacityEstimator().estimate_by_regime(
         {"sharpe_ratio": 1.5, "total_trades": 100, "total_return_pct": 20, "avg_trade_pct": 0.2}, 1e6, 0.02)
+    assert r.crisis is not None and r.normal is not None
     assert r.crisis.max_aum <= r.normal.max_aum and r.conservative <= r.normal.max_aum
 
 # -- MODULE 3: Kill Switch ----------------------------------------------------

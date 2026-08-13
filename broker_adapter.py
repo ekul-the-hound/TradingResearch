@@ -1,924 +1,473 @@
 # ==============================================================================
-# broker_adapter.py
+# backtest_adapter.py
 # ==============================================================================
-# Unified broker connection layer for live trading.
+# Bridges the gap between:
+#   - Parameter vectors (what the optimizer produces)
+#   - Backtrader strategy classes (what your backtester consumes)
+#   - CanonicalResult objects (what all downstream modules consume)
 #
-# Wraps CCXT (crypto) and ib_insync (futures/indices) into a single
-# interface that the rest of TradingLab consumes. No other module needs
-# to know which broker is being used.
+# Three modes of operation:
+#   1. evaluate_params()   -- GA proposes parameter vector -> backtest -> result
+#   2. evaluate_strategy() -- Run existing strategy class -> result
+#   3. evaluate_variant()  -- Load .py variant file -> backtest -> result
 #
-# Architecture:
-#   broker_adapter.py (this file)
-#       +-- CCXTBroker    -- Binance, Bybit, Hyperliquid, etc.
-#       +-- IBKRBroker    -- Interactive Brokers (TWS / IB Gateway)
-#       +-- PaperBroker   -- Simulated broker for testing (no real orders)
-#
-# Consumed by:
-#   - live_engine.py       -- runs strategy signals through broker
-#   - shadow_trader.py     -- paper trading (uses PaperBroker)
-#   - live_monitor.py      -- polls positions and PnL
-#   - kill_switch.py       -- flatten positions on trigger
-#   - strategy_lifecycle.py -- promotion gate checks
+# This is the architectural adapter that closes the loop.
 #
 # Usage:
-#     from broker_adapter import create_broker
+#     from backtest_adapter import BacktestAdapter
+#     adapter = BacktestAdapter()
 #
-#     # Crypto
-#     broker = create_broker("ccxt", exchange="binance",
-#                            api_key="...", api_secret="...")
+#     # Mode 1: GA optimization loop
+#     result = adapter.evaluate_params(
+#         param_vector={"fast_period": 10, "slow_period": 50},
+#         strategy_class=SimpleMovingAverageCrossover,
+#         symbol="EUR-USD", timeframe="1hour"
+#     )
 #
-#     # Futures/Indices
-#     broker = create_broker("ibkr", host="127.0.0.1", port=7497)
+#     # Mode 2: Run existing strategy
+#     result = adapter.evaluate_strategy(
+#         strategy_class=MyStrategy,
+#         symbols=["EUR-USD", "GBP-USD"],
+#         timeframes=["1hour"]
+#     )
 #
-#     # Paper (testing)
-#     broker = create_broker("paper")
-#
-#     # Unified interface
-#     broker.submit_order("BUY", "BTC/USDT", size=0.01, order_type="market")
-#     positions = broker.get_positions()
-#     broker.flatten("BTC/USDT")
-#     broker.flatten_all()  # kill switch calls this
+#     # Mode 3: Load and run a .py variant file
+#     result = adapter.evaluate_variant("strategies/variants/variant_001.py")
 # ==============================================================================
 
-import time
-import logging
-from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any
-from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum
+import importlib
+import importlib.util
+import sys
+import traceback
+import numpy as np
+from pathlib import Path
+from typing import Optional, List, Dict, Any, Type, Tuple
 
-logger = logging.getLogger(__name__)
+# Import from your existing system
+sys.path.insert(0, str(Path(__file__).parent))
 
+try:
+    from backtester_multi_timeframe import MultiTimeframeBacktester
+except ImportError:
+    MultiTimeframeBacktester = None
 
-# ==============================================================================
-# SHARED TYPES
-# ==============================================================================
+try:
+    from backtester import StrategyBacktester
+except ImportError:
+    StrategyBacktester = None
 
-class OrderType(Enum):
-    MARKET = "market"
-    LIMIT = "limit"
-    STOP = "stop"
-    STOP_LIMIT = "stop_limit"
-
-
-class OrderSide(Enum):
-    BUY = "buy"
-    SELL = "sell"
+from canonical_result import CanonicalResult
 
 
-class OrderStatus(Enum):
-    PENDING = "pending"
-    OPEN = "open"
-    FILLED = "filled"
-    PARTIALLY_FILLED = "partially_filled"
-    CANCELLED = "cancelled"
-    REJECTED = "rejected"
-    EXPIRED = "expired"
-
-
-@dataclass
-class BrokerOrder:
-    """Standardized order representation across all brokers."""
-    order_id: str
-    symbol: str
-    side: OrderSide
-    order_type: OrderType
-    size: float
-    price: Optional[float] = None          # Limit/stop price
-    stop_price: Optional[float] = None     # Stop trigger price
-    status: OrderStatus = OrderStatus.PENDING
-    fill_price: Optional[float] = None
-    filled_size: float = 0.0
-    commission: float = 0.0
-    timestamp: str = ""
-    broker_ref: str = ""                   # Native broker order ID
-    raw: Dict = field(default_factory=dict) # Raw broker response
-
-    @property
-    def is_complete(self) -> bool:
-        return self.status in (OrderStatus.FILLED, OrderStatus.CANCELLED,
-                               OrderStatus.REJECTED, OrderStatus.EXPIRED)
-
-
-@dataclass
-class BrokerPosition:
-    """Standardized position representation."""
-    symbol: str
-    side: str              # "long", "short", "flat"
-    size: float
-    entry_price: float
-    current_price: float
-    unrealized_pnl: float
-    realized_pnl: float
-    margin_used: float = 0.0
-    liquidation_price: Optional[float] = None
-
-    @property
-    def total_pnl(self) -> float:
-        return self.unrealized_pnl + self.realized_pnl
-
-
-@dataclass
-class BrokerBalance:
-    """Account balance snapshot."""
-    total_equity: float
-    free_margin: float
-    used_margin: float
-    unrealized_pnl: float
-    currency: str = "USD"
-    timestamp: str = ""
-
-
-@dataclass
-class BrokerTick:
-    """Real-time price tick."""
-    symbol: str
-    bid: float
-    ask: float
-    last: float
-    volume_24h: float = 0.0
-    timestamp: str = ""
-
-    @property
-    def mid(self) -> float:
-        return (self.bid + self.ask) / 2
-
-    @property
-    def spread(self) -> float:
-        return self.ask - self.bid
-
-    @property
-    def spread_bps(self) -> float:
-        return self.spread / max(self.mid, 1e-10) * 10000
-
-
-# ==============================================================================
-# ABSTRACT BROKER
-# ==============================================================================
-
-class BaseBroker(ABC):
-    """Interface that all broker adapters implement."""
-
-    def __init__(self, name: str):
-        self.name = name
-        self.is_connected = False
-        self._order_history: List[BrokerOrder] = []
-
-    @abstractmethod
-    def connect(self) -> bool:
-        """Establish connection to broker. Returns True on success."""
-        ...
-
-    @abstractmethod
-    def disconnect(self):
-        """Clean shutdown."""
-        ...
-
-    @abstractmethod
-    def get_tick(self, symbol: str) -> Optional[BrokerTick]:
-        """Get current price for a symbol."""
-        ...
-
-    @abstractmethod
-    def get_balance(self) -> BrokerBalance:
-        """Get account balance."""
-        ...
-
-    @abstractmethod
-    def get_positions(self) -> List[BrokerPosition]:
-        """Get all open positions."""
-        ...
-
-    @abstractmethod
-    def get_position(self, symbol: str) -> Optional[BrokerPosition]:
-        """Get position for a specific symbol."""
-        ...
-
-    @abstractmethod
-    def submit_order(
-        self,
-        side: str,
-        symbol: str,
-        size: float,
-        order_type: str = "market",
-        price: Optional[float] = None,
-        stop_price: Optional[float] = None,
-    ) -> BrokerOrder:
-        """Submit an order. Returns BrokerOrder with status."""
-        ...
-
-    @abstractmethod
-    def cancel_order(self, order_id: str) -> bool:
-        """Cancel an open order. Returns True on success."""
-        ...
-
-    @abstractmethod
-    def get_order(self, order_id: str) -> Optional[BrokerOrder]:
-        """Get order status by ID."""
-        ...
-
-    def flatten(self, symbol: str) -> Optional[BrokerOrder]:
-        """Close position for a symbol."""
-        pos = self.get_position(symbol)
-        if pos is None or pos.side == "flat" or pos.size == 0:
-            return None
-        close_side = "sell" if pos.side == "long" else "buy"
-        return self.submit_order(close_side, symbol, pos.size, "market")
-
-    def flatten_all(self) -> List[BrokerOrder]:
-        """Close ALL positions. Called by kill switch."""
-        orders = []
-        for pos in self.get_positions():
-            if pos.side != "flat" and pos.size > 0:
-                order = self.flatten(pos.symbol)
-                if order:
-                    orders.append(order)
-        return orders
-
-    def get_open_orders(self) -> List[BrokerOrder]:
-        """Get all orders that aren't complete."""
-        return [o for o in self._order_history if not o.is_complete]
-
-    def cancel_all_orders(self) -> int:
-        """Cancel all open orders. Returns count cancelled."""
-        count = 0
-        for o in self.get_open_orders():
-            if self.cancel_order(o.order_id):
-                count += 1
-        return count
-
-    @property
-    def order_history(self) -> List[BrokerOrder]:
-        return list(self._order_history)
-
-
-# ==============================================================================
-# CCXT BROKER (Crypto)
-# ==============================================================================
-
-class CCXTBroker(BaseBroker):
+class BacktestAdapter:
     """
-    Crypto broker via CCXT. Supports Binance, Bybit, Hyperliquid, etc.
-
-    Requirements:
-        pip install ccxt
+    Adapter that connects optimizers/pipelines to your existing backtester.
     """
 
     def __init__(
         self,
-        exchange: str = "binance",
-        api_key: str = "",
-        api_secret: str = "",
-        sandbox: bool = False,
-        default_type: str = "spot",   # "spot", "future", "swap"
+        default_symbols: Optional[List[str]] = None,
+        default_timeframes: Optional[List[str]] = None,
+        default_initial_cash: float = 10000,
+        default_commission: float = 0.001,
+        extract_trades: bool = True,
+        verbose: bool = True,
     ):
-        super().__init__(f"ccxt_{exchange}")
-        self.exchange_name = exchange
-        self.api_key = api_key
-        self.api_secret = api_secret
-        self.sandbox = sandbox
-        self.default_type = default_type
-        self._exchange = None
-        self._order_counter = 0
+        self.default_symbols = default_symbols or ["EUR-USD"]
+        self.default_timeframes = default_timeframes or ["1hour"]
+        self.default_initial_cash = default_initial_cash
+        self.default_commission = default_commission
+        self.extract_trades = extract_trades
+        self.verbose = verbose
 
-    def connect(self) -> bool:
-        try:
-            import ccxt
-        except ImportError:
-            logger.error("CCXT not installed. Run: pip install ccxt")
-            return False
+        # Initialize backtester
+        self._mtf = None
+        self._simple = None
+        self._init_backtester()
 
+        self._eval_count = 0
+
+    def _init_backtester(self):
+        """Initialize whichever backtester is available."""
+        self.engine_name = None
+        self.engine_error = None
+        if MultiTimeframeBacktester is not None:
+            try:
+                self._mtf = MultiTimeframeBacktester()
+                self.engine_name = 'MultiTimeframeBacktester'
+                if self.verbose:
+                    print("[OK] BacktestAdapter: Using MultiTimeframeBacktester")
+                return
+            except Exception as e:
+                self.engine_error = f'MTF init failed: {e}'
+                # Not verbose-gated: a failed engine init is the difference
+                # between a working run and one that silently does nothing.
+                print(f"[WARN]  MultiTimeframeBacktester init failed: {e}")
+
+        if StrategyBacktester is not None:
+            try:
+                self._simple = StrategyBacktester()
+                self.engine_name = 'StrategyBacktester'
+                if self.verbose:
+                    print("[OK] BacktestAdapter: Using StrategyBacktester")
+                return
+            except Exception as e:
+                self.engine_error = f'Simple init failed: {e}'
+                print(f"[WARN]  StrategyBacktester init failed: {e}")
+
+        # Reached only if neither engine loaded. This is fatal to the whole
+        # point of the adapter, so it is never silent.
+        if self.engine_name is None:
+            print("[FAIL] BacktestAdapter: NO backtest engine available. "
+                  "Every backtest will return no result. "
+                  f"(MTF import: {'ok' if MultiTimeframeBacktester else 'MISSING'}, "
+                  f"simple import: {'ok' if StrategyBacktester else 'MISSING'})")
+
+        if self.verbose:
+            print("[WARN]  BacktestAdapter: No backtester available (dry-run mode)")
+
+    # ------------------------------------------------------------------
+    # MODE 1: Evaluate a parameter vector (for GA/optimizer)
+    # ------------------------------------------------------------------
+    def evaluate_params(
+        self,
+        param_vector: Dict[str, Any],
+        strategy_class: Type,
+        symbol: Optional[str] = None,
+        timeframe: Optional[str] = None,
+        strategy_id: Optional[str] = None,
+    ) -> CanonicalResult:
+        """
+        Core adapter for optimization loops.
+
+        Takes a parameter dict, injects it into the strategy class,
+        runs your backtester, returns a CanonicalResult.
+
+        Args:
+            param_vector: Dict of parameter names -> values.
+                          e.g. {"fast_period": 10, "slow_period": 50}
+            strategy_class: Backtrader strategy class (e.g. SimpleMovingAverageCrossover)
+            symbol: Asset to test (defaults to first in default_symbols)
+            timeframe: Timeframe to test (defaults to first in default_timeframes)
+            strategy_id: Optional ID for tracking
+
+        Returns:
+            CanonicalResult with all metrics populated.
+        """
+        self._eval_count += 1
+        sym = symbol or self.default_symbols[0]
+        tf = timeframe or self.default_timeframes[0]
+
+        if not strategy_id:
+            params_str = "_".join(f"{k}{v}" for k, v in sorted(param_vector.items()))
+            strategy_id = f"{strategy_class.__name__}_{params_str}_{sym}_{tf}"
+
+        raw, reason = self._run_backtest(strategy_class, sym, tf, param_vector)
+        if raw is None:
+            if reason:
+                print(f"   [FAIL] {strategy_id}: {reason}")
+            cr = CanonicalResult(strategy_id=strategy_id, strategy_name='FAILED')
+        else:
+            cr = CanonicalResult.from_backtest(raw, strategy_id=strategy_id)
+        cr.strategy_params = dict(param_vector)
+        return cr
+
+    # ------------------------------------------------------------------
+    # MODE 1b: Batch evaluate for GA (run across multiple symbols)
+    # ------------------------------------------------------------------
+    def evaluate_params_multi(
+        self,
+        param_vector: Dict[str, Any],
+        strategy_class: Type,
+        symbols: Optional[List[str]] = None,
+        timeframes: Optional[List[str]] = None,
+        aggregate: str = "mean",
+    ) -> CanonicalResult:
+        """
+        Evaluate a parameter vector across multiple symbols/timeframes.
+        Returns aggregated CanonicalResult.
+        """
+        syms = symbols or self.default_symbols
+        tfs = timeframes or self.default_timeframes
+
+        results = []
+        for sym in syms:
+            for tf in tfs:
+                cr = self.evaluate_params(param_vector, strategy_class, sym, tf)
+                if cr.total_trades > 0:
+                    results.append(cr)
+
+        if not results:
+            return CanonicalResult(strategy_id="EMPTY", strategy_params=param_vector)
+
+        # Aggregate
+        return self._aggregate_results(results, param_vector, strategy_class.__name__)
+
+    # ------------------------------------------------------------------
+    # MODE 2: Evaluate an existing strategy class
+    # ------------------------------------------------------------------
+    def evaluate_strategy(
+        self,
+        strategy_class: Type,
+        symbols: Optional[List[str]] = None,
+        timeframes: Optional[List[str]] = None,
+        strategy_params: Optional[Dict] = None,
+        strategy_id: Optional[str] = None,
+    ) -> List[CanonicalResult]:
+        """
+        Run a strategy class across symbols/timeframes.
+        Returns list of CanonicalResult, one per symbol/timeframe combo.
+        """
+        syms = symbols or self.default_symbols
+        tfs = timeframes or self.default_timeframes
+        params = strategy_params or {}
+
+        results = []
+        failures = []
+        for sym in syms:
+            for tf in tfs:
+                sid = strategy_id or f"{strategy_class.__name__}_{sym}_{tf}"
+                raw, reason = self._run_backtest(
+                    strategy_class, sym, tf, params)
+                if raw is None:
+                    # A failed backtest is recorded as a failure, not
+                    # appended as an empty CanonicalResult that flows
+                    # downstream looking like a real (but losing) strategy.
+                    failures.append((sid, reason))
+                    continue
+                results.append(
+                    CanonicalResult.from_backtest(raw, strategy_id=sid))
+
+        if failures:
+            print(f"   [FAIL] {len(failures)} of "
+                  f"{len(failures) + len(results)} backtests produced no "
+                  f"result for {strategy_class.__name__}:")
+            for sid, reason in failures[:5]:
+                print(f"           - {sid}: {reason}")
+            if len(failures) > 5:
+                print(f"           ... and {len(failures) - 5} more")
+        self.last_failures = failures
+
+        return results
+
+    # ------------------------------------------------------------------
+    # MODE 3: Evaluate a .py variant file
+    # ------------------------------------------------------------------
+    def evaluate_variant(
+        self,
+        variant_path: str,
+        symbol: Optional[str] = None,
+        timeframe: Optional[str] = None,
+    ) -> CanonicalResult:
+        """
+        Load a strategy .py file (e.g., from mutation agent), import the
+        strategy class, and run it.
+        """
+        path = Path(variant_path)
+        if not path.exists():
+            return CanonicalResult(strategy_id=path.stem, strategy_name="FILE_NOT_FOUND")
+
+        # Dynamic import
         try:
-            exchange_class = getattr(ccxt, self.exchange_name)
-            config = {
-                "apiKey": self.api_key,
-                "secret": self.api_secret,
-                "enableRateLimit": True,
-                "options": {"defaultType": self.default_type},
+            spec = importlib.util.spec_from_file_location(path.stem, path)
+            if spec is None or spec.loader is None:
+                return CanonicalResult(strategy_id=path.stem,
+                                       strategy_name='NOT_IMPORTABLE')
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+        except Exception as e:
+            if self.verbose:
+                print(f"[FAIL] Failed to import {path}: {e}")
+            return CanonicalResult(strategy_id=path.stem, strategy_name="IMPORT_FAILED")
+
+        # Find the strategy class (first bt.Strategy subclass)
+        import backtrader as bt
+        strategy_class = None
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if isinstance(attr, type) and issubclass(attr, bt.Strategy) and attr is not bt.Strategy:
+                strategy_class = attr
+                break
+
+        if strategy_class is None:
+            return CanonicalResult(strategy_id=path.stem, strategy_name="NO_STRATEGY_CLASS")
+
+        sym = symbol or self.default_symbols[0]
+        tf = timeframe or self.default_timeframes[0]
+
+        raw, reason = self._run_backtest(strategy_class, sym, tf, {})
+        if raw is None:
+            if reason:
+                print(f"   [FAIL] {path.stem}: {reason}")
+            return CanonicalResult(strategy_id=path.stem, strategy_name='FAILED')
+        return CanonicalResult.from_backtest(raw, strategy_id=path.stem)
+
+    # ------------------------------------------------------------------
+    # MODE 4: Callable for optimization_pipeline.py
+    # ------------------------------------------------------------------
+    def as_objective_function(
+        self,
+        strategy_class: Type,
+        symbol: Optional[str] = None,
+        timeframe: Optional[str] = None,
+    ):
+        """
+        Returns a callable that optimization_pipeline.py can use directly.
+
+        Usage:
+            obj_fn = adapter.as_objective_function(SimpleMovingAverageCrossover)
+            # optimization_pipeline.py calls: obj_fn(param_dict) -> result_dict
+        """
+        def _objective(param_vector: Dict[str, Any]) -> Dict[str, float]:
+            cr = self.evaluate_params(param_vector, strategy_class, symbol, timeframe)
+            return {
+                "sharpe_ratio": cr.sharpe_ratio or 0,
+                "max_drawdown_pct": cr.max_drawdown_pct or 0,
+                "total_trades": float(cr.total_trades),
+                "win_rate": (cr.win_rate / 100) if cr.win_rate is not None else 0.0,
+                "profit_factor": cr.profit_factor or 0,
+                "total_return_pct": cr.total_return_pct,
             }
-            self._exchange = exchange_class(config)
+        return _objective
 
-            if self.sandbox:
-                self._exchange.set_sandbox_mode(True)
-
-            # Test connection
-            self._exchange.load_markets()
-            self.is_connected = True
-            logger.info(f"Connected to {self.exchange_name} "
-                        f"({'sandbox' if self.sandbox else 'live'}, {self.default_type})")
-            return True
-
-        except Exception as e:
-            logger.error(f"CCXT connection failed: {e}")
-            return False
-
-    def disconnect(self):
-        self._exchange = None
-        self.is_connected = False
-
-    def get_tick(self, symbol: str) -> Optional[BrokerTick]:
-        if not self._exchange:
-            return None
-        try:
-            ticker = self._exchange.fetch_ticker(symbol)
-            return BrokerTick(
-                symbol=symbol,
-                bid=ticker.get("bid", 0) or 0,
-                ask=ticker.get("ask", 0) or 0,
-                last=ticker.get("last", 0) or 0,
-                volume_24h=ticker.get("quoteVolume", 0) or 0,
-                timestamp=datetime.now().isoformat(),
-            )
-        except Exception as e:
-            logger.error(f"get_tick({symbol}) failed: {e}")
-            return None
-
-    def get_balance(self) -> BrokerBalance:
-        if not self._exchange:
-            return BrokerBalance(0, 0, 0, 0)
-        try:
-            bal = self._exchange.fetch_balance()
-            total = bal.get("total", {})
-            free = bal.get("free", {})
-            used = bal.get("used", {})
-            # Sum USDT values
-            quote = next((c for c in ("USDT", "USD", "USDC") if total.get(c)), "USDT")
-            equity = float(total.get(quote, 0) or 0)
-            free_m = float(free.get(quote, 0) or 0)
-            used_m = float(used.get(quote, 0) or 0)
-            return BrokerBalance(
-                total_equity=equity, free_margin=free_m,
-                used_margin=used_m, unrealized_pnl=0,
-                currency="USDT", timestamp=datetime.now().isoformat(),
-            )
-        except Exception as e:
-            logger.error(f"get_balance failed: {e}")
-            return BrokerBalance(0, 0, 0, 0)
-
-    def _spot_positions_from_balance(self) -> List[BrokerPosition]:
-        """Spot exchanges have no positions endpoint -- derive holdings from balances."""
-        result: List[BrokerPosition] = []
-        if not self._exchange:
-            return result
-        try:
-            bal = self._exchange.fetch_balance()
-            for asset, amount in (bal.get("total") or {}).items():
-                try:
-                    amount = float(amount or 0)
-                except (TypeError, ValueError):
-                    continue
-                if asset in ("USDT", "USD", "USDC") or amount <= 0:
-                    continue
-                symbol = f"{asset}/USDT"
-                price = 0.0
-                try:
-                    ticker = self._exchange.fetch_ticker(symbol)
-                    price = float(ticker.get("last", 0) or 0)
-                except Exception:
-                    pass
-                result.append(BrokerPosition(
-                    symbol=symbol,
-                    side="long",
-                    size=amount,
-                    entry_price=0.0,  # not recoverable from balances
-                    current_price=price,
-                    unrealized_pnl=0.0,
-                    realized_pnl=0.0,
-                ))
-        except Exception as e:
-            logger.error(f"spot position fallback failed: {e}")
-        return result
-
-    def get_positions(self) -> List[BrokerPosition]:
-        if not self._exchange:
-            return []
-        try:
-            if not self._exchange.has.get("fetchPositions"):
-                # Spot exchanges (e.g. Binance US) have no positions endpoint --
-                # derive holdings from balances so flatten/flatten_all work.
-                return self._spot_positions_from_balance()
-            positions = self._exchange.fetch_positions()
-            result = []
-            for p in positions:
-                size = abs(float(p.get("contracts", 0) or 0))
-                if size == 0:
-                    continue
-                side = p.get("side", "long")
-                result.append(BrokerPosition(
-                    symbol=p.get("symbol", ""),
-                    side=side,
-                    size=size,
-                    entry_price=float(p.get("entryPrice", 0) or 0),
-                    current_price=float(p.get("markPrice", 0) or 0),
-                    unrealized_pnl=float(p.get("unrealizedPnl", 0) or 0),
-                    realized_pnl=0,
-                    margin_used=float(p.get("initialMargin", 0) or 0),
-                    liquidation_price=float(p.get("liquidationPrice", 0) or 0)
-                    if p.get("liquidationPrice") else None,
-                ))
-            return result
-        except Exception as e:
-            logger.error(f"get_positions failed: {e}")
-            return []
-
-    def get_position(self, symbol: str) -> Optional[BrokerPosition]:
-        for p in self.get_positions():
-            if p.symbol == symbol:
-                return p
-        return None
-
-    def submit_order(
-        self, side: str, symbol: str, size: float,
-        order_type: str = "market", price: Optional[float] = None,
-        stop_price: Optional[float] = None,
-    ) -> BrokerOrder:
-        self._order_counter += 1
-        order = BrokerOrder(
-            order_id=f"ccxt_{self._order_counter}",
-            symbol=symbol, side=OrderSide(side.lower()),
-            order_type=OrderType(order_type.lower()),
-            size=size, price=price, stop_price=stop_price,
-            timestamp=datetime.now().isoformat(),
-        )
-
-        if not self._exchange:
-            order.status = OrderStatus.REJECTED
-            self._order_history.append(order)
-            return order
-
-        try:
-            params = {}
-            if stop_price:
-                params["stopPrice"] = stop_price
-
-            result = self._exchange.create_order(
-                symbol=symbol,
-                type=order_type.lower(),
-                side=side.lower(),
-                amount=size,
-                price=price,
-                params=params,
-            )
-
-            order.broker_ref = str(result.get("id", ""))
-            order.status = self._map_ccxt_status(result.get("status", "open"))
-            order.fill_price = float(result.get("average", 0) or 0)
-            order.filled_size = float(result.get("filled", 0) or 0)
-            fee = result.get("fee", {})
-            order.commission = float(fee.get("cost", 0) or 0) if fee else 0
-            order.raw = result
-
-            logger.info(f"Order {order.order_id}: {side} {size} {symbol} "
-                        f"@ {order.fill_price} [{order.status.value}]")
-
-        except Exception as e:
-            logger.error(f"submit_order failed: {e}")
-            order.status = OrderStatus.REJECTED
-            order.raw = {"error": str(e)}
-
-        self._order_history.append(order)
-        return order
-
-    def cancel_order(self, order_id: str) -> bool:
-        order = self.get_order(order_id)
-        if not order or not self._exchange:
-            return False
-        try:
-            self._exchange.cancel_order(order.broker_ref, order.symbol)
-            order.status = OrderStatus.CANCELLED
-            return True
-        except Exception as e:
-            logger.error(f"cancel_order failed: {e}")
-            return False
-
-    def get_order(self, order_id: str) -> Optional[BrokerOrder]:
-        for o in self._order_history:
-            if o.order_id == order_id:
-                return o
-        return None
-
-    def _map_ccxt_status(self, status: str) -> OrderStatus:
-        return {
-            "open": OrderStatus.OPEN,
-            "closed": OrderStatus.FILLED,
-            "canceled": OrderStatus.CANCELLED,
-            "expired": OrderStatus.EXPIRED,
-            "rejected": OrderStatus.REJECTED,
-        }.get(status, OrderStatus.PENDING)
-
-
-# ==============================================================================
-# IBKR BROKER (Futures / Indices / Equities)
-# ==============================================================================
-
-class IBKRBroker(BaseBroker):
-    """
-    Interactive Brokers via ib_insync.
-
-    Requirements:
-        pip install ib_insync
-        TWS or IB Gateway running with API enabled
-
-    Setup:
-        1. Install TWS: https://www.interactivebrokers.com/en/trading/tws.php
-        2. Enable API: TWS -> Edit -> Global Configuration -> API -> Settings
-           - Enable ActiveX and Socket Clients
-           - Socket port: 7497 (paper) or 7496 (live)
-        3. Or use IB Gateway (lighter): same config
-    """
-
-    def __init__(
+    # ------------------------------------------------------------------
+    # INTERNAL: Run backtest through your existing engine
+    # ------------------------------------------------------------------
+    def _run_backtest(
         self,
-        host: str = "127.0.0.1",
-        port: int = 7497,      # 7497=paper, 7496=live
-        client_id: int = 1,
-    ):
-        super().__init__("ibkr")
-        self.host = host
-        self.port = port
-        self.client_id = client_id
-        self._ib = None
-        self._order_counter = 0
+        strategy_class: Type,
+        symbol: str,
+        timeframe: str,
+        strategy_params: Dict,
+    ) -> 'Tuple[Optional[Dict], Optional[str]]':
+        """Run backtest using whichever engine is available."""
 
-    def connect(self) -> bool:
-        try:
-            from ib_insync import IB
-        except ImportError:
-            logger.error("ib_insync not installed. Run: pip install ib_insync")
-            return False
+        # Multi-timeframe backtester (preferred)
+        if self._mtf is not None:
+            try:
+                result = self._mtf.run_single_backtest(
+                    strategy_class=strategy_class,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    initial_cash=int(self.default_initial_cash),
+                    commission=self.default_commission,
+                    strategy_params=strategy_params if strategy_params else None,
+                    extract_trades=self.extract_trades,
+                )
+                if result is None:
+                    return None, f'MTF ran but returned nothing '\
+                                 f'({symbol} {timeframe}) -- likely no data'
+                return result, None
+            except Exception as e:
+                return None, f'MTF raised ({symbol} {timeframe}): '\
+                             f'{type(e).__name__}: {e}'
 
-        try:
-            self._ib = IB()
-            self._ib.connect(self.host, self.port, clientId=self.client_id)
-            self.is_connected = True
-            account = self._ib.managedAccounts()
-            logger.info(f"Connected to IBKR at {self.host}:{self.port} "
-                        f"(account: {account[0] if account else 'unknown'})")
-            return True
-        except Exception as e:
-            logger.error(f"IBKR connection failed: {e}")
-            return False
+        # Simple backtester fallback (uses yfinance, no timeframe/forex support)
+        if self._simple is not None:
+            try:
+                result = self._simple.run_backtest(
+                    strategy_class=strategy_class,
+                    symbol=(symbol.replace("-", "") + "=X") if "-" in symbol else symbol,
+                    start_date="2020-01-01",
+                    end_date="2025-01-01",
+                    initial_cash=int(self.default_initial_cash),
+                    commission=self.default_commission,
+                    strategy_params=strategy_params if strategy_params else None,
+                )
+                if result is None:
+                    return None, f'simple engine returned nothing ({symbol})'
+                return result, None
+            except Exception as e:
+                return None, f'simple engine raised ({symbol}): '\
+                             f'{type(e).__name__}: {e}'
 
-    def disconnect(self):
-        if self._ib:
-            self._ib.disconnect()
-        self.is_connected = False
+        return None, 'no backtest engine available'
 
-    def _parse_symbol(self, symbol: str) -> Any:
-        """Convert string symbol to IB contract."""
-        from ib_insync import Stock, Future, Forex, Contract
+    # ------------------------------------------------------------------
+    # AGGREGATION
+    # ------------------------------------------------------------------
+    def _aggregate_results(
+        self,
+        results: List[CanonicalResult],
+        params: Dict,
+        name: str,
+    ) -> CanonicalResult:
+        """Aggregate multiple single-asset results into one."""
+        sharpes = [r.sharpe_ratio for r in results if r.sharpe_ratio is not None]
+        dds = [r.max_drawdown_pct for r in results if r.max_drawdown_pct is not None]
+        trades = [r.total_trades for r in results]
+        returns = [r.total_return_pct for r in results]
+        wrs = [r.win_rate for r in results if r.win_rate is not None]
+        pfs = [r.profit_factor for r in results if r.profit_factor is not None]
 
-        # Forex: "EUR/USD" or "EUR-USD"
-        if "/" in symbol or (len(symbol) == 7 and "-" in symbol):
-            pair = symbol.replace("-", "").replace("/", "")
-            base, quote = pair[:3], pair[3:]
-            return Forex(base + quote)
+        # SYNTHETIC-RETURNS-FIX-AGGREGATE
+        # Previously this concatenated every non-empty returns array and built
+        # the aggregate without carrying returns_synthetic forward, so mixing
+        # one real result with one fabricated one produced an aggregate that
+        # reported itself as clean. Provenance was destroyed exactly where it
+        # started to matter. Synthetic inputs are now excluded and the
+        # aggregate records that it is incomplete.
+        usable, n_synthetic = [], 0
+        for r in results:
+            if r.returns is None or len(r.returns) == 0:
+                continue
+            if getattr(r, 'returns_synthetic', False) or getattr(r, 'returns_source', '') == 'synthetic':
+                n_synthetic += 1
+                continue
+            usable.append(r.returns)
 
-        # Futures: "ES", "NQ", "CL", "GC"
-        futures_map = {
-            "ES": ("ES", "CME"), "NQ": ("NQ", "CME"),
-            "YM": ("YM", "CBOT"), "RTY": ("RTY", "CME"),
-            "CL": ("CL", "NYMEX"), "GC": ("GC", "COMEX"),
-            "SI": ("SI", "COMEX"), "NG": ("NG", "NYMEX"),
-            "ZB": ("ZB", "CBOT"), "ZN": ("ZN", "CBOT"),
-        }
-        if symbol.upper() in futures_map:
-            sym, exch = futures_map[symbol.upper()]
-            return Future(sym, exchange=exch)
+        all_returns = np.concatenate(usable) if usable else None
+        agg_returns_source = 'none'
+        if usable:
+            agg_returns_source = 'mixed' if n_synthetic else 'trade_list'
+        if n_synthetic:
+            print(f"[WARN] {name}: excluded {n_synthetic} synthetic return series "
+                  f"from aggregation; aggregate marked '{agg_returns_source}'")
 
-        # Default: stock
-        return Stock(symbol, "SMART", "USD")
-
-    def get_tick(self, symbol: str) -> Optional[BrokerTick]:
-        if not self._ib:
-            return None
-        try:
-            contract = self._parse_symbol(symbol)
-            self._ib.qualifyContracts(contract)
-            ticker = self._ib.reqMktData(contract)
-            self._ib.sleep(1)  # Wait for data
-            return BrokerTick(
-                symbol=symbol,
-                bid=ticker.bid if ticker.bid > 0 else 0,
-                ask=ticker.ask if ticker.ask > 0 else 0,
-                last=ticker.last if ticker.last > 0 else 0,
-                volume_24h=ticker.volume if ticker.volume else 0,
-                timestamp=datetime.now().isoformat(),
-            )
-        except Exception as e:
-            logger.error(f"get_tick({symbol}) failed: {e}")
-            return None
-
-    def get_balance(self) -> BrokerBalance:
-        if not self._ib:
-            return BrokerBalance(0, 0, 0, 0)
-        try:
-            account_values = self._ib.accountSummary()
-            vals = {v.tag: float(v.value) for v in account_values
-                    if v.currency == "USD"}
-            return BrokerBalance(
-                total_equity=vals.get("NetLiquidation", 0),
-                free_margin=vals.get("AvailableFunds", 0),
-                used_margin=vals.get("InitMarginReq", 0),
-                unrealized_pnl=vals.get("UnrealizedPnL", 0),
-                currency="USD",
-                timestamp=datetime.now().isoformat(),
-            )
-        except Exception as e:
-            logger.error(f"get_balance failed: {e}")
-            return BrokerBalance(0, 0, 0, 0)
-
-    def get_positions(self) -> List[BrokerPosition]:
-        if not self._ib:
-            return []
-        try:
-            positions = self._ib.positions()
-            result = []
-            for p in positions:
-                size = abs(p.position)
-                if size == 0:
-                    continue
-                side = "long" if p.position > 0 else "short"
-                result.append(BrokerPosition(
-                    symbol=p.contract.localSymbol or p.contract.symbol,
-                    side=side,
-                    size=size,
-                    entry_price=p.avgCost / (p.contract.multiplier or 1),
-                    current_price=0,  # Need market data for this
-                    unrealized_pnl=0,
-                    realized_pnl=0,
-                    margin_used=0,
-                ))
-            return result
-        except Exception as e:
-            logger.error(f"get_positions failed: {e}")
-            return []
-
-    def get_position(self, symbol: str) -> Optional[BrokerPosition]:
-        for p in self.get_positions():
-            if p.symbol == symbol or symbol.upper() in p.symbol.upper():
-                return p
-        return None
-
-    def submit_order(
-        self, side: str, symbol: str, size: float,
-        order_type: str = "market", price: Optional[float] = None,
-        stop_price: Optional[float] = None,
-    ) -> BrokerOrder:
-        from ib_insync import MarketOrder, LimitOrder, StopOrder, StopLimitOrder
-
-        self._order_counter += 1
-        order = BrokerOrder(
-            order_id=f"ibkr_{self._order_counter}",
-            symbol=symbol, side=OrderSide(side.lower()),
-            order_type=OrderType(order_type.lower()),
-            size=size, price=price, stop_price=stop_price,
-            timestamp=datetime.now().isoformat(),
+        agg = CanonicalResult(
+            strategy_id=f"{name}_agg",
+            strategy_name=name,
+            strategy_params=params,
+            sharpe_ratio=float(np.mean(sharpes)) if sharpes else 0,
+            max_drawdown_pct=float(np.max(dds)) if dds else 0,
+            total_trades=sum(trades),
+            total_return_pct=float(np.mean(returns)),
+            win_rate=float(np.mean(wrs)) if wrs else None,
+            profit_factor=float(np.mean(pfs)) if pfs else None,
+            returns=all_returns,
+            returns_source=agg_returns_source,
         )
+        return agg
 
-        if not self._ib:
-            order.status = OrderStatus.REJECTED
-            self._order_history.append(order)
-            return order
+    # ------------------------------------------------------------------
+    # STATS
+    # ------------------------------------------------------------------
+    @property
+    def eval_count(self) -> int:
+        return self._eval_count
 
-        try:
-            contract = self._parse_symbol(symbol)
-            self._ib.qualifyContracts(contract)
-
-            action = "BUY" if side.lower() == "buy" else "SELL"
-
-            if order_type.lower() == "market":
-                ib_order = MarketOrder(action, size)
-            elif order_type.lower() == "limit":
-                ib_order = LimitOrder(action, size, price)
-            elif order_type.lower() == "stop":
-                ib_order = StopOrder(action, size, stop_price or price)
-            elif order_type.lower() == "stop_limit":
-                ib_order = StopLimitOrder(action, size, price, stop_price)
-            else:
-                ib_order = MarketOrder(action, size)
-
-            trade = self._ib.placeOrder(contract, ib_order)
-            self._ib.sleep(1)  # Wait for fill
-
-            order.broker_ref = str(trade.order.orderId)
-            if trade.orderStatus.status == "Filled":
-                order.status = OrderStatus.FILLED
-                order.fill_price = trade.orderStatus.avgFillPrice
-                order.filled_size = trade.orderStatus.filled
-            elif trade.orderStatus.status == "Submitted":
-                order.status = OrderStatus.OPEN
-            else:
-                order.status = OrderStatus.PENDING
-
-            order.commission = sum(f.commission for f in trade.fills) if trade.fills else 0
-            logger.info(f"IBKR Order {order.order_id}: {action} {size} {symbol} "
-                        f"[{order.status.value}]")
-
-        except Exception as e:
-            logger.error(f"IBKR submit_order failed: {e}")
-            order.status = OrderStatus.REJECTED
-            order.raw = {"error": str(e)}
-
-        self._order_history.append(order)
-        return order
-
-    def cancel_order(self, order_id: str) -> bool:
-        order = self.get_order(order_id)
-        if not order or not self._ib:
-            return False
-        try:
-            for trade in self._ib.openTrades():
-                if str(trade.order.orderId) == order.broker_ref:
-                    self._ib.cancelOrder(trade.order)
-                    order.status = OrderStatus.CANCELLED
-                    return True
-            return False
-        except Exception as e:
-            logger.error(f"IBKR cancel_order failed: {e}")
-            return False
-
-    def get_order(self, order_id: str) -> Optional[BrokerOrder]:
-        for o in self._order_history:
-            if o.order_id == order_id:
-                return o
-        return None
+    def reset_count(self):
+        self._eval_count = 0
 
 
 # ==============================================================================
-# PAPER BROKER (Testing / Shadow Trading)
+# Broker abstraction re-exports
 # ==============================================================================
-
-class PaperBroker(BaseBroker):
-    """
-    Simulated broker for testing. No real orders, no external connections.
-    Used by shadow_trader.py and for pipeline integration testing.
-    """
-
-    def __init__(self, initial_balance: float = 100_000, slippage_bps: float = 1.0):
-        super().__init__("paper")
-        self.initial_balance = initial_balance
-        self.balance = initial_balance
-        self.slippage_bps = slippage_bps
-        self._positions: Dict[str, BrokerPosition] = {}
-        self._prices: Dict[str, float] = {}
-        self._order_counter = 0
-
-    def connect(self) -> bool:
-        self.is_connected = True
-        logger.info("PaperBroker connected")
-        return True
-
-    def disconnect(self):
-        self.is_connected = False
-
-    def set_price(self, symbol: str, price: float):
-        """Set simulated market price for a symbol."""
-        self._prices[symbol] = price
-
-    def get_tick(self, symbol: str) -> Optional[BrokerTick]:
-        price = self._prices.get(symbol, 0)
-        if price == 0:
-            return None
-        spread = price * self.slippage_bps / 10000
-        return BrokerTick(
-            symbol=symbol, bid=price - spread / 2, ask=price + spread / 2,
-            last=price, timestamp=datetime.now().isoformat(),
-        )
-
-    def get_balance(self) -> BrokerBalance:
-        unrealized = sum(p.unrealized_pnl for p in self._positions.values())
-        return BrokerBalance(
-            total_equity=self.balance + unrealized,
-            free_margin=self.balance,
-            used_margin=sum(p.margin_used for p in self._positions.values()),
-            unrealized_pnl=unrealized,
-            currency="USD",
-            timestamp=datetime.now().isoformat(),
-        )
-
-    def get_positions(self) -> List[BrokerPosition]:
-        return [p for p in self._positions.values() if p.size > 0]
-
-    def get_position(self, symbol: str) -> Optional[BrokerPosition]:
-        return self._positions.get(symbol)
-
-    def submit_order(
-        self, side: str, symbol: str, size: float,
-        order_type: str = "market", price: Optional[float] = None,
-        stop_price: Optional[float] = None,
-    ) -> BrokerOrder:
-        self._order_counter += 1
-        mkt_price = self._prices.get(symbol, price or 0)
-        slip = mkt_price * self.slippage_bps / 10000
-
-        if side.lower() == "buy":
-            fill_price = mkt_price + slip
-        else:
-            fill_price = mkt_price - slip
-
-        order = BrokerOrder(
-            order_id=f"paper_{self._order_counter}",
-            symbol=symbol, side=OrderSide(side.lower()),
-            order_type=OrderType(order_type.lower()),
-            size=size, price=price, fill_price=fill_price,
-            filled_size=size, status=OrderStatus.FILLED,
-            commission=fill_price * size * 0.001,
-            timestamp=datetime.now().isoformat(),
-        )
-
-        # Update position
-        self._update_position(symbol, side.lower(), size, fill_price, order.commission)
-        self._order_history.append(order)
-        return order
-
-    def cancel_order(self, order_id: str) -> bool:
-        return False  # Paper orders fill instantly
-
-    def get_order(self, order_id: str) -> Optional[BrokerOrder]:
-        for o in self._order_history:
-            if o.order_id == order_id:
-                return o
-        return None
-
-    def mark_to_market(self):
-        """Update all positions with current prices."""
-        for sym, pos in self._positions.items():
-            if sym in self._prices:
-                pos.current_price = self._prices[sym]
-                if pos.side == "long":
-                    pos.unrealized_pnl = (pos.current_price - pos.entry_price) * pos.size
-                elif pos.side == "short":
-                    pos.unrealized_pnl = (pos.entry_price - pos.current_price) * pos.size
-
-    def _update_position(self, symbol: str, side: str, size: float,
-                          fill_price: float, commission: float):
-        pos = self._positions.get(symbol)
-        if pos is None:
-            self._positions[symbol] = BrokerPosition(
-                symbol=symbol, side="long" if side == "buy" else "short",
-                size=size, entry_price=fill_price,
-                current_price=fill_price, unrealized_pnl=0, realized_pnl=0,
-            )
-            self.balance -= commission
-            return
-
-        # Closing or reversing
-        if (pos.side == "long" and side == "sell") or (pos.side == "short" and side == "buy"):
-            close_size = min(size, pos.size)
-            if pos.side == "long":
-                pnl = (fill_price - pos.entry_price) * close_size
-            else:
-                pnl = (pos.entry_price - fill_price) * close_size
-            pnl -= commission
-            self.balance += pnl
-            pos.realized_pnl += pnl
-
-            remaining = size - close_size
-            pos.size -= close_size
-            if pos.size <= 0:
-                if remaining > 0:
-                    pos.side = "long" if side == "buy" else "short"
-                    pos.size = remaining
-                    pos.entry_price = fill_price
-                else:
-                    pos.side = "flat"
-                    pos.size = 0
-        else:
-            # Adding to position
-            total = pos.size + size
-            pos.entry_price = (pos.entry_price * pos.size + fill_price * size) / total
-            pos.size = total
-            self.balance -= commission
-
-
-# ==============================================================================
-# FACTORY
-# ==============================================================================
-
-def create_broker(
-    broker_type: str,
-    **kwargs,
-) -> BaseBroker:
-    """
-    Factory function to create the right broker.
-
-    Args:
-        broker_type: "ccxt", "ibkr", or "paper"
-        **kwargs: Broker-specific configuration
-
-    Usage:
-        broker = create_broker("ccxt", exchange="binance",
-                               api_key="...", api_secret="...")
-        broker = create_broker("ibkr", host="127.0.0.1", port=7497)
-        broker = create_broker("paper", initial_balance=100000)
-    """
-    if broker_type.lower() == "ccxt":
-        return CCXTBroker(**kwargs)
-    elif broker_type.lower() in ("ibkr", "ib", "interactive_brokers"):
-        return IBKRBroker(**kwargs)
-    elif broker_type.lower() == "paper":
-        return PaperBroker(**kwargs)
-    else:
-        raise ValueError(f"Unknown broker type: {broker_type}. Use 'ccxt', 'ibkr', or 'paper'")
+# The live stack (governed_broker, mt5_adapter, live_engine) imports the broker
+# interface and data records from here. They live in broker_base; re-exported
+# so existing `from broker_adapter import ...` lines resolve.
+from broker_base import (  # noqa: E402,F401
+    BaseBroker,
+    PaperBroker,
+    CCXTBroker,
+    IBKRBroker,
+    create_broker,
+    BrokerTick,
+    BrokerOrder,
+    BrokerPosition,
+    BrokerBalance,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+)

@@ -179,7 +179,7 @@ def load_raw_xlsx(base_path, ticker, n_files=2):
     for fp in files[-n_files:]:
         df = pd.read_excel(
             fp, engine='openpyxl', header=None,
-            names=['datetime', 'open', 'high', 'low', 'close', 'volume'],
+            names=['datetime', 'open', 'high', 'low', 'close', 'volume'],  # type: ignore[arg-type]
         )
         df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
         df = df.dropna(subset=['datetime']).set_index('datetime')

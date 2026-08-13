@@ -142,7 +142,7 @@ class Phase1Pipeline:
         print(f"\n[LIST] Step 1: Registering strategies in lineage tracker...")
         registered = 0
         for s in strategies:
-            sid = s.get("strategy_id", s.get("name"))
+            sid = str(s.get("strategy_id", s.get("name", "")))
             self.tracker.register_strategy(
                 name=s.get("name", sid),
                 origin=s.get("origin", "discovered"),
@@ -165,7 +165,7 @@ class Phase1Pipeline:
         if returns_dict:
             print(f"\n[SEARCH] Step 2: Running overfitting analysis...")
             # Build returns DataFrame
-            shared_ids = [s.get("strategy_id", s.get("name"))
+            shared_ids = [str(s.get("strategy_id", s.get("name", "")))
                           for s in strategies if s.get("strategy_id", s.get("name")) in returns_dict]
             if len(shared_ids) >= 4:
                 min_len = min(len(returns_dict[sid]) for sid in shared_ids)

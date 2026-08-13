@@ -187,7 +187,7 @@ class ResearchDatabase:
         short_hash = hashlib.md5(ts.encode()).hexdigest()[:8]
         return f"{prefix}_{ts}_{short_hash}"
 
-    def document_exists(self, url: str = None, content: str = None) -> bool:
+    def document_exists(self, url: Optional[str] = None, content: Optional[str] = None) -> bool:
         """Check if document already exists (by URL or content hash)."""
         conn = self._get_conn()
         cursor = conn.cursor()
@@ -249,7 +249,7 @@ class ResearchDatabase:
         except sqlite3.IntegrityError as e:
             # Duplicate content hash - document already exists
             conn.close()
-            return None
+            return ""  # existing document; no new id created
         finally:
             if conn:
                 conn.close()

@@ -109,21 +109,21 @@ class DataManager:
                     exchange_config['apiKey'] = config.BINANCE_API_KEY
                     exchange_config['secret'] = config.BINANCE_API_SECRET
                 
-                self.exchanges['binance'] = ccxt.binanceus(exchange_config)
+                self.exchanges['binance'] = ccxt.binanceus(exchange_config)  # type: ignore[arg-type]
                 print("[OK] Binance US exchange initialized (fallback)")
             except Exception as e:
                 print(f"[WARN]  Failed to initialize Binance US: {e}")
         
         # Kraken as backup
         try:
-            self.exchanges['kraken'] = ccxt.kraken({'enableRateLimit': True})
+            self.exchanges['kraken'] = ccxt.kraken({'enableRateLimit': True})  # type: ignore[arg-type]
             print("[OK] Kraken exchange initialized (fallback)")
         except Exception as e:
             print(f"[WARN]  Failed to initialize Kraken: {e}")
         
         if config.HYPERLIQUID_ENABLED and 'hyperliquid' in config.CRYPTO_EXCHANGE_PRIORITY:
             try:
-                self.exchanges['hyperliquid'] = ccxt.hyperliquid({'enableRateLimit': True})
+                self.exchanges['hyperliquid'] = ccxt.hyperliquid({'enableRateLimit': True})  # type: ignore[arg-type]
                 print("[OK] Hyperliquid exchange initialized (fallback)")
             except Exception as e:
                 print(f"[WARN]  Failed to initialize Hyperliquid: {e}")
@@ -178,6 +178,8 @@ class DataManager:
         everything through unchanged.
         """
         df = self._get_data_unguarded(symbol, timeframe, max_bars, use_cache, **kwargs)
+        if df is None:
+            return None
 
         # FINGERPRINT-RECORD
         # Fingerprint AFTER the holdout truncation below would be wrong -- the
@@ -747,7 +749,7 @@ class DataManager:
             if not ohlcv:
                 return None
             
-            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])  # type: ignore[arg-type]
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df.set_index('timestamp', inplace=True)
             

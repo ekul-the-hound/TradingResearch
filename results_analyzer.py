@@ -67,7 +67,7 @@ class ResultsAnalyzer:
             WHERE timeframe = ?
             ORDER BY total_return_pct DESC
         """
-        df = pd.read_sql_query(query, conn, params=(timeframe,))
+        df = pd.read_sql_query(query, conn, params=[timeframe])
         conn.close()
         return df
     
@@ -79,7 +79,7 @@ class ResultsAnalyzer:
             WHERE symbol = ?
             ORDER BY total_return_pct DESC
         """
-        df = pd.read_sql_query(query, conn, params=(symbol,))
+        df = pd.read_sql_query(query, conn, params=[symbol])
         conn.close()
         return df
     

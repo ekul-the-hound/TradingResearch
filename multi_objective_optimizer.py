@@ -281,6 +281,12 @@ class StrategyOptimizer:
             )
 
         # Map results back to strategies
+        if res.X is None:
+            return OptimizationResult(
+                pareto_front=[], pareto_X=np.array([]),
+                pareto_F=np.array([]), all_strategies=strategies,
+                n_generations=0, n_evaluations=0,
+            )
         pareto_strats = self._map_to_strategies(
             res.X, strategies, fingerprints
         )

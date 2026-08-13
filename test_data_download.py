@@ -189,7 +189,7 @@ def test_disabled_sources():
     print("="*70)
     
     manager = DataManager()
-    results = {'indices': None, 'commodities': None}
+    results: dict = {'indices': None, 'commodities': None}
     
     # Test Indices
     print("\n[STATS] Testing Indices (should return None)...")
@@ -282,6 +282,7 @@ def test_cache_system():
     start = time.time()
     data2 = manager.get_data(test_symbol, timeframe=timeframe, max_bars=100, use_cache=True)
     time2 = time.time() - start
+    assert data1 is not None and data2 is not None
     print(f"[OK] {len(data2)} bars in {time2:.2f}s")
     
     # Calculate speedup
@@ -441,8 +442,8 @@ def run_all_tests():
     
     # Crypto
     if 'skipped' not in all_results['crypto'] and 'error' not in all_results['crypto']:
-        crypto_passed = all_results['crypto'].get('successful', 0)
-        crypto_total = all_results['crypto'].get('total_tests', 0)
+        crypto_passed = int(all_results['crypto'].get('successful', 0))
+        crypto_total = int(all_results['crypto'].get('total_tests', 0))
         total_tests += crypto_total
         total_passed += crypto_passed
         status = "[OK]" if crypto_passed == crypto_total else "[WARN] " if crypto_passed > 0 else "[FAIL]"

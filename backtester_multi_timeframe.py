@@ -274,8 +274,9 @@ class MultiTimeframeBacktester:
         data = data[available_cols]
         
         # Normalize timezone explicitly using UTC conversion
-        if data.index.tz is not None:
-            data.index = data.index.tz_convert("UTC").tz_localize(None)
+        _idx = pd.DatetimeIndex(data.index)
+        if _idx.tz is not None:
+            data.index = _idx.tz_convert("UTC").tz_localize(None)
         
         # Create backtrader engine
         cerebro = bt.Cerebro()
@@ -369,8 +370,8 @@ class MultiTimeframeBacktester:
             'strategy_name': strategy_class.__name__,
             'symbol': symbol,
             'timeframe': timeframe,
-            'start_date': pd.Timestamp(data.index[0]).strftime('%Y-%m-%d'),
-            'end_date': pd.Timestamp(data.index[-1]).strftime('%Y-%m-%d'),
+            'start_date': str(pd.DatetimeIndex(data.index).strftime('%Y-%m-%d')[0]),
+            'end_date': str(pd.DatetimeIndex(data.index).strftime('%Y-%m-%d')[-1]),
             'bars_tested': len(data),
             'starting_value': starting_value,
             'ending_value': ending_value,
@@ -394,9 +395,8 @@ class MultiTimeframeBacktester:
             # =========================================================
             if result['trades'] and len(result['trades']) > 0:
                 trades_df = pd.DataFrame(result['trades'])
-                trading_days = max(
-                    (pd.Timestamp(data.index[-1])
-                     - pd.Timestamp(data.index[0])).days, 1)
+                _di = pd.DatetimeIndex(data.index)
+                trading_days = max((_di[-1] - _di[0]).days, 1)
                 
                 # Trades per day
                 result['trades_per_day'] = total_trades / trading_days

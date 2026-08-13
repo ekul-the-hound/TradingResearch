@@ -181,7 +181,7 @@ class ForexDataProcessor:
                     file_path,
                     engine='openpyxl',
                     header=None,  # NO HEADER ROW
-                    names=['datetime', 'open', 'high', 'low', 'close', 'volume']
+                    names=['datetime', 'open', 'high', 'low', 'close', 'volume']  # type: ignore[arg-type]
                 )
 
                 # Convert datetime column
@@ -228,7 +228,7 @@ class ForexDataProcessor:
         merged = pd.concat(dfs, axis=0)
 
         # Remove duplicates (keep first occurrence)
-        merged = merged[~merged.index.duplicated(keep='first')]
+        merged = pd.DataFrame(merged[~merged.index.duplicated(keep='first')])
 
         # Sort chronologically
         merged = merged.sort_index()
@@ -239,7 +239,8 @@ class ForexDataProcessor:
         if verbose:
             print(f"\n  [OK] Merged {ticker}:")
             print(f"     Total rows: {len(merged):,}")
-            print(f"     Date range: {merged.index.min()} to {merged.index.max()}  (UTC)")
+            _midx = pd.DatetimeIndex(merged.index)
+            print(f"     Date range: {_midx.min()} to {_midx.max()}  (UTC)")
             if sample_before is not None and sample_after is not None:
                 print(f"     TZ shift:   {sample_before}  ->  {sample_after}  (+5h)")
             self._report_session_gap(merged)

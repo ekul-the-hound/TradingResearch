@@ -230,7 +230,7 @@ class LineageAnalyzer:
             costs = [child.compute_seconds + child.api_cost_usd * 100 for child, _ in pairs]
             avg_cost = np.mean(costs) if costs else 0
             avg_imp = float(np.mean(arr))
-            roi = avg_imp / max(avg_cost, 0.01)
+            roi = float(avg_imp / max(avg_cost, 0.01))
 
             reports.append(MutationReport(
                 mutation_type=mt,

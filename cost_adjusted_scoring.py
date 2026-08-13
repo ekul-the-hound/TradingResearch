@@ -137,7 +137,7 @@ class CostAdjustedScorer:
     def __init__(
         self,
         default_profile: str = 'forex',
-        custom_profiles: Dict[str, CostProfile] = None
+        custom_profiles: Optional[Dict[str, CostProfile]] = None
     ):
         """
         Args:
@@ -168,8 +168,8 @@ class CostAdjustedScorer:
     def adjust_result(
         self,
         result: Dict,
-        profile: CostProfile = None,
-        avg_holding_bars: float = None
+        profile: Optional[CostProfile] = None,
+        avg_holding_bars: Optional[float] = None
     ) -> AdjustedResult:
         """
         Adjust a single backtest result for realistic costs.
@@ -199,7 +199,9 @@ class CostAdjustedScorer:
             if total_trades > 0:
                 avg_holding_bars = bars_tested / total_trades / 2  # Rough estimate
             else:
-                avg_holding_bars = 0
+                avg_holding_bars = 0.0
+        # definite float for the arithmetic and dataclass field below
+        holding_bars: float = float(avg_holding_bars or 0.0)
         
         # Calculate round-trip cost per trade
         # Each trade = buy + sell, so costs apply twice for spread/slippage
@@ -219,7 +221,7 @@ class CostAdjustedScorer:
         _BARS_PER_DAY = {'1min': 1440, '5min': 288, '15min': 96, '30min': 48,
                          '1hour': 24, '4hour': 6, '1day': 1}
         bars_per_day = _BARS_PER_DAY.get(result.get('timeframe', '1hour'), 24)
-        holding_days = avg_holding_bars / bars_per_day
+        holding_days = holding_bars / bars_per_day
         if holding_days >= 1.0:
             overnight_periods = total_trades * holding_days
             financing_cost = overnight_periods * profile.overnight_rate * 100
@@ -269,7 +271,7 @@ class CostAdjustedScorer:
             net_sharpe=net_sharpe,
             cost_ratio=cost_ratio,
             total_trades=total_trades,
-            avg_holding_period=avg_holding_bars,
+            avg_holding_period=holding_bars,
             turnover=turnover,
             is_viable=is_viable,
             viability_reason=reason

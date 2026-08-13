@@ -661,7 +661,7 @@ def validate_strategy_code(code: str, name: str) -> Tuple[bool, str, int]:
         dates = pd.date_range("2020-01-01", periods=bars, freq="D")
         df = pd.DataFrame({"open": open_, "high": high, "low": low,
                            "close": close, "volume": volume}, index=dates)
-        cerebro.adddata(bt.feeds.PandasData(dataname=df))
+        cerebro.adddata(bt.feeds.PandasData(dataname=df))  # type: ignore[call-arg]
 
         # Second correlated feed for pairs / cointegration strategies
         close2 = close * 0.98 + np.cumsum(rng.randn(bars) * 0.1)
@@ -672,7 +672,7 @@ def validate_strategy_code(code: str, name: str) -> Tuple[bool, str, int]:
             "close": close2,
             "volume": rng.randint(1000, 10000, bars).astype(float),
         }, index=dates)
-        cerebro.adddata(bt.feeds.PandasData(dataname=df2))
+        cerebro.adddata(bt.feeds.PandasData(dataname=df2))  # type: ignore[call-arg]
 
         cerebro.broker.setcash(10000)
 

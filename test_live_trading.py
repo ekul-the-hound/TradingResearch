@@ -95,6 +95,7 @@ def test_ba_09_paper_buy():
     assert order.status == OrderStatus.FILLED
     assert order.filled_size == 1.0
     pos = broker.get_position("BTC/USDT")
+    assert pos is not None  # narrow for type checker
     assert pos is not None
     assert pos.side == "long"
     assert pos.size == 1.0
@@ -107,6 +108,7 @@ def test_ba_10_paper_sell_close():
     broker.set_price("BTC/USDT", 55000)
     broker.submit_order("sell", "BTC/USDT", 1.0)
     pos = broker.get_position("BTC/USDT")
+    assert pos is not None  # narrow for type checker
     assert pos.side == "flat" or pos.size == 0
     assert broker.balance > 100_000  # Profit from 50k->55k
 
@@ -116,6 +118,7 @@ def test_ba_11_paper_short():
     broker.set_price("ETH/USDT", 3000)
     broker.submit_order("sell", "ETH/USDT", 10.0)
     pos = broker.get_position("ETH/USDT")
+    assert pos is not None  # narrow for type checker
     assert pos.side == "short"
     assert pos.size == 10.0
 
@@ -127,6 +130,7 @@ def test_ba_12_paper_pnl():
     broker.set_price("BTC/USDT", 52000)
     broker.mark_to_market()
     pos = broker.get_position("BTC/USDT")
+    assert pos is not None  # narrow for type checker
     assert abs(pos.unrealized_pnl - 2000) < 100  # ~$2000 profit
 
 def test_ba_13_flatten():
@@ -138,6 +142,7 @@ def test_ba_13_flatten():
     assert order is not None
     assert order.status == OrderStatus.FILLED
     pos = broker.get_position("BTC/USDT")
+    assert pos is not None  # narrow for type checker
     assert pos.size == 0
 
 def test_ba_14_flatten_all():
@@ -284,8 +289,11 @@ def test_le_10_multiple_strategies():
     engine.add_strategy("S_001", "BTC/USDT", mode="shadow")
     engine.add_strategy("S_002", "ETH/USDT", mode="shadow")
     engine._tick()
-    assert engine._slots["S_001"].last_tick.last == 50000
-    assert engine._slots["S_002"].last_tick.last == 3000
+    _t1 = engine._slots["S_001"].last_tick
+    _t2 = engine._slots["S_002"].last_tick
+    assert _t1 is not None and _t2 is not None
+    assert _t1.last == 50000
+    assert _t2.last == 3000
 
 def test_le_11_run_loop_limited():
     engine, broker = _make_engine()

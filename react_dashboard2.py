@@ -330,7 +330,7 @@ class DataStore:
     def decay_snapshots(self):
         """All decay snapshots, newest first."""
         k = "decay"
-        if k in self._c and not self._stale(): return self._c[k]
+        if k in self._c and not self._stale(k): return self._c[k]
         self._c[k] = self._query(
             DB_BT,
             "SELECT * FROM strategy_decay_snapshots ORDER BY snapshot_date DESC, created_at DESC",
@@ -392,7 +392,7 @@ def _fig(fig, h=320):
         xaxis=dict(gridcolor="rgba(255,255,255,0.04)",zerolinecolor="rgba(255,255,255,0.06)"),
         yaxis=dict(gridcolor="rgba(255,255,255,0.04)",zerolinecolor="rgba(255,255,255,0.06)"),
         legend=dict(bgcolor="rgba(0,0,0,0)",font=dict(size=10)))
-    return html.iframe({"srcDoc":pio.to_html(fig,full_html=True,include_plotlyjs="cdn",config={"displayModeBar":False}),
+    return html.iframe({"srcDoc":pio.to_html(fig,full_html=True,include_plotlyjs="cdn",config={"displayModeBar":False}),  # type: ignore[arg-type]
         "style":{"width":"100%","height":f"{h+20}px","border":"none","borderRadius":"8px"}})
 
 # ==============================================================================

@@ -153,7 +153,7 @@ def generate_monte_carlo_paths(n_paths=100, n_trades=100, initial_capital=10000)
     np.random.seed(42)
     paths = []
     for _ in range(n_paths):
-        equity = [initial_capital]
+        equity = [float(initial_capital)]
         for _ in range(n_trades):
             change = (np.random.randn() * 0.02 + 0.001) * equity[-1]
             equity.append(max(equity[-1] + change, 0))
@@ -439,7 +439,7 @@ def create_robustness_charts(latency_data, slippage_data):
     )
     
     # Add zero line for slippage
-    fig.add_hline(y=0, line_dash="dash", line_color="#ef4444", row=1, col=2)
+    fig.add_hline(y=0, line_dash="dash", line_color="#ef4444", row=1, col=2)  # type: ignore[arg-type]
     
     fig.update_xaxes(title_text="Delay (ms)", row=1, col=1)
     fig.update_xaxes(title_text="Slippage (bps)", row=1, col=2)

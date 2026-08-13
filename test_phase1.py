@@ -39,7 +39,7 @@ _passed = 0
 _failed = 0
 _errors = []
 
-def run_test(name: str, fn, quick_list: set = None, quick_mode: bool = False):
+def run_test(name: str, fn, quick_list=None, quick_mode: bool = False):
     global _passed, _failed
     if quick_mode and quick_list and name not in quick_list:
         return
@@ -118,6 +118,7 @@ def test_m1_2_register_child():
             mutation_type="add_indicator", mutation_params={"indicator": "RSI"},
         )
         rec = t.get_strategy(child)
+        assert rec is not None
         assert rec.generation == 1
         assert rec.parent_id == root
         assert rec.mutation_type == "add_indicator"
@@ -139,6 +140,7 @@ def test_m1_3_deep_genealogy():
                 mutation_type="tweak",
             ))
         rec = t.get_strategy(ids[-1])
+        assert rec is not None
         assert rec.generation == 3
         desc = t.get_descendants(ids[0])
         assert len(desc) == 3
@@ -168,10 +170,14 @@ def test_m1_5_status_lifecycle():
     try:
         t = LineageTracker(db_path=f"{d}/lineage.db", enable_mlflow=False)
         sid = t.register_strategy(name="S1", origin="discovered")
-        assert t.get_strategy(sid).status == "pending"
+        _r = t.get_strategy(sid)
+        assert _r is not None
+        assert _r.status == "pending"
         for status in ["backtested", "filtered", "promoted", "retired"]:
             t.update_status(sid, status)
-            assert t.get_strategy(sid).status == status
+            _r2 = t.get_strategy(sid)
+            assert _r2 is not None
+            assert _r2.status == status
     finally:
         shutil.rmtree(d)
 
@@ -229,7 +235,7 @@ def test_m2_1_pbo_random():
     det = OverfittingDetector(random_seed=42)
     np.random.seed(42)
     df = pd.DataFrame(np.random.normal(0, 0.01, (500, 10)),
-                       columns=[f"s{i}" for i in range(10)])
+                       columns=[f"s{i}" for i in range(10)])  # type: ignore[arg-type]
     pbo = det.compute_pbo(df, n_partitions=8)
     assert 0.0 <= pbo.probability <= 1.0
     assert pbo.n_combinations > 0
@@ -242,7 +248,7 @@ def test_m2_2_pbo_with_signal():
     det = OverfittingDetector(random_seed=42)
     np.random.seed(42)
     df = pd.DataFrame(np.random.normal(0, 0.01, (500, 10)),
-                       columns=[f"s{i}" for i in range(10)])
+                       columns=[f"s{i}" for i in range(10)])  # type: ignore[arg-type]
     # Add strong signal to strategy 0
     df["s0"] += 0.003
     pbo = det.compute_pbo(df, n_partitions=8)
@@ -364,7 +370,7 @@ def test_m3_5_with_pbo():
     np.random.seed(42)
     n = 10
     ret = np.random.normal(0.0003, 0.01, (500, n))
-    ret_df = pd.DataFrame(ret, columns=[f"S{i}" for i in range(n)])
+    ret_df = pd.DataFrame(ret, columns=[f"S{i}" for i in range(n)])  # type: ignore[arg-type]
 
     strats = [
         {"strategy_id": f"S{i}", "name": f"Strategy_{i}",

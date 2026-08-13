@@ -365,6 +365,7 @@ class TestSubmitOrder(unittest.TestCase):
         b, fake = broker(retcode=10014)
         o = b.submit_order('buy', 'EURUSD', 100_000)
         self.assertIs(o.status, OrderStatus.REJECTED)
+        assert o.raw is not None
         self.assertIn('Invalid volume', o.raw['error'])
 
     def test_sub_minimum_size_does_not_reach_the_broker(self):
@@ -377,6 +378,7 @@ class TestSubmitOrder(unittest.TestCase):
         b, fake = broker(tick=False)
         o = b.submit_order('buy', 'EURUSD', 100_000)
         self.assertIs(o.status, OrderStatus.REJECTED)
+        assert o.raw is not None
         self.assertIn('market may be closed', o.raw['error'])
 
     def test_limit_order_rejected_not_silently_marketed(self):
@@ -389,6 +391,7 @@ class TestSubmitOrder(unittest.TestCase):
                            price=1.09)
         self.assertIs(o.status, OrderStatus.REJECTED)
         self.assertEqual(fake.sent, [])
+        assert o.raw is not None
         self.assertIn('not implemented', o.raw['error'])
 
     def test_unknown_side_rejected(self):

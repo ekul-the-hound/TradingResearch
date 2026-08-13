@@ -170,6 +170,7 @@ class AcquisitionOptimizer:
         if mu is None or sigma is None:
             assert self.surrogate is not None, "Need surrogate or pre-computed mu/sigma"
             mu, sigma = self.surrogate.predict(X, return_std=True)
+            assert mu is not None and sigma is not None
 
         if f_best is None:
             f_best = float(np.max(mu))

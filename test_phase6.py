@@ -278,7 +278,9 @@ def test_rs_06_adopt():
     rs.register("S_001", current_sharpe=1.0)
     result = rs.execute_job(rs.trigger_retrain("S_001"))
     assert result.decision == RetrainDecision.ADOPT_NEW
-    assert rs.get_schedule("S_001").current_sharpe == 2.5
+    _sc = rs.get_schedule("S_001")
+    assert _sc is not None
+    assert _sc.current_sharpe == 2.5
 
 def test_rs_07_walk_forward():
     rs = RetrainingScheduler(ScheduleConfig(state_dir=""))
@@ -297,7 +299,9 @@ def test_rs_09_adaptive():
     rs = RetrainingScheduler(ScheduleConfig(adaptive=True, state_dir=""))
     rs.register("S_001")
     rs.update_volatility("S_001", current_vol=0.04, normal_vol=0.01)
-    assert rs.get_schedule("S_001").next_retrain is not None
+    _sc2 = rs.get_schedule("S_001")
+    assert _sc2 is not None
+    assert _sc2.next_retrain is not None
 
 def test_rs_10_checkpoint():
     d = tempfile.mkdtemp()
@@ -383,7 +387,9 @@ def test_et_01_create():
     try:
         et = ExperimentTracker(d)
         eid = et.create_experiment("test_exp", "description")
-        assert et.get_experiment(eid).name == "test_exp"
+        _e = et.get_experiment(eid)
+        assert _e is not None
+        assert _e.name == "test_exp"
     finally:
         shutil.rmtree(d)
 
@@ -395,6 +401,7 @@ def test_et_02_lifecycle():
     et.log_metrics(rid, {"sharpe": 1.8, "max_dd": 0.12})
     et.end_run(rid)
     run = et.get_run(rid)
+    assert run is not None
     assert run.status == RunStatus.COMPLETED
     assert run.metrics["sharpe"] == 1.8 and run.params["sma_fast"] == 10
 
@@ -409,6 +416,7 @@ def test_et_03_search():
     results = et.search_runs(experiment_id=eid, filter_tags={"mutation": "add_indicator"})
     assert len(results) == 5
     best = et.get_best_run(eid, "sharpe")
+    assert best is not None
     assert abs(best.metrics["sharpe"] - (0.5 + 9 * 0.2)) < 0.01
 
 def test_et_04_compare():
@@ -421,6 +429,7 @@ def test_et_04_compare():
         et.end_run(rid)
         rids.append(rid)
     comp = et.compare_runs(rids, "sharpe")
+    assert comp is not None
     assert abs(comp.best_value - (1.0 + 4 * 0.3)) < 0.01
     assert comp.std > 0
 
@@ -436,7 +445,9 @@ def test_et_05_save_load():
         # Reload from disk
         et2 = ExperimentTracker(d)
         assert et2.get_experiment(eid) is not None
-        assert et2.get_run(rid).metrics["sharpe"] == 1.5
+        _r = et2.get_run(rid)
+        assert _r is not None
+        assert _r.metrics["sharpe"] == 1.5
     finally:
         shutil.rmtree(d)
 

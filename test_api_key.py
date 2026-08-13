@@ -35,7 +35,7 @@ try:
         messages=[{"role": "user", "content": "Say 'API test successful!' and nothing else."}]
     )
     print("[OK] SUCCESS! API key is valid!")
-    print(f"Claude says: {message.content[0].text}")
+    print(f"Claude says: {getattr(message.content[0], 'text', '')}")
 except Exception as e:
     print(f"[FAIL] FAILED! Error: {e}")
     print("\nThis means your API key is invalid. You need to:")

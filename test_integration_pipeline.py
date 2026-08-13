@@ -14,7 +14,7 @@
 import sys
 import unittest
 from datetime import timedelta
-from typing import Optional, TypeVar
+from typing import Optional, TypeVar, cast
 
 import numpy as np
 import pandas as pd
@@ -53,7 +53,7 @@ def strategy(sid, pnls, size=10_000.0, start='2024-01-01', symbol='EUR-USD'):
     base = pd.Timestamp(start)
     trades = []
     for i, p in enumerate(pnls):
-        ex = base + timedelta(days=i, hours=15)
+        ex = cast(pd.Timestamp, base + timedelta(days=i, hours=15))
         trades.append({
             'entry_date': (ex - timedelta(hours=2)).isoformat(),
             'exit_date': ex.isoformat(),

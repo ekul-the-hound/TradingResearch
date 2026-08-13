@@ -145,6 +145,7 @@ class TestGate(unittest.TestCase):
     def test_rejection_carries_the_reason(self):
         b, _, _ = governed(equity=95_900)
         o = b.submit_order('buy', 'EURUSD', 100_000)
+        assert o.raw is not None
         self.assertIn('governor', o.raw['error'].lower())
         self.assertIn('governor_decision', o.raw)
         self.assertIsNotNone(o.raw['headroom'])

@@ -137,7 +137,9 @@ class TailRiskAnalyzer:
         std = float(np.std(r, ddof=1))
         skew = float(sp_stats.skew(r))
         kurt = float(sp_stats.kurtosis(r))  # Excess kurtosis
-        jb_stat, jb_p = sp_stats.jarque_bera(r)
+        _jb = sp_stats.jarque_bera(r)
+        jb_stat = float(_jb.statistic)  # type: ignore[attr-defined]
+        jb_p = float(_jb.pvalue)  # type: ignore[attr-defined]
 
         # VaR / CVaR (Historical)
         var_95 = float(np.percentile(r, 5))
@@ -195,7 +197,7 @@ class TailRiskAnalyzer:
         z_cf = (z + (z**2 - 1) * skew / 6
                 + (z**3 - 3*z) * kurt / 24
                 - (2*z**3 - 5*z) * skew**2 / 36)
-        return mu + z_cf * sigma
+        return float(mu + z_cf * sigma)
 
     def _cornish_fisher_cvar(self, returns: np.ndarray, var_cf: float) -> float:
         """CVaR using CF threshold."""

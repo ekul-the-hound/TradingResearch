@@ -184,7 +184,7 @@ class StrategyFingerprinter:
             X_scaled = X
 
         return FingerprintResult(
-            X=X_scaled,
+            X=np.asarray(X_scaled),
             feature_names=self.feature_names,
             strategy_ids=ids,
             scaler=self.scaler,
@@ -197,7 +197,7 @@ class StrategyFingerprinter:
         x = np.nan_to_num(x, nan=0.0, posinf=10.0, neginf=-10.0)
         if self.scaler is not None:
             x = self.scaler.transform(x)
-        return x[0]
+        return np.asarray(x)[0]
 
     # ------------------------------------------------------------------
     # SCALER PERSISTENCE -- the coordinate system must survive restarts,

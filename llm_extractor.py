@@ -307,7 +307,7 @@ class OllamaClient:
             except KeyError as e:
                 raise ValueError(f"Unexpected Ollama response format: {e}\nResponse: {response.text[:500]}")
 
-        raise last_error
+        raise last_error or RuntimeError("Ollama request failed with no captured error")
 
     def health_check(self) -> bool:
         """Check if Ollama is responding and the model is available."""

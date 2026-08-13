@@ -76,7 +76,7 @@ VALID_ANCHOR_MODES = (ANCHOR_BALANCE, ANCHOR_MAX)
 def _to_naive_utc(ts) -> datetime:
     """Coerce a timestamp to a naive-UTC datetime."""
     t = pd.Timestamp(ts)
-    if pd.isna(t):
+    if bool(pd.isna(t)):
         # NaT would silently compare False against every boundary, which is how
         # a bad timestamp turns into a missing daily-loss check rather than an
         # error. Refuse it here instead.

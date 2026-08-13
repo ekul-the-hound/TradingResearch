@@ -350,7 +350,7 @@ class BacktestAdapter:
                     strategy_class=strategy_class,
                     symbol=symbol,
                     timeframe=timeframe,
-                    initial_cash=self.default_initial_cash,
+                    initial_cash=int(self.default_initial_cash),
                     commission=self.default_commission,
                     strategy_params=strategy_params if strategy_params else None,
                     extract_trades=self.extract_trades,
@@ -371,7 +371,7 @@ class BacktestAdapter:
                     symbol=(symbol.replace("-", "") + "=X") if "-" in symbol else symbol,
                     start_date="2020-01-01",
                     end_date="2025-01-01",
-                    initial_cash=self.default_initial_cash,
+                    initial_cash=int(self.default_initial_cash),
                     commission=self.default_commission,
                     strategy_params=strategy_params if strategy_params else None,
                 )

@@ -38,6 +38,8 @@ def load_strategy(filepath):
     
     try:
         spec = importlib.util.spec_from_file_location(path.stem, path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load strategy module from {path}")
         module = importlib.util.module_from_spec(spec)
         sys.modules[path.stem] = module
         spec.loader.exec_module(module)
@@ -45,7 +47,7 @@ def load_strategy(filepath):
         # Find the first class that inherits from bt.Strategy
         for name in dir(module):
             obj = getattr(module, name)
-            if isinstance(obj, type) and issubclass(obj, bt.Strategy) and obj != bt.Strategy:
+            if isinstance(obj, type) and issubclass(obj, bt.Strategy) and obj is not bt.Strategy:
                 return obj, name
         
         print(f"[FAIL] No Strategy class found in {filepath}")

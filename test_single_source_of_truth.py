@@ -92,7 +92,7 @@ class TestCheckerReadsTheProfile(unittest.TestCase):
 
 def _empty_trades():
     import pandas as pd
-    return pd.DataFrame(columns=['entry_date', 'exit_date', 'entry_price',
+    return pd.DataFrame(columns=['entry_date', 'exit_date', 'entry_price',  # type: ignore[arg-type]
                                  'exit_price', 'size', 'symbol'])
 
 

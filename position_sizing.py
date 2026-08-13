@@ -129,7 +129,7 @@ class VolatilityTracker:
         self._returns: Dict[str, Deque[float]] = defaultdict(lambda: deque(maxlen=lookback))
         self._last_price: Dict[str, float] = {}
 
-    def update(self, symbol: str, price: float) -> None:
+    def update(self, symbol: str, price: Optional[float]) -> None:
         if price is None or price <= 0:
             return
         prev = self._last_price.get(symbol)
@@ -236,7 +236,7 @@ def size_position(
     stop_distance: Optional[float] = None,
     stop_price: Optional[float] = None,
     max_position_size: Optional[float] = None,
-    max_leverage_pct: float = 0.20,
+    max_leverage_pct: Optional[float] = 0.20,
     vol_tracker: Optional[VolatilityTracker] = None,
 ) -> SizingResult:
     """

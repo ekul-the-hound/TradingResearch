@@ -10,7 +10,7 @@
 
 import sys
 import unittest
-from typing import Optional, TypeVar
+from typing import Optional, TypeVar, cast
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -58,7 +58,7 @@ def make_result(strategy_id, day_pnls, start='2024-01-01', symbol='EURUSD'):
     day_pnls: list of daily P&L in currency. Index 0 is `start`.
     Trades exit at 15:00 UTC so they land unambiguously on the same Prague day.
     """
-    base = pd.Timestamp(start)
+    base = cast(pd.Timestamp, pd.Timestamp(start))
     trades = []
     for i, pnl in enumerate(day_pnls):
         exit_dt = base + timedelta(days=i, hours=15)

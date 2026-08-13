@@ -189,7 +189,9 @@ class DriftDetector:
         severity = DriftSeverity.NONE
 
         # 1. KS test
-        ks_stat, ks_p = sp_stats.ks_2samp(self._ref, live)
+        _ks = sp_stats.ks_2samp(self._ref, live)
+        ks_stat = float(_ks.statistic)  # type: ignore[attr-defined]
+        ks_p = float(_ks.pvalue)  # type: ignore[attr-defined]
         if ks_p < cfg.ks_critical_pvalue:
             triggered.append("ks_critical")
             severity = DriftSeverity.CRITICAL
@@ -252,7 +254,7 @@ class DriftDetector:
             cusum_signal=cusum_signal, cusum_value=cusum_val,
             sharpe_ratio_live=live_sharpe, sharpe_ratio_ref=ref_sharpe,
             sharpe_degradation_pct=degrad,
-            mean_shift=mean_shift_z, var_shift=var_ratio,
+            mean_shift=mean_shift_z, var_shift=float(var_ratio),
             triggered_tests=triggered,
         )
         self.history.append(result)

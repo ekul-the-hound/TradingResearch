@@ -93,10 +93,10 @@ asset_df = pd.DataFrame({
 # DASHBOARD PAGES
 # ==============================================================================
 
-overview_page = vm.Page(
+overview_page = vm.Page(  # type: ignore[call-arg]
     title="Overview",
     components=[
-        vm.Card(
+        vm.Card(  # type: ignore[call-arg]
             text="""
             # Trading Research Dashboard
             
@@ -115,14 +115,14 @@ overview_page = vm.Page(
             - [WARN] Slippage Test: -12% @ 20bps
             """
         ),
-        vm.Graph(
+        vm.Graph(  # type: ignore[call-arg]
             figure=px.line(
                 equity_df, x='Bar', y='Equity', color='Type',
                 title='Equity Curve',
                 color_discrete_map={'Strategy': '#6366f1', 'Benchmark': '#6b7280'}
             )
         ),
-        vm.Graph(
+        vm.Graph(  # type: ignore[call-arg]
             figure=px.bar(
                 strategies_df, x='Strategy', y='Gross Return (%)',
                 color='Gross Return (%)',
@@ -131,22 +131,22 @@ overview_page = vm.Page(
             )
         ),
     ],
-    layout=vm.Layout(grid=[[0, 1], [0, 2]])
+    layout=vm.Layout(grid=[[0, 1], [0, 2]])  # type: ignore[call-arg]
 )
 
-strategies_page = vm.Page(
+strategies_page = vm.Page(  # type: ignore[call-arg]
     title="Strategies",
     components=[
-        vm.Card(
+        vm.Card(  # type: ignore[call-arg]
             text="""
             # Strategy Variants
             Compare and analyze all strategy variants ranked by net return.
             """
         ),
-        vm.AgGrid(
+        vm.AgGrid(  # type: ignore[call-arg]
             figure=dash_ag_grid(strategies_df)
         ),
-        vm.Graph(
+        vm.Graph(  # type: ignore[call-arg]
             figure=px.scatter(
                 strategies_df, x='Sharpe', y='Gross Return (%)',
                 size='Trades', color='Status',
@@ -159,13 +159,13 @@ strategies_page = vm.Page(
             )
         ),
     ],
-    layout=vm.Layout(grid=[[0], [1], [2]])
+    layout=vm.Layout(grid=[[0], [1], [2]])  # type: ignore[call-arg]
 )
 
-validation_page = vm.Page(
+validation_page = vm.Page(  # type: ignore[call-arg]
     title="Validation",
     components=[
-        vm.Card(
+        vm.Card(  # type: ignore[call-arg]
             text="""
             # Statistical Validation
             
@@ -179,14 +179,14 @@ validation_page = vm.Page(
             | Monte Carlo | 2.3% ruin prob | [OK] Pass |
             """
         ),
-        vm.Graph(
+        vm.Graph(  # type: ignore[call-arg]
             figure=px.histogram(
                 mc_df, x='Final Equity', nbins=50,
                 title='Monte Carlo: Final Equity Distribution',
                 color_discrete_sequence=['#6366f1']
             )
         ),
-        vm.Graph(
+        vm.Graph(  # type: ignore[call-arg]
             figure=px.bar(
                 wf_df, x='Fold', y='Return', color='Type', barmode='group',
                 title='Walk-Forward Analysis',
@@ -194,13 +194,13 @@ validation_page = vm.Page(
             )
         ),
     ],
-    layout=vm.Layout(grid=[[0, 1], [0, 2]])
+    layout=vm.Layout(grid=[[0, 1], [0, 2]])  # type: ignore[call-arg]
 )
 
-robustness_page = vm.Page(
+robustness_page = vm.Page(  # type: ignore[call-arg]
     title="Robustness",
     components=[
-        vm.Card(
+        vm.Card(  # type: ignore[call-arg]
             text="""
             # Robustness Testing
             
@@ -213,21 +213,21 @@ robustness_page = vm.Page(
             - [WARN] RANGING regime shows negative returns
             """
         ),
-        vm.Graph(
+        vm.Graph(  # type: ignore[call-arg]
             figure=px.line(
                 latency_df, x='Delay (ms)', y='Return (%)',
                 title='Latency Sensitivity',
                 markers=True, color_discrete_sequence=['#6366f1']
             )
         ),
-        vm.Graph(
+        vm.Graph(  # type: ignore[call-arg]
             figure=px.line(
                 slippage_df, x='Slippage (bps)', y='Return (%)',
                 title='Slippage Stress Test',
                 markers=True, color_discrete_sequence=['#10b981']
             )
         ),
-        vm.Graph(
+        vm.Graph(  # type: ignore[call-arg]
             figure=px.bar(
                 regime_df, x='Return (%)', y='Regime', orientation='h',
                 title='Performance by Regime',
@@ -236,13 +236,13 @@ robustness_page = vm.Page(
             )
         ),
     ],
-    layout=vm.Layout(grid=[[0, 1], [0, 2], [3, 3]])
+    layout=vm.Layout(grid=[[0, 1], [0, 2], [3, 3]])  # type: ignore[call-arg]
 )
 
-analysis_page = vm.Page(
+analysis_page = vm.Page(  # type: ignore[call-arg]
     title="Analysis",
     components=[
-        vm.Card(
+        vm.Card(  # type: ignore[call-arg]
             text="""
             # Detailed Analysis
             
@@ -260,7 +260,7 @@ analysis_page = vm.Page(
             | Total Trades | 67 |
             """
         ),
-        vm.Graph(
+        vm.Graph(  # type: ignore[call-arg]
             figure=px.bar(
                 asset_df, x='Asset', y='Return (%)',
                 color='Return (%)',
@@ -268,7 +268,7 @@ analysis_page = vm.Page(
                 title='Performance by Asset'
             )
         ),
-        vm.Graph(
+        vm.Graph(  # type: ignore[call-arg]
             figure=px.pie(
                 regime_df[regime_df['Return (%)'] > 0],
                 values='Trades', names='Regime',
@@ -277,14 +277,14 @@ analysis_page = vm.Page(
             )
         ),
     ],
-    layout=vm.Layout(grid=[[0, 1], [0, 2]])
+    layout=vm.Layout(grid=[[0, 1], [0, 2]])  # type: ignore[call-arg]
 )
 
 # ==============================================================================
 # BUILD DASHBOARD
 # ==============================================================================
 
-dashboard = vm.Dashboard(
+dashboard = vm.Dashboard(  # type: ignore[call-arg]
     title="Trading Research",
     pages=[overview_page, strategies_page, validation_page, robustness_page, analysis_page],
     theme="vizro_dark"

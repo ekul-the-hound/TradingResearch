@@ -313,7 +313,7 @@ class GeneticEngine:
             for j in range(i + 1, min(n, 100)):
                 total += np.linalg.norm(population[i] - population[j])
                 count += 1
-        return total / max(count, 1)
+        return float(total / max(count, 1))
 
     def enforce_diversity(
         self,

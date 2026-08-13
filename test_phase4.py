@@ -112,6 +112,7 @@ def test_st_2_pnl():
 def test_st_3_slippage():
     t = ShadowTrader("S_003", 100000, slippage_bps=10, commission_pct=0)
     o = t.submit_order("BUY", 100.0, 100)
+    assert o.fill_price is not None
     assert o.fill_price > 100.0  # Slippage adds to buy
 
 def test_st_4_mark_to_market():
@@ -165,6 +166,7 @@ def test_lm_2_update():
     t.submit_order("BUY", 100.0, 100)
     m.update("S_001", price=105.0)
     snap = m.get_strategy_snapshot("S_001")
+    assert snap is not None
     assert snap.pnl > 0
 
 def test_lm_3_portfolio():

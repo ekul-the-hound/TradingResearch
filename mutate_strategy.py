@@ -338,7 +338,8 @@ def call_mutation_agent(base_code, performance, ideas):
         if getattr(response, "stop_reason", None) == "max_tokens":
             print("   [WARN] Response truncated at max_tokens -- final variant likely lost; "
                   "reduce NUM_VARIANTS or raise max_tokens")
-        return response.content[0].text
+        _blk = response.content[0]
+        return getattr(_blk, 'text', '') or ''
     
     except Exception as e:
         print(f"[FAIL] API call failed: {e}")

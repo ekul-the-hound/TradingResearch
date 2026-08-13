@@ -34,7 +34,7 @@ import traceback
 import argparse
 from pathlib import Path
 from datetime import datetime
-from typing import Tuple
+from typing import Tuple, cast, Any
 
 # ==============================================================================
 # HELPERS
@@ -85,7 +85,7 @@ def run_test(test_num: int, name: str, func) -> bool:
 # ==============================================================================
 
 # Temporary directory for test databases and files
-TEST_DIR = None
+TEST_DIR: Path = Path(tempfile.gettempdir())
 
 
 def setup_test_dir():
@@ -248,13 +248,13 @@ SAMPLE_SUMMARY_JSON = {
 
 def test_01_config_loads() -> Tuple[bool, str]:
     """Test that discovery_config.py loads without errors."""
-    from discovery_config import DISCOVERY_CONFIG as cfg, print_config
+    from discovery_config import DISCOVERY_CONFIG as cfg, print_config, SEARCH_QUERIES
 
     checks = [
         cfg.searxng.base_url != "",
         cfg.llm.summarizer.model != "",
         cfg.llm.code_generator.model != "",
-        len(cfg.search_queries) > 0,
+        len(SEARCH_QUERIES) > 0,
         cfg.quality.min_quality_threshold > 0,
         cfg.dedup.similarity_threshold > 0,
     ]
@@ -330,6 +330,7 @@ def test_03_database_crud() -> Tuple[bool, str]:
     # Update strategy
     db.update_strategy(strat_id, {"status": "validated", "code_validates": 1})
     strat2 = db.get_strategy_by_id(strat_id)
+    assert strat2 is not None
     if strat2["status"] != "validated":
         return False, "Strategy update failed"
 
@@ -592,7 +593,7 @@ def test_12_mocked_summarize() -> Tuple[bool, str]:
         def chat(self, system, user, temperature=None):
             return json.dumps(SAMPLE_SUMMARY_JSON), {"prompt_tokens": 100, "completion_tokens": 50}
 
-    ext.summarizer = MockClient()
+    ext.summarizer = cast(Any, MockClient())
 
     # Save a test document first
     doc_id = db.save_document(SAMPLE_DOCS["arxiv_good"])
@@ -639,8 +640,8 @@ def test_13_mocked_full_extraction() -> Tuple[bool, str]:
         def chat(self, system, user, temperature=None):
             return VALID_STRATEGY_CODE, {"prompt_tokens": 200, "completion_tokens": 150}
 
-    ext.summarizer = MockSummarizer()
-    ext.code_generator = MockCodeGen()
+    ext.summarizer = cast(Any, MockSummarizer())
+    ext.code_generator = cast(Any, MockCodeGen())
 
     # Save doc
     doc_id = db.save_document(SAMPLE_DOCS["arxiv_good"])
@@ -679,8 +680,8 @@ def test_14_dedup_basic() -> Tuple[bool, str]:
 
     # Isolate index paths for this test
     orig_idx, orig_meta = cfg.dedup.index_path, cfg.dedup.metadata_path
-    cfg.dedup.index_path = TEST_DIR / "t14_index.faiss"
-    cfg.dedup.metadata_path = TEST_DIR / "t14_meta.json"
+    cfg.dedup.index_path = str(TEST_DIR / "t14_index.faiss")
+    cfg.dedup.metadata_path = str(TEST_DIR / "t14_meta.json")
 
     try:
         dedup = SemanticDeduplicator(db=db)
@@ -708,8 +709,8 @@ def test_15_dedup_different_strategies() -> Tuple[bool, str]:
 
     # Isolate index paths
     orig_idx, orig_meta = cfg.dedup.index_path, cfg.dedup.metadata_path
-    cfg.dedup.index_path = TEST_DIR / "t15_index.faiss"
-    cfg.dedup.metadata_path = TEST_DIR / "t15_meta.json"
+    cfg.dedup.index_path = str(TEST_DIR / "t15_index.faiss")
+    cfg.dedup.metadata_path = str(TEST_DIR / "t15_meta.json")
 
     try:
         dedup = SemanticDeduplicator(db=db)
@@ -745,8 +746,8 @@ def test_16_dedup_persistence() -> Tuple[bool, str]:
     # Override index paths to test dir
     original_index = cfg.dedup.index_path
     original_meta = cfg.dedup.metadata_path
-    cfg.dedup.index_path = TEST_DIR / "test_index.faiss"
-    cfg.dedup.metadata_path = TEST_DIR / "test_metadata.json"
+    cfg.dedup.index_path = str(TEST_DIR / "test_index.faiss")
+    cfg.dedup.metadata_path = str(TEST_DIR / "test_metadata.json")
 
     try:
         dedup1 = SemanticDeduplicator(db=db)
@@ -853,6 +854,7 @@ def test_19_strategy_file_saving() -> Tuple[bool, str]:
         })
 
         strat = db.get_strategy_by_id(strat_id)
+        assert strat is not None
         strat["strategy_id"] = strat_id
 
         saved = pipeline.step_6_save([strat])
@@ -910,8 +912,8 @@ def test_21_pipeline_dedup_integration() -> Tuple[bool, str]:
 
     # Isolate index paths
     orig_idx, orig_meta = cfg.dedup.index_path, cfg.dedup.metadata_path
-    cfg.dedup.index_path = TEST_DIR / "t21_index.faiss"
-    cfg.dedup.metadata_path = TEST_DIR / "t21_meta.json"
+    cfg.dedup.index_path = str(TEST_DIR / "t21_index.faiss")
+    cfg.dedup.metadata_path = str(TEST_DIR / "t21_meta.json")
 
     try:
         dedup = SemanticDeduplicator(db=db)

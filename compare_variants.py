@@ -308,7 +308,7 @@ Be specific and actionable in your analysis."""
         print("\n" + "="*70)
         print("CLAUDE'S ANALYSIS:")
         print("="*70)
-        print(response.content[0].text)
+        print(getattr(response.content[0], 'text', '') or '')
         print("="*70 + "\n")
         
     except Exception as e:

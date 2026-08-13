@@ -1,384 +1,415 @@
-#!/usr/bin/env python3
 # ==============================================================================
-# test_integration.py -- Tests for the integration layer
+# test_integration_pipeline.py
 # ==============================================================================
-# These tests verify the 3 integration pieces work correctly WITHOUT
-# needing your data files or Backtrader running. They test:
-#   1. CanonicalResult creation and format conversion
-#   2. BacktestAdapter in dry-run mode
-#   3. Pipeline structure and step chaining
+# CONTRACTS BETWEEN MODULES, not module internals.
+#
+# 345 unit tests each check one module against a fixture built to suit it.
+# None check that module A's real output satisfies module B's real input --
+# which is how bootstrap_summary and challenge_simulator ended up disagreeing
+# about P(pass) by a factor of two while both suites stayed green.
+#
+# Every test here runs real output from one component into the next.
 # ==============================================================================
 
 import sys
-import time
-import traceback
+import unittest
+from datetime import timedelta
+from typing import Optional, TypeVar, cast
+
 import numpy as np
-from pathlib import Path
+import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent))
-
+from broker_adapter import BaseBroker
 from canonical_result import CanonicalResult
-from backtest_adapter import BacktestAdapter
+import challenge_simulator
+import consistency_rule
+import dashboard_portfolio_panel as PANEL
+import portfolio_merge
+from challenge_simulator import simulate_challenge
+from firm_rules import Capability, FirmRules, ftmo, generic_trailing
+from ftmo_compliance import FTMOComplianceChecker
+from governed_broker import GovernedBroker, account_state_from_broker
+from live_governor import Decision, GovernorConfig, LiveGovernor
+from portfolio_merge import joint_block_bootstrap, merge_strategies
 
-_p, _f, _e = 0, 0, []
+ACCOUNT = 100_000.0
 
-def run_test(name, fn):
-    global _p, _f
-    try:
-        fn(); _p += 1; print(f"  [OK] {name}")
-    except Exception as ex:
-        _f += 1; _e.append((name, str(ex))); print(f"  [FAIL] {name}: {ex}")
-        traceback.print_exc()
+_T = TypeVar('_T')
 
 
-# ==============================================================================
-# CanonicalResult Tests (15)
-# ==============================================================================
+def not_none(v: Optional[_T], msg: str = 'expected a value') -> _T:
+    assert v is not None, msg
+    return v
 
-def test_cr_01_from_dict():
-    raw = {
-        "strategy_name": "SMA_Cross",
-        "symbol": "EUR-USD",
-        "timeframe": "1hour",
-        "total_return_pct": 15.5,
-        "sharpe_ratio": 1.8,
-        "max_drawdown_pct": 12.3,
-        "total_trades": 45,
-        "win_rate": 55.0,
-        "profit_factor": 1.6,
-        "starting_value": 10000,
-        "ending_value": 11550,
-        "bars_tested": 500,
-        "start_date": "2023-01-01",
-        "end_date": "2024-01-01",
-        "strategy_params": {"fast_period": 10, "slow_period": 50},
-    }
-    cr = CanonicalResult.from_backtest(raw, strategy_id="test_001")
-    assert cr.strategy_id == "test_001"
-    assert cr.sharpe_ratio == 1.8
-    assert cr.total_trades == 45
 
-def test_cr_02_auto_id():
-    cr = CanonicalResult.from_backtest({"strategy_name": "SMA", "symbol": "EURUSD", "timeframe": "1h"})
-    assert "SMA" in cr.strategy_id
+def strategy(sid, pnls, size=10_000.0, start='2024-01-01', symbol='EUR-USD'):
+    """
+    A CanonicalResult whose prices are CONSISTENT with its P&L.
 
-def test_cr_03_none_input():
-    cr = CanonicalResult.from_backtest(None)
-    assert cr.strategy_id == "FAILED"
-    assert cr.total_trades == 0
+    The consistency matters: the compliance checker recomputes P&L from
+    entry/exit prices and size, so a fixture whose stated pnl disagrees with
+    its prices tests the warning path rather than the contract.
+    """
+    base = cast(pd.Timestamp, pd.Timestamp(start))
+    trades = []
+    for i, p in enumerate(pnls):
+        ex = base + timedelta(days=i, hours=15)
+        trades.append({
+            'entry_date': (ex - timedelta(hours=2)).isoformat(),
+            'exit_date': ex.isoformat(),
+            'entry_price': 1.1000,
+            'exit_price': 1.1000 + p / size,
+            'size': size,
+            'symbol': symbol,
+            'pnl': float(p),
+        })
+    cr = CanonicalResult(
+        strategy_id=sid, strategy_name=sid, symbol=symbol, timeframe='M15',
+        starting_value=ACCOUNT, total_trades=len(trades), trade_list=trades)
+    cr._compute_arrays()
+    return cr
 
-def test_cr_04_returns_from_trades():
-    trades = [{"pnl": 100}, {"pnl": -50}, {"pnl": 200}, {"pnl": -30}]
-    raw = {"strategy_name": "test", "starting_value": 10000, "trades": trades,
-           "total_return_pct": 2.2, "sharpe_ratio": 1.0, "max_drawdown_pct": 5, "total_trades": 4}
-    cr = CanonicalResult.from_backtest(raw)
-    assert cr.returns is not None
-    assert len(cr.returns) > 0
-    assert cr.equity_curve is not None
 
-def test_cr_05_returns_synthetic():
-    # SYNTHETIC-RETURNS-FIX-CR05
-    # This test used to assert that a result with NO trade list still produced
-    # a 252-element return series. That series came from rng.normal() -- data
-    # the overfitting detectors cannot fail, because Gaussian draws have no
-    # skew, no excess kurtosis, and are stationary by construction. The pin is
-    # inverted: summary statistics alone must NOT yield a return series.
-    raw = {"strategy_name": "test", "total_return_pct": 20, "sharpe_ratio": 1.5,
-           "max_drawdown_pct": 10, "total_trades": 30, "bars_tested": 252,
-           "starting_value": 10000}
-    cr = CanonicalResult.from_backtest(raw, strategy_id="synth")
-    assert cr.returns is None, "no trade list must not fabricate returns"
-    assert cr.returns_source == "none"
-    assert not cr.has_real_returns
-
-def test_cr_06_to_dict():
-    cr = CanonicalResult(strategy_id="S1", sharpe_ratio=1.5, total_trades=30)
-    d = cr.to_dict()
-    assert d["strategy_id"] == "S1"
-    assert d["sharpe_ratio"] == 1.5
-
-def test_cr_07_to_filter_dict():
-    cr = CanonicalResult(strategy_id="S1", sharpe_ratio=1.5, max_drawdown_pct=12,
-                          total_trades=40, win_rate=55, profit_factor=1.6)
-    d = cr.to_filter_dict()
-    assert d["sharpe_ratio"] == 1.5
-    assert d["total_trades"] == 40
-
-def test_cr_08_to_risk_dict():
-    cr = CanonicalResult(strategy_id="S1", sharpe_ratio=1.5, total_trades=40)
-    d = cr.to_risk_dict()
-    assert "sharpe_ratio" in d
-    assert "max_drawdown_pct" in d
-
-def test_cr_09_to_fingerprint():
-    cr = CanonicalResult(strategy_id="S1", sharpe_ratio=1.5, max_drawdown_pct=10,
-                          total_trades=40, win_rate=55, profit_factor=1.6,
-                          total_return_pct=20, trades_per_day=0.5)
-    fp = cr.to_fingerprint_input()
-    assert fp["sharpe_ratio"] == 1.5
-    assert fp["win_rate"] == 0.55  # Converted to decimal
-
-def test_cr_10_to_lineage():
-    cr = CanonicalResult(strategy_id="S1", sharpe_ratio=1.5, parent_id="S0",
-                          mutation_type="add_indicator", generation=2)
-    d = cr.to_lineage_dict()
-    assert d["parent_id"] == "S0"
-    assert d["generation"] == 2
-
-def test_cr_11_str():
-    cr = CanonicalResult(strategy_id="S1", symbol="EUR-USD", timeframe="1hour",
-                          total_return_pct=15, sharpe_ratio=1.8, max_drawdown_pct=12,
-                          total_trades=45, win_rate=55)
-    s = str(cr)
-    assert "S1" in s
-    assert "EUR-USD" in s
-
-def test_cr_12_null_sharpe():
-    # INTEGRATION-FIX-CR12
-    # canonical_result deliberately preserves None to mean "unmeasured", which
-    # is distinct from a measured 0.0. Collapsing the two would let a strategy
-    # whose Sharpe could not be computed rank alongside a genuinely flat one.
-    # This assertion predates that change and asserted the opposite.
-    raw = {"strategy_name": "test", "sharpe_ratio": None, "total_trades": 0}
-    cr = CanonicalResult.from_backtest(raw)
-    assert cr.sharpe_ratio is None
-
-def test_cr_13_equity_from_trades():
-    trades = [{"pnl": 100}, {"pnl": 200}]
-    raw = {"strategy_name": "t", "trades": trades, "starting_value": 10000,
-           "total_return_pct": 3, "sharpe_ratio": 1, "max_drawdown_pct": 1, "total_trades": 2}
-    cr = CanonicalResult.from_backtest(raw)
-    assert cr.equity_curve is not None
-    assert cr.equity_curve[0] == 10000
-    assert cr.equity_curve[-1] == 10300
-
-def test_cr_14_empty_trades():
-    # INTEGRATION-FIX-CR14
-    # trades=[] is falsy, so _compute_arrays takes the no-trade-list branch.
-    # That branch used to fabricate 100 Gaussian returns; it now reports None.
-    # Same pin as CR.05 -- an empty trade list is not a return series.
-    raw = {"strategy_name": "t", "trades": [], "bars_tested": 100,
-           "total_return_pct": 5, "starting_value": 10000,
-           "sharpe_ratio": 0.8, "max_drawdown_pct": 5, "total_trades": 0}
-    cr = CanonicalResult.from_backtest(raw)
-    assert cr.returns is None, "empty trades must not fabricate returns"
-    assert cr.returns_source == "none"
-    assert not cr.has_real_returns
-    # The equity curve still exists, holding just the starting value.
-    assert cr.equity_curve is not None and len(cr.equity_curve) == 1
-
-def test_cr_15_missing_fields():
-    # INTEGRATION-FIX-CR15
-    # A result dict with no sharpe_ratio key yields None (unmeasured), not 0.0.
-    raw = {"strategy_name": "minimal"}
-    cr = CanonicalResult.from_backtest(raw)
-    assert cr.strategy_name == "minimal"
-    assert cr.total_trades == 0
-    assert cr.sharpe_ratio is None
+A_PNL = [1200, -800, 500, 800, -200, 900, -400, 600, 300, -150]
+B_PNL = [-400, 900, 1100, -300, 700, -1200, 400, 500, -250, 800]
 
 
 # ==============================================================================
-# BacktestAdapter Tests (8) -- dry-run mode (no backtester loaded)
+# MERGE -> COMPLIANCE CHECKER
 # ==============================================================================
 
-def test_ba_01_init():
-    adapter = BacktestAdapter(verbose=False)
-    assert adapter.eval_count == 0
+class TestMergedResultThroughChecker(unittest.TestCase):
+    """
+    The central Phase 3 claim: a merged portfolio is an ordinary
+    CanonicalResult and flows through the identical validation pipeline.
+    Nothing tested that until now.
+    """
 
-def test_ba_02_no_engine():
-    """Without Backtrader data, evaluate_params returns empty CanonicalResult."""
-    adapter = BacktestAdapter(verbose=False)
-    # This will fail to run (no data) but should return gracefully
-    class FakeStrategy:
-        __name__ = "FakeStrategy"
-    cr = adapter.evaluate_params({"fast": 10}, FakeStrategy, "TEST-SYM")
-    assert isinstance(cr, CanonicalResult)
+    def setUp(self):
+        self.res = merge_strategies(
+            [strategy('A', A_PNL), strategy('B', B_PNL)],
+            rules=ftmo(), account_size=ACCOUNT)
+        self.ledger = pd.DataFrame(self.res.canonical.trade_list)
+        self.checker = FTMOComplianceChecker(rules=ftmo())
 
-def test_ba_03_eval_count():
-    adapter = BacktestAdapter(verbose=False)
-    class FakeStrategy:
-        __name__ = "Fake"
-    adapter.evaluate_params({"a": 1}, FakeStrategy)
-    adapter.evaluate_params({"a": 2}, FakeStrategy)
-    assert adapter.eval_count == 2
+    def test_checker_accepts_the_merged_ledger(self):
+        result = self.checker.validate(self.ledger, account_size=100_000)
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result.passed, bool)
 
-def test_ba_04_reset():
-    adapter = BacktestAdapter(verbose=False)
-    class FakeStrategy:
-        __name__ = "Fake"
-    adapter.evaluate_params({"a": 1}, FakeStrategy)
-    adapter.reset_count()
-    assert adapter.eval_count == 0
+    def test_ledger_carries_every_column_the_checker_needs(self):
+        for col in ('entry_date', 'exit_date', 'entry_price', 'exit_price',
+                    'size', 'symbol'):
+            self.assertIn(col, self.ledger.columns)
 
-def test_ba_05_objective_fn():
-    adapter = BacktestAdapter(verbose=False)
-    class FakeStrategy:
-        __name__ = "Fake"
-    fn = adapter.as_objective_function(FakeStrategy)
-    result = fn({"fast": 10})
-    assert "sharpe_ratio" in result
-    assert "max_drawdown_pct" in result
+    def test_merge_total_is_gross_and_checker_total_is_net(self):
+        """
+        These two numbers DIFFER BY DESIGN and the difference is the fees.
 
-def test_ba_06_variant_missing():
-    adapter = BacktestAdapter(verbose=False)
-    cr = adapter.evaluate_variant("/nonexistent/file.py")
-    assert cr.strategy_name == "FILE_NOT_FOUND"
+        The merge sums raw trade P&L; the checker applies commission and
+        spread. Comparing them without accounting for that looks like a bug
+        and is not one -- pinning it here so the next person to notice finds
+        an explanation rather than a mystery.
+        """
+        merge_total = sum(t['pnl'] for t in self.res.canonical.trade_list)
+        r = self.checker.validate(self.ledger, account_size=100_000)
+        self.assertGreater(r.total_fees, 0, 'checker should model costs')
+        self.assertAlmostEqual(merge_total, r.total_pnl + r.total_fees,
+                               places=2)
+        self.assertLess(r.total_pnl, merge_total)
 
-def test_ba_07_aggregate():
-    adapter = BacktestAdapter(verbose=False)
-    results = [
-        CanonicalResult(strategy_id="a", sharpe_ratio=1.5, max_drawdown_pct=10,
-                         total_trades=20, total_return_pct=15, returns=np.random.normal(0, 0.01, 50)),
-        CanonicalResult(strategy_id="b", sharpe_ratio=2.0, max_drawdown_pct=8,
-                         total_trades=30, total_return_pct=20, returns=np.random.normal(0, 0.01, 50)),
-    ]
-    agg = adapter._aggregate_results(results, {"test": True}, "TestStrat")
-    assert agg.sharpe_ratio == 1.75  # mean of 1.5 and 2.0
-    assert agg.total_trades == 50
-    assert agg.returns is not None
-    assert len(agg.returns) == 100  # concatenated
+    def test_checker_recomputes_pnl_and_wins(self):
+        """
+        The checker derives P&L from prices and IGNORES the pnl column.
 
-def test_ba_08_strategy_id_gen():
-    adapter = BacktestAdapter(verbose=False)
-    class MyStrat:
-        __name__ = "MyStrat"
-    cr = adapter.evaluate_params({"fast_period": 10, "slow_period": 50}, MyStrat, "EUR-USD", "1hour")
-    assert "MyStrat" in cr.strategy_id
-    assert "fast_period" in cr.strategy_id
+        For a ledger whose prices imply its P&L this is invisible. For one
+        carrying cost-inclusive or multi-leg P&L, the checker silently
+        substitutes its own number. It prints a warning; nothing captures it.
+        """
+        bad = self.ledger.copy()
+        bad['pnl'] = bad['pnl'] * 10          # prices unchanged
+        r_bad = self.checker.validate(bad, account_size=100_000)
+        r_good = self.checker.validate(self.ledger, account_size=100_000)
+        self.assertAlmostEqual(r_bad.total_pnl, r_good.total_pnl, places=6)
+
+    def test_trade_count_survives_the_round_trip(self):
+        r = self.checker.validate(self.ledger, account_size=100_000)
+        self.assertEqual(len(self.ledger), len(A_PNL) + len(B_PNL))
+        self.assertGreater(r.trading_days, 0)
 
 
 # ==============================================================================
-# Pipeline Structure Tests (5)
+# MERGE -> BOOTSTRAP -> CHALLENGE SIMULATOR
 # ==============================================================================
 
-def test_pipe_01_config():
-    from run_pipeline import PipelineConfig
-    cfg = PipelineConfig()
-    assert cfg.min_sharpe == 0.5
-    assert cfg.top_pool_size == 10
+class TestMergeIntoSimulator(unittest.TestCase):
 
-def test_pipe_02_init():
-    from run_pipeline import Pipeline, PipelineConfig
-    cfg = PipelineConfig()
-    cfg.verbose = False
-    cfg.output_dir = Path("/tmp/test_pipeline_output")
-    p = Pipeline(cfg)
-    assert p._results == {}
+    def setUp(self):
+        self.res = merge_strategies(
+            [strategy('A', A_PNL * 8), strategy('B', B_PNL * 8)],
+            rules=ftmo(), account_size=ACCOUNT)
 
-def test_pipe_03_step_methods():
-    """Verify all 11 step methods exist."""
-    from run_pipeline import Pipeline, PipelineConfig
-    cfg = PipelineConfig()
-    cfg.verbose = False
-    cfg.output_dir = Path("/tmp/test_pipeline_output")
-    p = Pipeline(cfg)
-    for i in range(1, 12):
-        method = getattr(p, f"step_{i}_{'discovery' if i==1 else 'x'}", None)
-    # Just check they exist
-    assert hasattr(p, "step_1_discovery")
-    assert hasattr(p, "step_2_backtest_filter")
-    assert hasattr(p, "step_7_split")
-    assert hasattr(p, "step_11_analytics")
+    def test_daily_matrix_feeds_the_bootstrap(self):
+        sims = joint_block_bootstrap(self.res.daily_pnl, n_simulations=200,
+                                     window_days=30)
+        self.assertEqual(sims.shape, (200, 30))
 
-def test_pipe_04_save_state():
-    from run_pipeline import Pipeline, PipelineConfig
-    import tempfile, shutil
-    d = tempfile.mkdtemp()
-    try:
-        cfg = PipelineConfig()
-        cfg.verbose = False
-        cfg.output_dir = Path(d)
-        p = Pipeline(cfg)
-        p._results["step2_candidates"] = [
-            CanonicalResult(strategy_id="S1", sharpe_ratio=1.5, total_trades=30)
-        ]
-        p._save_state()
-        assert (Path(d) / "pipeline_state.json").exists()
-    finally:
-        shutil.rmtree(d)
+    def test_bootstrap_feeds_the_challenge_simulator(self):
+        sims = joint_block_bootstrap(self.res.daily_pnl, n_simulations=300,
+                                     window_days=30, random_seed=3)
+        out = simulate_challenge(sims, ACCOUNT, ftmo())
+        self.assertEqual(out.n_simulations, 300)
+        self.assertGreaterEqual(out.p_funded, 0.0)
+        self.assertLessEqual(out.p_funded, 1.0)
 
-def test_pipe_05_canonical_through_steps():
-    """Verify CanonicalResult flows through step data correctly."""
-    from run_pipeline import Pipeline, PipelineConfig
-    cfg = PipelineConfig()
-    cfg.verbose = False
-    cfg.output_dir = Path("/tmp/test_pipeline_output")
-    p = Pipeline(cfg)
+    def test_panel_wrapper_runs_the_same_chain(self):
+        out = PANEL.try_challenge(self.res.daily_pnl, ftmo(), ACCOUNT,
+                                  n_simulations=200, window_days=30)
+        self.assertTrue(out['ok'], out.get('reason'))
+        self.assertEqual(len(out['stages']), 2)
 
-    # Simulate step 2 output
-    candidates = [
-        CanonicalResult(strategy_id=f"S_{i}", sharpe_ratio=0.5 + i * 0.3,
-                         max_drawdown_pct=10, total_trades=30,
-                         returns=np.random.normal(0.001, 0.01, 100))
-        for i in range(15)
-    ]
-    p._results["step2_candidates"] = candidates
-    p._results["step2_all"] = candidates
-
-    # Run diversification (step 6) which consumes candidates
-    p.step_6_diversify()
-    diversified = p._results.get("step6_diversified", [])
-    assert len(diversified) <= len(candidates)  # Some may be removed
-
-    # Run split (step 7)
-    p._results["step6_diversified"] = diversified if diversified else candidates
-    p.step_7_split()
-    assert len(p._results.get("step7_top_pool", [])) <= cfg.top_pool_size
+    def test_bootstrap_and_simulator_agree_on_one_stage(self):
+        """
+        The regression that started this: two components computing P(pass)
+        from the same paths must not diverge.
+        """
+        sims = joint_block_bootstrap(self.res.daily_pnl, n_simulations=400,
+                                     window_days=30, random_seed=7)
+        summary = portfolio_merge.bootstrap_summary(sims, ACCOUNT, ftmo())
+        stage = challenge_simulator.StageSpec.from_rules(ftmo(), 'challenge')
+        walked = sum(
+            1 for row in sims
+            if challenge_simulator.walk_stage(
+                row, ACCOUNT, stage, ftmo())['outcome']
+            == challenge_simulator.PASSED) / len(sims)
+        self.assertAlmostEqual(summary['modelled_pass_rate'], walked,
+                               places=12)
 
 
 # ==============================================================================
-# RUNNER
+# MERGE -> COMPARISON TABLE
 # ==============================================================================
 
-ALL = [
-    # CanonicalResult (15)
-    ("CR.01 From dict",           test_cr_01_from_dict),
-    ("CR.02 Auto ID",             test_cr_02_auto_id),
-    ("CR.03 None input",          test_cr_03_none_input),
-    ("CR.04 Returns from trades", test_cr_04_returns_from_trades),
-    ("CR.05 Synthetic returns",   test_cr_05_returns_synthetic),
-    ("CR.06 to_dict",             test_cr_06_to_dict),
-    ("CR.07 to_filter_dict",      test_cr_07_to_filter_dict),
-    ("CR.08 to_risk_dict",        test_cr_08_to_risk_dict),
-    ("CR.09 to_fingerprint",      test_cr_09_to_fingerprint),
-    ("CR.10 to_lineage",          test_cr_10_to_lineage),
-    ("CR.11 __str__",             test_cr_11_str),
-    ("CR.12 Null Sharpe",         test_cr_12_null_sharpe),
-    ("CR.13 Equity from trades",  test_cr_13_equity_from_trades),
-    ("CR.14 Empty trades",        test_cr_14_empty_trades),
-    ("CR.15 Missing fields",      test_cr_15_missing_fields),
-    # BacktestAdapter (8)
-    ("BA.01 Init",                test_ba_01_init),
-    ("BA.02 No engine graceful",  test_ba_02_no_engine),
-    ("BA.03 Eval count",          test_ba_03_eval_count),
-    ("BA.04 Reset count",         test_ba_04_reset),
-    ("BA.05 Objective function",  test_ba_05_objective_fn),
-    ("BA.06 Missing variant",     test_ba_06_variant_missing),
-    ("BA.07 Aggregate results",   test_ba_07_aggregate),
-    ("BA.08 Strategy ID gen",     test_ba_08_strategy_id_gen),
-    # Pipeline (5)
-    ("PIPE.01 Config",            test_pipe_01_config),
-    ("PIPE.02 Init",              test_pipe_02_init),
-    ("PIPE.03 Step methods",      test_pipe_03_step_methods),
-    ("PIPE.04 Save state",        test_pipe_04_save_state),
-    ("PIPE.05 Canonical flow",    test_pipe_05_canonical_through_steps),
-]
+class TestMergeIntoComparison(unittest.TestCase):
 
-if __name__ == "__main__":
-    start = time.time()
-    mods = [
-        ("CanonicalResult",    0, 15),
-        ("BacktestAdapter",   15, 23),
-        ("Pipeline",          23, 28),
-    ]
-    for name, lo, hi in mods:
-        print(f"\n{'-'*60}\n  {name}\n{'-'*60}")
-        for n, fn in ALL[lo:hi]:
-            run_test(n, fn)
-    print(f"\n  [TIME]  {time.time()-start:.1f}s\n{'='*60}")
-    print(f"  INTEGRATION: {_p} passed, {_f} failed")
-    if _e:
-        for n, e in _e:
-            print(f"    {n}: {e}")
-    print(f"{'='*60}")
-    sys.exit(0 if _f == 0 else 1)
+    def test_portfolio_renders_beside_its_members(self):
+        a, b = strategy('A', A_PNL), strategy('B', B_PNL)
+        res = merge_strategies([a, b], rules=ftmo(), account_size=ACCOUNT)
+        table = PANEL.build_comparison([a, b], portfolio=res.canonical)
+        self.assertEqual(len(table.columns), 3)
+        self.assertTrue(table.columns[-1].is_portfolio)
+        self.assertTrue(table.deltas)
+
+    def test_merged_result_has_real_provenance(self):
+        """A portfolio must earn trade_list provenance like anything else."""
+        res = merge_strategies(
+            [strategy('A', A_PNL), strategy('B', B_PNL)],
+            rules=ftmo(), account_size=ACCOUNT)
+        self.assertEqual(res.canonical.returns_source, 'trade_list')
+        res.canonical.require_returns('integration test')
+
+
+# ==============================================================================
+# BROKER -> GOVERNOR -> GOVERNED BROKER
+# ==============================================================================
+
+class MiniBroker(BaseBroker):
+    """
+    Smallest real BaseBroker satisfying what the state bridge reads.
+
+    Subclasses BaseBroker rather than duck-typing it: the point of these
+    tests is that the actual contract holds, and a stand-in that only
+    resembles the interface would not prove that.
+    """
+
+    def __init__(self, equity, unrealized=0.0):
+        super().__init__(name='mini')
+        self.is_connected = True
+        self.equity = equity
+        self.unrealized = unrealized
+        self.submitted = []
+
+    def connect(self):
+        return True
+
+    def disconnect(self):
+        self.is_connected = False
+
+    def get_balance(self):
+        from broker_adapter import BrokerBalance
+        return BrokerBalance(total_equity=self.equity, free_margin=self.equity,
+                             used_margin=0.0, unrealized_pnl=self.unrealized,
+                             currency='USD', timestamp='')
+
+    def get_positions(self):
+        return []
+
+    def get_position(self, symbol):
+        return None
+
+    def get_tick(self, symbol):
+        return None
+
+    def get_order(self, order_id):
+        return None
+
+    def cancel_order(self, order_id):
+        return True
+
+    def submit_order(self, side, symbol, size, order_type='market',
+                     price=None, stop_price=None):
+        from broker_adapter import BrokerOrder, OrderSide, OrderStatus, OrderType
+        self.submitted.append((side, symbol, size))
+        return BrokerOrder(
+            order_id='1', symbol=symbol,
+            side=OrderSide.BUY if side == 'buy' else OrderSide.SELL,
+            order_type=OrderType.MARKET, size=size,
+            status=OrderStatus.FILLED, timestamp='')
+
+
+class TestBrokerThroughGovernor(unittest.TestCase):
+
+    def test_state_bridge_produces_a_usable_verdict(self):
+        broker = MiniBroker(equity=99_000)
+        state = account_state_from_broker(broker, ACCOUNT)
+        g = LiveGovernor()
+        g.seed_anchor(g.trading_date(state.timestamp), ACCOUNT)
+        self.assertIs(g.observe(state).decision, Decision.ALLOW)
+
+    def test_full_chain_blocks_an_order(self):
+        broker = MiniBroker(equity=95_800)
+        g = LiveGovernor()
+        g.seed_anchor(g.trading_date(
+            account_state_from_broker(broker, ACCOUNT).timestamp), ACCOUNT)
+        gb = GovernedBroker(broker, g, initial_balance=ACCOUNT)
+        from broker_adapter import OrderStatus
+        o = gb.submit_order('buy', 'EURUSD', 100_000)
+        self.assertIs(o.status, OrderStatus.REJECTED)
+        self.assertEqual(broker.submitted, [])
+
+    def test_full_chain_allows_a_healthy_order(self):
+        broker = MiniBroker(equity=ACCOUNT)
+        g = LiveGovernor()
+        g.seed_anchor(g.trading_date(
+            account_state_from_broker(broker, ACCOUNT).timestamp), ACCOUNT)
+        gb = GovernedBroker(broker, g, initial_balance=ACCOUNT)
+        gb.submit_order('buy', 'EURUSD', 100_000)
+        self.assertEqual(len(broker.submitted), 1)
+
+
+# ==============================================================================
+# ONE PROFILE, END TO END
+# ==============================================================================
+
+class TestUncheckedRulesPropagate(unittest.TestCase):
+    """
+    A partial rule set must stay visible the whole way. Any component that
+    drops the list turns a qualified answer into an unqualified one.
+    """
+
+    def setUp(self):
+        self.rules = generic_trailing('PartialFirm')
+        self.res = merge_strategies(
+            [strategy('A', A_PNL * 6), strategy('B', B_PNL * 6)],
+            rules=self.rules, account_size=ACCOUNT)
+
+    def test_merge_diagnostics(self):
+        caps = [u.capability.value for u in self.res.diagnostics.unsupported_rules]
+        self.assertIn('trailing_drawdown_eod', caps)
+
+    def test_bootstrap_summary(self):
+        sims = joint_block_bootstrap(self.res.daily_pnl, n_simulations=100,
+                                     window_days=20)
+        s = portfolio_merge.bootstrap_summary(sims, ACCOUNT, self.rules)
+        self.assertIn('trailing_drawdown_eod', s['unsupported_rules'])
+        self.assertFalse(s['is_complete'])
+
+    def test_challenge_result(self):
+        sims = joint_block_bootstrap(self.res.daily_pnl, n_simulations=100,
+                                     window_days=20)
+        out = simulate_challenge(sims, ACCOUNT, self.rules)
+        self.assertIn('trailing_drawdown_eod', out.unchecked_rules)
+
+    def test_governor_verdict(self):
+        g = LiveGovernor(GovernorConfig(rules=self.rules))
+        broker = MiniBroker(equity=99_000)
+        state = account_state_from_broker(broker, ACCOUNT)
+        g.seed_anchor(g.trading_date(state.timestamp), ACCOUNT)
+        self.assertIn('trailing_drawdown_eod',
+                      g.observe(state).unchecked_rules)
+
+    def test_governed_broker_summary(self):
+        broker = MiniBroker(equity=99_000)
+        g = LiveGovernor(GovernorConfig(rules=self.rules))
+        g.seed_anchor(g.trading_date(
+            account_state_from_broker(broker, ACCOUNT).timestamp), ACCOUNT)
+        gb = GovernedBroker(broker, g, initial_balance=ACCOUNT)
+        gb.submit_order('buy', 'EURUSD', 100_000)
+        self.assertIn('trailing_drawdown_eod',
+                      gb.summary()['unchecked_rules'])
+
+
+class TestConsistencyEndToEnd(unittest.TestCase):
+
+    def test_cap_reduces_p_funded_through_the_whole_chain(self):
+        res = merge_strategies(
+            [strategy('A', A_PNL * 8), strategy('B', B_PNL * 8)],
+            rules=ftmo(), account_size=ACCOUNT)
+        sims = joint_block_bootstrap(res.daily_pnl, n_simulations=800,
+                                     window_days=40, random_seed=11)
+        loose = simulate_challenge(sims, ACCOUNT, ftmo())
+        strict = simulate_challenge(
+            sims, ACCOUNT,
+            FirmRules(firm_name='Capped', consistency_max_day_pct=0.25))
+        self.assertLessEqual(strict.p_funded, loose.p_funded)
+
+
+# ==============================================================================
+# SMOKE
+# ==============================================================================
+
+class TestFullChainSmoke(unittest.TestCase):
+
+    def test_strategies_to_p_funded_without_exceptions(self):
+        rules = ftmo()
+        res = merge_strategies(
+            [strategy('A', A_PNL * 10), strategy('B', B_PNL * 10),
+             strategy('C', [x * 0.5 for x in A_PNL] * 10)],
+            rules=rules, account_size=ACCOUNT)
+
+        checker = FTMOComplianceChecker(rules=rules)
+        compliance = checker.validate(
+            pd.DataFrame(res.canonical.trade_list), account_size=100_000)
+
+        sims = joint_block_bootstrap(res.daily_pnl, n_simulations=500,
+                                     window_days=40, random_seed=5)
+        challenge = simulate_challenge(sims, ACCOUNT, rules)
+        cons = consistency_rule.check_consistency_frame(res.daily_pnl, 0.30)
+
+        self.assertEqual(len(res.diagnostics.strategy_ids), 3)
+        self.assertIsInstance(compliance.passed, bool)
+        self.assertGreaterEqual(challenge.p_funded, 0.0)
+        self.assertIsNotNone(cons)
+
+    def test_single_strategy_is_refused_by_the_merge(self):
+        """A portfolio of one is a strategy; say so rather than degrade."""
+        with self.assertRaises(portfolio_merge.PortfolioMergeError):
+            merge_strategies([strategy('A', A_PNL)], rules=ftmo())
+
+
+def main():
+    loader = unittest.TestLoader()
+    suite = loader.loadTestsFromModule(sys.modules[__name__])
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    print('\n' + '=' * 68)
+    print(f"  ran {result.testsRun} | failures {len(result.failures)} | "
+          f"errors {len(result.errors)} | skipped {len(result.skipped)}")
+    print('=' * 68)
+    if result.skipped:
+        for case, reason in result.skipped:
+            print(f"    SKIPPED {case}: {reason}")
+    return 0 if not (result.failures or result.errors or result.skipped) else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

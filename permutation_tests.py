@@ -186,7 +186,7 @@ class PermutationTester:
             permutation_values=permutation_values,
             permutation_mean=perm_mean,
             permutation_std=perm_std,
-            p_value=p_value,
+            p_value=float(p_value),
             is_significant=is_significant,
             significance_level=significance_level,
             percentile_rank=percentile_rank,

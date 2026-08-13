@@ -205,7 +205,7 @@ def build_synthetic_window(
     # Resolve to a concrete Timestamp: `start or default` leaves the checker
     # with Timestamp | NaTType | None, and a NaT cursor would loop forever.
     cursor = pd.Timestamp(start) if start is not None else pd.Timestamp('2024-01-01')
-    if pd.isna(cursor):
+    if bool(pd.isna(cursor)):
         cursor = pd.Timestamp('2024-01-01')
     days = []
     while len(days) < window_days:

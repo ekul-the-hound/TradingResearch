@@ -86,7 +86,7 @@ class StrategyBacktester:
         data.columns = [col.lower() for col in data.columns]
         # Strip timezone -- backtrader's date2num mishandles tz-aware indices
         if getattr(data.index, "tz", None) is not None:
-            data.index = data.index.tz_localize(None)
+            data.index = pd.DatetimeIndex(data.index).tz_localize(None)
         
         print(f"[OK] Downloaded {len(data)} days of data")
         
@@ -338,7 +338,8 @@ Be direct and honest. If the strategy looks bad, say so clearly."""
                 }]
             )
             
-            analysis = message.content[0].text
+            _blk = message.content[0]
+            analysis = getattr(_blk, 'text', '') or ''
             return analysis
             
         except Exception as e:

@@ -201,7 +201,7 @@ class StrategyInbox:
 
         return sid
 
-    def list_strategies(self, origin: str = None, limit: int = 50) -> List[Dict]:
+    def list_strategies(self, origin: Optional[str] = None, limit: int = 50) -> List[Dict]:
         """List strategies from the DB."""
         conn = self._get_conn()
         if origin:
@@ -231,7 +231,7 @@ class StrategyInbox:
         conn.close()
         return [dict(r) for r in rows]
 
-    def export_for_pipeline(self, output_dir: str = None) -> int:
+    def export_for_pipeline(self, output_dir: Optional[str] = None) -> int:
         """
         Export all ready strategies as .py files for run_pipeline.py.
 

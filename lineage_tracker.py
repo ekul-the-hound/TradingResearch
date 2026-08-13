@@ -335,7 +335,7 @@ class LineageTracker:
             datetime.now().isoformat(),
             json.dumps(extra) if extra else None,
         ))
-        row_id = c.lastrowid
+        row_id = int(c.lastrowid or 0)
         conn.commit()
         conn.close()
 

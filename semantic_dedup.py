@@ -29,7 +29,7 @@
 import json
 import logging
 import numpy as np
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, TYPE_CHECKING
 from pathlib import Path
 
 from discovery_config import DISCOVERY_CONFIG as cfg
@@ -43,14 +43,18 @@ logger = logging.getLogger(__name__)
 FAISS_AVAILABLE = False
 SBERT_AVAILABLE = False
 
-try:
+if TYPE_CHECKING:
     import faiss
+    from sentence_transformers import SentenceTransformer
+
+try:
+    import faiss  # noqa: F811
     FAISS_AVAILABLE = True
 except ImportError:
     logger.info("faiss-cpu not installed. Using fallback dedup mode.")
 
 try:
-    from sentence_transformers import SentenceTransformer
+    from sentence_transformers import SentenceTransformer  # noqa: F811
     SBERT_AVAILABLE = True
 except ImportError:
     logger.info("sentence-transformers not installed. Using fallback dedup mode.")
@@ -212,6 +216,8 @@ class SemanticDeduplicator:
 
     def _embed(self, text: str) -> np.ndarray:
         """Get normalized embedding for text."""
+        if self.model is None:
+            raise RuntimeError("Embedding model not loaded; cannot embed text.")
         vec = self.model.encode([text], normalize_embeddings=True)
         return vec.astype(np.float32)
 
@@ -222,7 +228,7 @@ class SemanticDeduplicator:
             return False, None, 0.0
 
         query_vec = self._embed(summary_text)
-        scores, indices = self.index.search(query_vec, min(5, self.index.ntotal))
+        scores, indices = self.index.search(query_vec, min(5, self.index.ntotal))  # type: ignore[call-arg]
 
         # Check top match
         top_score = float(scores[0][0])
@@ -242,7 +248,7 @@ class SemanticDeduplicator:
         """Add strategy embedding to FAISS index."""
         vec = self._embed(summary_text)
         pos = self.index.ntotal
-        self.index.add(vec)
+        self.index.add(vec)  # type: ignore[call-arg]
         self.metadata[pos] = strategy_id
 
     # ==========================================================================

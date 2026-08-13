@@ -165,7 +165,7 @@ def test_data_manager():
     
     manager = DataManager()
     
-    results = {'forex': None, 'crypto': None, 'indices': None}
+    results: dict = {'forex': None, 'crypto': None, 'indices': None}
     
     # Test Forex
     if config.FOREX_ENABLED and config.FOREX_WATCHLIST:
@@ -451,6 +451,8 @@ def test_variant_loading():
     for filepath in variant_files[:5]:  # Test first 5 only
         try:
             spec = importlib.util.spec_from_file_location(filepath.stem, filepath)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"cannot load {filepath}")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             loaded += 1
@@ -1392,7 +1394,7 @@ def test_regression_pins():
     data = pd.DataFrame({"open": px, "high": px + 0.5, "low": px - 0.5,
                          "close": px, "volume": 1000.0}, index=idx)
     cerebro = bt.Cerebro()
-    cerebro.adddata(bt.feeds.PandasData(dataname=data))
+    cerebro.adddata(bt.feeds.PandasData(dataname=data))  # type: ignore[call-arg]
     cerebro.addstrategy(_PinStrat)
     cerebro.addanalyzer(TradeTracker, _name="pins")
     strat = cerebro.run()[0]

@@ -144,7 +144,7 @@ class DiversificationFilter:
 
         # Sort by composite score descending
         strategies = sorted(strategies, key=lambda s: s.get("composite_score", 0), reverse=True)
-        sids = [s.get("strategy_id", s.get("name")) for s in strategies]
+        sids = [str(s.get("strategy_id", s.get("name", ""))) for s in strategies]
 
         # Build similarity matrix
         sim_matrix = self._build_similarity_matrix(
@@ -304,7 +304,7 @@ class DiversificationFilter:
 
         names = [sids[i] for i in selected_idx]
         sub = sim[np.ix_(selected_idx, selected_idx)]
-        df = pd.DataFrame(sub, index=names, columns=names)
+        df = pd.DataFrame(sub, index=names, columns=names)  # type: ignore[arg-type]
 
         mask = np.triu(np.ones_like(sub, dtype=bool), k=1)
         upper = sub[mask]

@@ -288,8 +288,8 @@ class ExperimentTracker:
 
         import numpy as np
         vals = list(values.values())
-        best_id = max(values, key=values.get)
-        worst_id = min(values, key=values.get)
+        best_id = max(values, key=lambda k: values[k])
+        worst_id = min(values, key=lambda k: values[k])
 
         return ComparisonResult(
             run_ids=list(values.keys()),

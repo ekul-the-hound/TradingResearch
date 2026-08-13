@@ -81,7 +81,7 @@ def _dt(v: Any) -> Optional[datetime]:
         ts = pd.Timestamp(v)
     except (TypeError, ValueError):
         return None
-    if pd.isna(ts):
+    if bool(pd.isna(ts)):
         return None
     # Built from components rather than ts.to_pydatetime(), which is declared
     # as returning datetime | NaTType. The isna() guard above rules NaT out at
@@ -1502,7 +1502,7 @@ def run_unit_tests():
     # =========================================================================
     print("\n[LIST] Test 10: Empty trade history")
     
-    trades_empty = pd.DataFrame(columns=['entry_date', 'exit_date', 'entry_price', 'size', 'symbol'])
+    trades_empty = pd.DataFrame(columns=['entry_date', 'exit_date', 'entry_price', 'size', 'symbol'])  # type: ignore[arg-type]
     
     result = checker.validate(trades_empty, account_size=100000, phase='challenge')
     

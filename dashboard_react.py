@@ -47,7 +47,7 @@ sys.path.insert(0, os.path.join(script_dir, 'strategies'))
 try:
     import config
     from data_manager import DataManager
-    from simple_strategy import SimpleMovingAverageCrossover
+    from simple_strategy import SimpleMovingAverageCrossover  # type: ignore[import]
     PROJECT_AVAILABLE = True
     print("[OK] Project modules loaded")
 except ImportError as e:
@@ -249,15 +249,21 @@ def run_backtest(
         cols = [c for c in ['open', 'high', 'low', 'close', 'volume'] if c in data.columns]
         data = data[cols]
         
-        if data.index.tz is not None:
-            data.index = data.index.tz_convert("UTC").tz_localize(None)
+        _idx = pd.DatetimeIndex(data.index)
+        if _idx.tz is not None:
+            data.index = _idx.tz_convert("UTC").tz_localize(None)
         
-        result.start_date = data.index[0].strftime('%Y-%m-%d')
-        result.end_date = data.index[-1].strftime('%Y-%m-%d')
+        _idx = pd.DatetimeIndex(data.index)
+        _dates = _idx.strftime('%Y-%m-%d')
+        result.start_date = str(_dates[0])
+        result.end_date = str(_dates[-1])
         result.bars_tested = len(data)
         
         # Calculate benchmark (buy & hold)
-        result.benchmark_return = ((data['close'].iloc[-1] - data['close'].iloc[0]) / data['close'].iloc[0]) * 100
+        _close = pd.Series(data['close'])
+        _c0 = float(_close.iloc[0])
+        _c1 = float(_close.iloc[-1])
+        result.benchmark_return = ((_c1 - _c0) / _c0) * 100
         
         print(f"[UP] Running backtest on {len(data)} bars...")
         
@@ -265,11 +271,11 @@ def run_backtest(
         cerebro = bt.Cerebro()
         
         feed = bt.feeds.PandasData(
-            dataname=data,
-            datetime=None,
-            open='open', high='high', low='low', close='close',
-            volume='volume' if 'volume' in data.columns else None,
-            openinterest=-1
+            dataname=data,  # type: ignore
+            datetime=None,  # type: ignore
+            open='open', high='high', low='low', close='close',  # type: ignore
+            volume='volume' if 'volume' in data.columns else None,  # type: ignore
+            openinterest=-1  # type: ignore
         )
         cerebro.adddata(feed)
         
@@ -399,7 +405,7 @@ def run_backtest(
         
         if result.trades:
             returns = [t['return_pct'] for t in result.trades]
-            result.avg_trade_pct = np.mean(returns) if returns else 0
+            result.avg_trade_pct = float(np.mean(returns)) if returns else 0.0
             
             # Debug output
             print(f"[UP] Trade returns: min={min(returns):.2f}%, max={max(returns):.2f}%, avg={result.avg_trade_pct:.2f}%")
@@ -594,7 +600,7 @@ def chart_equity():
                           xref="paper", yref="paper", showarrow=False, font=dict(size=16, color=C['dim']))
         fig.update_layout(template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                          height=300, xaxis=dict(visible=False), yaxis=dict(visible=False))
-        return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
+        return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')  # type: ignore[arg-type]
     
     equity = result.equity_curve
     dd = result.drawdown_curve
@@ -621,7 +627,7 @@ def chart_equity():
         yaxis=dict(gridcolor='#1f2937', title='Equity ($)'),
         yaxis2=dict(overlaying='y', side='right', range=[-50, 0], showgrid=False, title='DD %')
     )
-    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
+    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')  # type: ignore[arg-type]
 
 
 def chart_monte_carlo():
@@ -635,7 +641,7 @@ def chart_monte_carlo():
                           xref="paper", yref="paper", showarrow=False, font=dict(size=16, color=C['dim']))
         fig.update_layout(template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                          height=280, xaxis=dict(visible=False), yaxis=dict(visible=False))
-        return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {'ruin': 0}
+        return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {'ruin': 0}  # type: ignore[arg-type]
     
     fig = go.Figure()
     for i, path in enumerate(mc['paths'][:50]):
@@ -653,7 +659,7 @@ def chart_monte_carlo():
         yaxis=dict(gridcolor='#1f2937', title='Equity ($)')
     )
     
-    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {'ruin': mc.get('ruin_pct', 0)}
+    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {'ruin': mc.get('ruin_pct', 0)}  # type: ignore[arg-type]
 
 
 def chart_bootstrap():
@@ -666,7 +672,7 @@ def chart_bootstrap():
                           xref="paper", yref="paper", showarrow=False, font=dict(size=16, color=C['dim']))
         fig.update_layout(template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                          height=250, xaxis=dict(visible=False), yaxis=dict(visible=False))
-        return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {'mean': 0, 'lo': 0, 'hi': 0}
+        return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {'mean': 0, 'lo': 0, 'hi': 0}  # type: ignore[arg-type]
     
     # Generate histogram data
     np.random.seed(42)
@@ -692,7 +698,7 @@ def chart_bootstrap():
         yaxis=dict(gridcolor='#1f2937', title='Frequency')
     )
     
-    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {
+    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {  # type: ignore[arg-type]
         'mean': val.get('mean', 0), 'lo': val.get('ci_lo', 0), 'hi': val.get('ci_hi', 0)
     }
 
@@ -707,7 +713,7 @@ def chart_walk_forward():
                           xref="paper", yref="paper", showarrow=False, font=dict(size=16, color=C['dim']))
         fig.update_layout(template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                          height=250, xaxis=dict(visible=False), yaxis=dict(visible=False))
-        return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {'is': 0, 'oos': 0, 'ratio': 0}
+        return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {'is': 0, 'oos': 0, 'ratio': 0}  # type: ignore[arg-type]
     
     # Simulate fold data
     np.random.seed(42)
@@ -731,7 +737,7 @@ def chart_walk_forward():
         yaxis=dict(gridcolor='#1f2937', title='Return %')
     )
     
-    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {
+    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn'), {  # type: ignore[arg-type]
         'is': val.get('is_return', 0),
         'oos': val.get('oos_return', 0),
         'ratio': val.get('ratio', 0)
@@ -749,7 +755,7 @@ def chart_permutation():
                           xref="paper", yref="paper", showarrow=False, font=dict(size=16, color=C['dim']))
         fig.update_layout(template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                          height=250, xaxis=dict(visible=False), yaxis=dict(visible=False))
-        return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
+        return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')  # type: ignore[arg-type]
     
     # Generate permutation distribution
     np.random.seed(42)
@@ -770,7 +776,7 @@ def chart_permutation():
         yaxis=dict(gridcolor='#1f2937', title='Frequency')
     )
     
-    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
+    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')  # type: ignore[arg-type]
 
 
 def chart_portfolio_weights():
@@ -786,7 +792,7 @@ def chart_portfolio_weights():
         template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         margin=dict(l=20, r=20, t=20, b=20), height=280, showlegend=False
     )
-    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
+    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')  # type: ignore[arg-type]
 
 
 def chart_var_distribution():
@@ -814,7 +820,7 @@ def chart_var_distribution():
         xaxis=dict(gridcolor='#1f2937', title='Return %'),
         yaxis=dict(gridcolor='#1f2937', title='Frequency')
     )
-    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
+    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')  # type: ignore[arg-type]
 
 
 def chart_paper_equity():
@@ -835,7 +841,7 @@ def chart_paper_equity():
         xaxis=dict(gridcolor='#1f2937', title='Bar #'),
         yaxis=dict(gridcolor='#1f2937', title='Equity $')
     )
-    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
+    return pio.to_html(fig, full_html=True, include_plotlyjs='cdn')  # type: ignore[arg-type]
 
 
 # ==============================================================================
