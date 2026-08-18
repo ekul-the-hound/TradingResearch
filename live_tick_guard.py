@@ -244,16 +244,19 @@ class LiveTickGuard:
 
 
 # ── Small dependency-free helpers ─────────────────────────────────────────────
-def _as_float(v: Any) -> Optional[float]:
+def _as_float(v: Any) -> float:
+    # Returns NaN (not None) for missing/invalid input. NaN fails
+    # _is_positive_finite, so bad quotes are still rejected -- but the return
+    # type is a plain float, so downstream comparisons never see None.
     if v is None:
-        return None
+        return float("nan")
     try:
         return float(v)
     except (TypeError, ValueError):
-        return None
+        return float("nan")
 
 
-def _is_positive_finite(v: Optional[float]) -> bool:
+def _is_positive_finite(v: float) -> bool:
     return v is not None and math.isfinite(v) and v > 0.0
 
 

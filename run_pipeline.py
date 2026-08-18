@@ -828,6 +828,13 @@ class Pipeline:
                               f"spec (is it valid Python?)")
                     continue
                 mod = importlib.util.module_from_spec(spec)
+                # Register in sys.modules BEFORE executing: Backtrader looks
+                # the strategy's module up by name during its run, and an
+                # unregistered module raises KeyError(module_name) (this was
+                # the 'Backtest failed: variant_01' bug). evaluate_variant
+                # does the same thing for the same reason.
+                import sys as _sys
+                _sys.modules[spec.name] = mod
                 spec.loader.exec_module(mod)
                 for attr_name in dir(mod):
                     attr = getattr(mod, attr_name)

@@ -75,27 +75,15 @@ Generate {num_variants} variant strategies based on the base strategy below. Eac
 ## CRITICAL BACKTRADER CODING RULES (MUST FOLLOW):
 
 ### Rule 1: Indicator Names
-Use ONLY indicators that exist in this Backtrader build. Verified available:
-- [OK] `bt.indicators.RSI(self.data.close, period=14)`
-- [OK] `bt.indicators.ATR(self.data, period=14)`
-- [OK] `bt.indicators.ADX(self.data, period=14)`
-- [OK] `bt.indicators.BollingerBands(self.data.close)`
-- [OK] `bt.indicators.MACD(self.data.close)`
-- [OK] `bt.indicators.Stochastic(self.data)`
-- [OK] `bt.indicators.CCI(self.data)`, `bt.indicators.WilliamsR(self.data)`,
-      `bt.indicators.Ichimoku(self.data)`, `bt.indicators.EMA(...)`,
-      `bt.indicators.SMA(...)`
-
-DO NOT USE these -- they DO NOT EXIST in this build and will crash:
-- [FAIL] `bt.indicators.OBV(...)` and `bt.indicators.OnBalanceVolume(...)`
-- [FAIL] `bt.indicators.VWAP(...)`
-- [FAIL] `bt.indicators.KeltnerChannel(...)`
-- [FAIL] `bt.indicators.DonchianChannel(...)`
-- [FAIL] any "Volume Profile" indicator
-
-If a volume-based idea is needed, DO NOT reference a missing indicator. Either
-skip it, or include a fully self-contained custom indicator class in the file
-(subclassing bt.Indicator) so nothing undefined is referenced.
+Use the CORRECT Backtrader indicator names:
+- [OK] CORRECT: `bt.indicators.OBV(self.data)` 
+- [FAIL] WRONG: `bt.indicators.OnBalanceVolume()` (does not exist!)
+- [OK] CORRECT: `bt.indicators.RSI(self.data.close, period=14)`
+- [OK] CORRECT: `bt.indicators.ATR(self.data, period=14)`
+- [OK] CORRECT: `bt.indicators.ADX(self.data, period=14)`
+- [OK] CORRECT: `bt.indicators.BollingerBands(self.data.close)`
+- [OK] CORRECT: `bt.indicators.MACD(self.data.close)`
+- [OK] CORRECT: `bt.indicators.Stochastic(self.data)`
 
 ### Rule 2: Position Price Access (CRITICAL - Prevents NoneType errors)
 ALWAYS check position exists before accessing position.price:
@@ -407,19 +395,9 @@ def check_common_bugs(code):
     """
     warnings = []
     
-    # HARD problem: this build has no OBV/OnBalanceVolume indicator at all.
-    # Redirecting one missing name to another (the old behaviour) still crashes,
-    # so flag ANY reference unless the file defines its own custom class.
-    if ('OnBalanceVolume' in code or 'indicators.OBV' in code
-            or 'ind.OBV' in code):
-        if 'bt.Indicator' not in code:
-            warnings.append("[BLOCK] References OBV/OnBalanceVolume, which does "
-                            "not exist in this Backtrader build and has no "
-                            "custom class defined -- variant will crash")
-    for _missing in ('VWAP', 'KeltnerChannel', 'DonchianChannel'):
-        if _missing in code and 'bt.Indicator' not in code:
-            warnings.append(f"[BLOCK] References {_missing}, missing in this "
-                            f"Backtrader build with no custom class")
+    # Check for wrong OBV indicator name
+    if 'OnBalanceVolume' in code:
+        warnings.append("[WARN]  Uses 'OnBalanceVolume' - should be 'OBV'")
     
     # Check for unsafe position.price access
     if 'self.position.price' in code:

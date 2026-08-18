@@ -423,7 +423,7 @@ def create_robustness_charts(latency_data, slippage_data):
     # Add 80% threshold line for latency
     base_return = latency_data['return_pct'].iloc[0]
     fig.add_hline(y=base_return * 0.8, line_dash="dash", line_color="#f59e0b",
-                  annotation_text="80% threshold", row=1, col=1)
+                  annotation_text="80% threshold", row=1, col=1)  # type: ignore[arg-type]
     
     # Slippage chart
     fig.add_trace(

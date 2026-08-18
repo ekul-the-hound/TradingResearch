@@ -24,15 +24,17 @@ MACD
 ADX
 Bollinger Bands
 ATR
+VWAP
 Stochastic
 EMA
+Volume Profile
+OBV
 CCI
 Williams %R
 Ichimoku Cloud
+Keltner Channels
+Donchian Channels
 """
-# NOTE: OBV, VWAP, Volume Profile, Keltner Channels, and Donchian Channels were
-# removed -- they do not exist in this Backtrader version and any variant using
-# them crashes at backtest time. Re-add only after adding custom implementations.
 
 
 # ------------------------------------------------------------------------------

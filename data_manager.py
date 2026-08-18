@@ -145,7 +145,12 @@ class DataManager:
             return 'commodities'
         
         # Fallback pattern detection
-        if symbol.endswith('=X') or '-' in symbol and symbol.replace('-', '') in ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD']:
+        # Accept forex symbols with OR without a dash: 'EURUSD' and
+        # 'EUR-USD' both resolve to forex. (Previously only dashed symbols
+        # matched, so 'EURUSD' fell through to 'unknown' and was skipped.)
+        _forex_undashed = {'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD',
+                           'USDCAD', 'USDCHF', 'NZDUSD'}
+        if symbol.endswith('=X') or symbol.replace('-', '').upper() in _forex_undashed:
             return 'forex'
         elif symbol.endswith('-USD') or symbol.endswith('USDT') or symbol in ['BTC', 'ETH', 'SOL', 'XRP', 'ADA']:
             return 'crypto'

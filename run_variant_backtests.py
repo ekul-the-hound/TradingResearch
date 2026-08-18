@@ -61,6 +61,9 @@ def load_variant_class(filepath):
     try:
         # Load the module
         spec = importlib.util.spec_from_file_location(filepath.stem, filepath)
+        if spec is None or spec.loader is None:
+            print(f"  [WARN] cannot load {filepath.name}: no import spec")
+            return None
         module = importlib.util.module_from_spec(spec)
         sys.modules[filepath.stem] = module
         spec.loader.exec_module(module)
@@ -126,14 +129,14 @@ def run_variant_backtests(quick_mode=False):
     print("="*70)
     
     # Discover variants
-    variant_files = discover_variants()
+    variant_files = discover_variants() or []
     
     if not variant_files:
         print("No variants to test. Run mutate_strategy.py first.")
         return
     
     # Get assets and timeframes
-    assets = get_test_assets()
+    assets = get_test_assets() or []
     timeframes = ['1hour', '4hour', '1day'] if quick_mode else TEST_TIMEFRAMES
     
     print(f"\n[LIST] Test Configuration:")

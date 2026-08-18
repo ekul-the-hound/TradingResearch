@@ -1,15 +1,8 @@
 {
-  "//": "Points Pylance at the quant2 conda environment. Without this it falls back to a base interpreter that has no pandas, numpy or backtrader, and reports every import as unresolved. Pylance reads this file directly, so it survives VS Code settings being reset or the project being opened on another machine.",
-
   "venvPath": "C:\\Users\\Luke\\anaconda3\\envs",
   "venv": "quant2",
-
   "typeCheckingMode": "basic",
-
-  "//reportMissingModuleSource": "pandas ships type stubs separately. When only the stubs resolve, Pylance warns that the source is missing -- harmless noise once the interpreter is correct, and off here so real problems stay visible.",
   "reportMissingModuleSource": "none",
-
-  "//exclude": "Pylance warns if the default excludes are dropped, because it then walks node_modules and dotfile directories. They are restored here alongside the project-specific entries.",
   "exclude": [
     "**/node_modules",
     "**/__pycache__",
@@ -17,6 +10,13 @@
     "**/*_bak.*",
     "**/*.bak_*",
     "data",
-    "results"
-  ]
+    "results",
+    "discovered_strategies",
+    "strategies/variants",
+    "strategies/discovered",
+    "strategies/**"
+  ],
+  "reportOptionalMemberAccess": "none",
+  "reportOptionalSubscript": "none",
+  "reportOptionalCall": "none"
 }
