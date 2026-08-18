@@ -32,7 +32,7 @@ class TestPercentile(unittest.TestCase):
         self.assertEqual(_percentile([1, 2, 3, 4], 50), 2.5)
 
     def test_p75(self):
-        self.assertAlmostEqual(_percentile([1, 2, 3, 4, 5], 75), 4.0)
+        self.assertAlmostEqual(_percentile([1, 2, 3, 4, 5], 75), 4.0)  # type: ignore[arg-type]
 
     def test_single_value(self):
         self.assertEqual(_percentile([7], 90), 7)
@@ -80,8 +80,8 @@ class TestWinnerMAE(unittest.TestCase):
         for dip in range(10, 41):  # 31 winners, dips 10..40
             rows.append(row(100, -dip, 200))
         rep = MFEMAEAnalyzer().analyze(rows)
-        self.assertLessEqual(rep.winner_mae_median, rep.winner_mae_p75)
-        self.assertLessEqual(rep.winner_mae_p75, rep.winner_mae_p90)
+        self.assertLessEqual(rep.winner_mae_median, rep.winner_mae_p75)  # type: ignore[arg-type]
+        self.assertLessEqual(rep.winner_mae_p75, rep.winner_mae_p90)  # type: ignore[arg-type]
 
 
 class TestLeftOnTable(unittest.TestCase):
@@ -89,13 +89,13 @@ class TestLeftOnTable(unittest.TestCase):
         # winner realises 100, MFE 250 -> 150 left on table each.
         rows = [row(100, -20, 250) for _ in range(25)]
         rep = MFEMAEAnalyzer().analyze(rows)
-        self.assertAlmostEqual(rep.left_on_table_median, 150, places=1)
-        self.assertAlmostEqual(rep.left_on_table_total, 150 * 25, places=1)
+        self.assertAlmostEqual(rep.left_on_table_median, 150, places=1)  # type: ignore[arg-type]
+        self.assertAlmostEqual(rep.left_on_table_total, 150 * 25, places=1)  # type: ignore[arg-type]
 
     def test_no_run_when_mfe_equals_realised(self):
         rows = [row(100, -20, 100) for _ in range(25)]
         rep = MFEMAEAnalyzer().analyze(rows)
-        self.assertAlmostEqual(rep.left_on_table_median, 0, places=6)
+        self.assertAlmostEqual(rep.left_on_table_median, 0, places=6)  # type: ignore[arg-type]
 
 
 class TestHiddenAdverse(unittest.TestCase):

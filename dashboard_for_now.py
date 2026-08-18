@@ -912,9 +912,9 @@ def render_robustness_page():
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Best Fast Period", int(best_row['fast']))
+            st.metric("Best Fast Period", int(best_row['fast']))  # type: ignore[arg-type]
         with col2:
-            st.metric("Best Slow Period", int(best_row['slow']))
+            st.metric("Best Slow Period", int(best_row['slow']))  # type: ignore[arg-type]
         with col3:
             st.metric("Best Return", f"{best_row['return']:.1f}%")
     

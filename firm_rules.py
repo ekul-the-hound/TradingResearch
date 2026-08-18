@@ -358,7 +358,7 @@ class FirmRules:
             {'capability': u.capability.value, 'reason': u.reason}
             for u in self.unsupported()
         ]
-        d['is_fully_modelled'] = self.is_fully_modelled()
+        d['is_fully_modelled'] = self.is_fully_modelled
         return d
 
     @classmethod

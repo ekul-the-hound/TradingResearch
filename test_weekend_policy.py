@@ -128,7 +128,7 @@ class TestWeekendGaps(unittest.TestCase):
             # weekend jump (2 days) with a gap on Monday open
             dt = dt + pd.Timedelta(days=2)
             price = price * (1 + gap_pct / 100.0)  # gap up
-        df = pd.DataFrame(rows, columns=["dt", "open", "high", "low", "close"])
+        df = pd.DataFrame(rows, columns=["dt", "open", "high", "low", "close"])  # type: ignore[arg-type]
         df = df.set_index("dt")
         return df
 
@@ -169,7 +169,7 @@ class TestWeekendGaps(unittest.TestCase):
             dt += pd.Timedelta(days=2)
             price = price * (1 - 0.01)  # 1% gap DOWN each weekend
         df = pd.DataFrame(rows, columns=["dt", "open", "high", "low",
-                                         "close"]).set_index("dt")
+                                         "close"]).set_index("dt")  # type: ignore[arg-type]
         stats = weekend_gaps(df, min_weekends=10)
         self.assertTrue(stats.sufficient)
         self.assertLess(stats.worst_gap_pct, 0)  # negative = gap down

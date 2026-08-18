@@ -37,7 +37,7 @@ def good_request(**overrides):
         remaining_daily_budget=4000.0, current_open_risk=500.0,
     )
     base.update(overrides)
-    return EntryRequest(**base)
+    return EntryRequest(**base)  # type: ignore[arg-type]
 
 
 def sev(decision: EntryDecision, name: str) -> str:

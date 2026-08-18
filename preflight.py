@@ -168,8 +168,8 @@ class Preflight:
         detail = f"loaded '{self.config.firm}'"
         data: Dict[str, Any] = {}
         try:
-            data["fully_modelled"] = bool(rules.is_fully_modelled())
-            if not rules.is_fully_modelled():
+            data["fully_modelled"] = bool(rules.is_fully_modelled)
+            if not rules.is_fully_modelled:
                 return CheckResult(
                     name, WARN,
                     f"{detail}, but rules are not fully modelled: "

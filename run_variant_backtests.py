@@ -55,15 +55,14 @@ def discover_variants():
     return variant_files
 
 
-def load_variant_class(filepath):
+def load_variant_class(filepath) -> tuple:
     """Dynamically import a strategy class from a variant file"""
     
     try:
         # Load the module
         spec = importlib.util.spec_from_file_location(filepath.stem, filepath)
         if spec is None or spec.loader is None:
-            print(f"  [WARN] cannot load {filepath.name}: no import spec")
-            return None
+            return None, None, "no import spec"
         module = importlib.util.module_from_spec(spec)
         sys.modules[filepath.stem] = module
         spec.loader.exec_module(module)

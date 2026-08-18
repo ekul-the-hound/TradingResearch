@@ -43,14 +43,14 @@ class TestDayLifecycle(JournalTestBase):
         self.j.open_day(100_000, trading_date="2026-01-05")
         day = self.j.close_day(101_500, trading_date="2026-01-05")
         self.assertEqual(day.day_pnl, 1500.0)
-        self.assertAlmostEqual(day.day_pnl_pct, 1.5)
+        self.assertAlmostEqual(day.day_pnl_pct, 1.5)  # type: ignore[arg-type]
         self.assertTrue(day.complete)
 
     def test_loss_day(self):
         self.j.open_day(100_000, trading_date="2026-01-06")
         day = self.j.close_day(96_000, trading_date="2026-01-06")
         self.assertEqual(day.day_pnl, -4000.0)
-        self.assertAlmostEqual(day.day_pnl_pct, -4.0)
+        self.assertAlmostEqual(day.day_pnl_pct, -4.0)  # type: ignore[arg-type]
 
     def test_open_day_idempotent(self):
         self.j.open_day(100_000, trading_date="2026-01-05")

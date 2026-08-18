@@ -62,7 +62,7 @@ class TestWallMode(unittest.TestCase):
 
     def test_age_reported(self):
         v = self.ts.check("EURUSD", now=T0 + timedelta(seconds=1800))
-        self.assertAlmostEqual(v.age_seconds, 1800, places=0)
+        self.assertAlmostEqual(v.age_seconds, 1800, places=0)  # type: ignore[arg-type]
 
 
 class TestBarMode(unittest.TestCase):

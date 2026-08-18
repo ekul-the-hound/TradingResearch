@@ -122,7 +122,7 @@ class TestValidation(unittest.TestCase):
 
     def test_accepts_list_input(self):
         out = StressInjector(StressConfig(extra_daily_cost=1.0)).apply(
-            [[10.0, 20.0], [30.0, 40.0]])
+            [[10.0, 20.0], [30.0, 40.0]])  # type: ignore[arg-type]
         self.assertEqual(out.shape, (2, 2))
 
 

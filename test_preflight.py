@@ -27,7 +27,7 @@ def primed_preflight(symbols=("EURUSD",), **cfg_kwargs):
     b = pf._get_broker()
     b.connect()
     for s in symbols:
-        b.set_price(s, 1.10000)
+        b.set_price(s, 1.10000)  # type: ignore[attr-defined]
     return pf
 
 
