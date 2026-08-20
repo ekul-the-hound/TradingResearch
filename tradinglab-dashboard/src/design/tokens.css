@@ -1,0 +1,54 @@
+:root {
+  /* Color tokens (CLAUDE.md §5) */
+  --c-bg: #090e14;
+  --c-surface: #101821;
+  --c-raised: #16212c;
+  --c-border: #263646;
+  --c-text: #e6edf4;
+  --c-text-2: #91a2b5;
+  --c-text-muted: #6d8095;
+  --c-info: #28b8c8;
+  --c-pass: #3acb8f;
+  --c-fail: #f26d6d;
+  --c-warn: #f6b84b;
+  --c-research: #a78bfa;
+
+  /* Status surface tints (low-alpha, for backgrounds only) */
+  --c-pass-bg: rgba(58, 203, 143, 0.12);
+  --c-fail-bg: rgba(242, 109, 109, 0.12);
+  --c-warn-bg: rgba(246, 184, 75, 0.12);
+  --c-info-bg: rgba(40, 184, 200, 0.12);
+  --c-research-bg: rgba(167, 139, 250, 0.12);
+  --c-muted-bg: rgba(97, 114, 134, 0.12);
+
+  /* Spacing scale (8px base) */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+
+  /* Radius (6px max, CLAUDE.md §5) */
+  --r-sm: 3px;
+  --r-md: 6px;
+
+  /* Layout */
+  --nav-w: 232px;
+  --statusbar-h: 44px;
+
+  /* Type */
+  --font-ui: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono",
+    Menlo, Consolas, monospace;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-18: 18px;
+
+  --border: 1px solid var(--c-border);
+}

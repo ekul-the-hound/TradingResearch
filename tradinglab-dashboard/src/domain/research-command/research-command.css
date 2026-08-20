@@ -1,0 +1,307 @@
+/* ---- Truth ribbon ---- */
+.tl-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-2) var(--s-3);
+  margin-bottom: var(--s-4);
+  border: var(--border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+}
+
+/* ---- Funnel ---- */
+.tl-rc-funnel-panel {
+  margin-top: 0;
+}
+.tl-funnel {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+}
+.tl-funnel__item {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 128px;
+}
+.tl-funnel__stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--s-3);
+  background: var(--c-raised);
+  border: var(--border);
+  border-radius: var(--r-md);
+  text-align: left;
+  color: var(--c-text);
+  min-height: 92px;
+}
+.tl-funnel__stage:hover {
+  border-color: var(--c-info);
+}
+.tl-funnel__stage[data-live] {
+  opacity: 0.62;
+}
+.tl-funnel__stage-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--c-text-2);
+  text-transform: uppercase;
+}
+.tl-funnel__count {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.tl-funnel__sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tl-funnel__tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--c-border);
+}
+.tl-funnel__tag--blocked {
+  color: var(--c-warn);
+  border-color: rgba(246, 184, 75, 0.4);
+}
+.tl-funnel__tag--rejected {
+  color: var(--c-text-muted);
+}
+.tl-funnel__tag--muted {
+  color: var(--c-text-muted);
+  border-color: transparent;
+}
+.tl-funnel__arrow {
+  color: var(--c-text-muted);
+  font-size: 18px;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+/* ---- Latest run ---- */
+.tl-run {
+  padding: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.tl-run__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.tl-run__id {
+  font-size: var(--fs-14);
+  font-weight: 700;
+}
+.tl-run__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-3);
+}
+.tl-run__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tl-run__field-label {
+  font-size: var(--fs-11);
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.tl-run__field-value {
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+}
+.tl-run__truth {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  padding-top: var(--s-2);
+  border-top: 1px solid rgba(38, 54, 70, 0.5);
+}
+.tl-run__blocker {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--s-2) var(--s-3);
+  background: var(--c-warn-bg);
+  border: 1px solid rgba(246, 184, 75, 0.3);
+  border-radius: var(--r-md);
+}
+.tl-run__blocker-label {
+  font-size: var(--fs-11);
+  font-weight: 600;
+  color: var(--c-warn);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.tl-run__blocker-text {
+  font-size: var(--fs-12);
+  color: var(--c-text-2);
+}
+
+/* ---- Research queue ---- */
+.tl-queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tl-queue__item {
+  padding: var(--s-2) var(--s-3);
+  border: var(--border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tl-queue__item[data-clickable] {
+  cursor: pointer;
+}
+.tl-queue__item[data-clickable]:hover {
+  border-color: var(--c-info);
+  background: var(--c-raised);
+}
+.tl-queue__top {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.tl-queue__title {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  color: var(--c-text);
+  flex: 1;
+}
+.tl-queue__source {
+  font-size: 10px;
+  color: var(--c-text-muted);
+  font-family: var(--font-mono);
+}
+.tl-queue__reason {
+  font-size: var(--fs-11);
+  color: var(--c-text-2);
+}
+.tl-queue__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: baseline;
+}
+.tl-queue__affects {
+  font-size: 10px;
+  color: var(--c-info);
+}
+.tl-queue__action {
+  font-size: 10px;
+  color: var(--c-text-muted);
+}
+
+/* ---- Health strip ---- */
+.tl-health {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--s-3);
+}
+@media (max-width: 1240px) {
+  .tl-health {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.tl-health__mod {
+  display: flex;
+  flex-direction: column;
+}
+.tl-health__hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-2) var(--s-3);
+  border-bottom: var(--border);
+}
+.tl-health__title {
+  font-size: var(--fs-12);
+  font-weight: 600;
+}
+.tl-health__body {
+  padding: var(--s-3);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-height: 108px;
+}
+.tl-health__primary {
+  display: flex;
+  flex-direction: column;
+}
+.tl-health__primary-val {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tl-health__primary-label {
+  font-size: var(--fs-11);
+  color: var(--c-text-muted);
+}
+.tl-health__secondary {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-11);
+  color: var(--c-text-2);
+}
+.tl-health__secondary-val {
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text);
+}
+.tl-health__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 40px;
+  margin-top: auto;
+}
+.tl-health__bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 2px;
+}
+.tl-health__bar {
+  width: 100%;
+  border-radius: 1px;
+  min-height: 3px;
+}
+.tl-health__bar-label {
+  font-size: 9px;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+.tl-health__src {
+  padding: 4px var(--s-3);
+  font-size: 10px;
+  color: var(--c-text-muted);
+  border-top: 1px solid rgba(38, 54, 70, 0.5);
+}

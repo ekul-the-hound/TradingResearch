@@ -1,0 +1,1133 @@
+prompt 1: # TradingLab Dashboard — Permanent Product and Engineering Rules
+
+You are building TradingLab, a desktop-first quantitative forex strategy
+research, validation, portfolio-construction, and FTMO challenge-readiness
+dashboard.
+
+This is NOT:
+- A generic retail brokerage dashboard
+- A crypto dashboard
+- An "AI trader" product
+- A live trading terminal today
+- A marketing site
+- A collection of decorative KPI cards
+
+The product supports a rigorous workflow:
+
+raw strategy idea
+→ deduplication and quality review
+→ static checks for lookahead/prohibited patterns
+→ historical backtest
+→ pessimistic cost adjustment
+→ hard manual gates
+→ holdout and statistical validation
+→ robustness / parameter stability review
+→ diversification and portfolio construction
+→ FTMO challenge simulation and stress testing
+→ future paper/demo/live lifecycle
+
+## Product truth
+
+The existing repository is research-first and primarily on-demand.
+
+Confirmed:
+- Historical data source is local HistData forex data, typically 1-minute base
+  data resampled for requested timeframes.
+- The pipeline runs manually through commands such as run_pipeline.py and
+  run_discovery.py. Do not imply automatic refresh, scheduled jobs, or live
+  updates unless a real scheduler is verified in code.
+- Databases are SQLite, including discovery.db, results/backtest_results.db,
+  lineage.db, algorithm_ideas.db, slippage_observations.db, and
+  challenge_journal.db.
+- The live/MT5 broker path is not connected. MT5 transport is only a file-IPC
+  contract; the EA bridge is not present.
+- Claude and Ollama are build/research helpers, not runtime dashboard features.
+- The dashboard must never show fake live P&L, fake broker connectivity,
+  artificial tickers, fabricated execution data, or inferred refresh times.
+
+## Required truth labels
+
+Every data-backed surface must expose the appropriate state:
+- RESEARCH / BACKTEST / PAPER / DEMO / LIVE
+- HISTORICAL / DELAYED / REAL-TIME
+- Actual last-run or last-refresh timestamp when available
+- Data source and relevant data period
+- Dataset fingerprint when applicable
+- Holdout state: SEALED / UNSEALED / UNKNOWN
+- Returns provenance: REAL / UNVERIFIED / SYNTHETIC RISK / UNAVAILABLE
+- Cost basis: named profile and its values
+- Compliance basis: AUTHORITATIVE / PROXY / INCOMPLETE / UNKNOWN
+- Broker state: OFFLINE / NOT CONFIGURED / CONNECTED
+
+If a datum cannot be verified from the code or database, label it UNKNOWN or
+NOT AVAILABLE. Do not silently invent a value.
+
+## Important known integrity constraints
+
+- The most recent 20% of history is sealed by holdout_guard.py by default.
+- Backtest manual gates use minimum Sharpe 0.5, minimum 20 trades, and maximum
+  30% drawdown unless inspection shows config differs.
+- Current pessimistic manual cost profile is 2-pip spread, 1-pip slippage, and
+  intraday/no swaps unless actual config differs.
+- canonical_result.py has a synthetic-returns fallback risk if require_returns()
+  is bypassed. Do not portray returns as real until verified at the result level.
+- The existing FTMO dashboard panel uses display proxies and must not be presented
+  as authoritative compliance until wired to FTMOComplianceChecker.
+- The consistency-rule threshold is unknown until explicitly configured. Do not
+  show “consistency headroom” as a real calculated number without that threshold.
+- Capacity/liquidity results require sufficient underlying data. Never make
+  liquidity or impact charts look measured if they are extrapolated or unavailable.
+- multi_objective_optimizer is selection over an existing backtested pool, not
+  true parameter optimization. Label it “Pareto Selection” or “Portfolio Selection.”
+
+## Visual system
+
+Design direction:
+Modern institutional quantitative research terminal.
+
+The interface should feel like a proprietary research workstation used by a
+systematic PM and quant researcher. Calm, credible, dense, precise, and useful
+during analysis. Favor evidence over spectacle.
+
+Desktop-first:
+- Primary target: 1440px+ width
+- Fixed left navigation: approximately 232px
+- Fixed/top system status bar: approximately 44px
+- 12-column responsive content grid
+- 8px spacing scale
+- Compact table row heights
+- 6px maximum standard panel corner radius
+- Subtle 1px borders
+- Minimal/no shadows
+- No large hero content
+
+Color tokens:
+- App background: #090E14
+- Base surface: #101821
+- Raised surface: #16212C
+- Subtle border: #263646
+- Primary text: #E6EDF4
+- Secondary text: #91A2B5
+- Muted text: #617286
+- Information/active: #28B8C8
+- Pass/positive: #3ACB8F
+- Failure/negative: #F26D6D
+- Warning: #F6B84B
+- Research/selection: #A78BFA
+
+Use tabular numerals for all performance, risk, timestamps, prices, percentages,
+bar counts, and financial quantities.
+
+## Anti-slop rules
+
+Never produce:
+- Purple-to-blue gradients
+- Glassmorphism
+- Giant "Welcome back" or “Good morning trader” hero messages
+- Generic “AI confidence” gauges
+- Crypto-exchange visual language
+- Fake real-time tickers
+- Decorative 3D objects, blobs, stock photos, or illustration art
+- A page made entirely of identical rounded cards
+- Chart-only panels without decision context
+- Isolated metrics without a period, calculation basis, units, sample size, or status
+- Green/red-only communication; every state must also have a label/icon/pattern
+- Excessive animation, glowing elements, pills, or badges
+
+## Engineering rules
+
+- Inspect existing source, tables, and schemas before inventing an API contract.
+- Keep backend/data adapters separate from UI components.
+- Use TypeScript types or equivalent typed interfaces for every dashboard entity.
+- Create fixtures only behind a clearly named adapter such as MockResearchRepository.
+- Fixtures must be visibly marked as DEMO DATA or DEVELOPMENT FIXTURE.
+- Never hardcode metrics in production data adapters.
+- Build loading, empty, unavailable, stale, error, and partial-data states for every
+  important data component.
+- Do not build write operations, order placement, broker controls, destructive DB
+  actions, or automated trading actions unless explicitly requested.
+- Provide concise implementation notes and list changed files after each task.
+- Do not refactor unrelated code without asking.
+
+
+Prompt 2:Read CLAUDE.md and inspect the entire repository before proposing changes.
+
+Your task is to audit the current dashboard and data-access situation. Do not
+write frontend implementation code yet.
+
+Deliver a concise, source-grounded report with:
+
+1. The canonical application entry points currently used by each dashboard:
+   Streamlit, ReactPy, Vizro, Reflex, React, or other.
+2. The frontend framework and build system that are most complete and safest to
+   make canonical, with a reason based on actual source code—not preference.
+3. Every existing dashboard file and what it currently renders.
+4. Every SQLite database path actually present or referenced in source.
+5. The confirmed tables, key columns, and relationships relevant to:
+   - strategy discovery
+   - backtest results
+   - backtest trades
+   - validation
+   - portfolio construction
+   - FTMO/challenge results
+   - journal and fills
+   - lineage and experiment tracking
+6. Existing API layers, repository classes, query functions, or direct SQLite
+   access points that can supply dashboard data.
+7. Which metrics are authoritative, which are proxies, which are absent, and
+   which are potentially synthetic.
+8. A recommended single canonical frontend path.
+9. A phased migration plan that keeps existing tools working and avoids duplicate
+   dashboards.
+10. A list of missing fields that must be added or exposed before a trustworthy UI
+    can display them.
+
+Important:
+- Cite actual file paths, class names, function names, SQL table names, and
+  columns wherever possible.
+- Mark anything not verified from source as UNKNOWN.
+- Do not make a new dashboard yet.
+- Do not call anything “live” unless the actual broker/feed connection exists.
+
+Prompt 3: Read CLAUDE.md and the completed dashboard audit.
+
+Create a detailed implementation architecture for the canonical TradingLab
+dashboard. Do not build visual pages yet.
+
+Deliver:
+
+1. Recommended folder structure for:
+   - app shell and routing
+   - design tokens
+   - reusable UI primitives
+   - domain components
+   - typed domain models
+   - SQLite/data repository adapters
+   - fixture/mock adapters
+   - chart utilities
+   - tests
+2. A route map for:
+   - /research-command
+   - /strategy-lab
+   - /strategies/:strategyId
+   - /portfolio-builder
+   - /challenge-readiness
+   - /discovery-inbox
+   - /data-integrity
+   - /execution
+3. The exact page purpose, primary question, inputs, outputs, and truth labels for
+   every route.
+4. Typed interface proposals for:
+   - StrategySummary
+   - StrategyEvidence
+   - PipelineRun
+   - PipelineFunnel
+   - BacktestResult
+   - ValidationResult
+   - CostProfile
+   - DataProvenance
+   - IntegrityStatus
+   - FTMOComplianceStatus
+   - ChallengeSimulationResult
+   - PortfolioCandidate
+   - ResearchQueueItem
+   - SystemStatus
+5. A data-access abstraction that can initially read from SQLite or an existing
+   backend, while allowing explicit development fixtures where live data adapters
+   are not yet wired.
+6. A strategy for surfacing UNKNOWN, UNAVAILABLE, PROXY, and UNVERIFIED states.
+7. The minimum viable scope for phase one.
+
+Constraints:
+- Do not add a live trading API.
+- Do not pretend an absent DB field exists.
+- Keep the app desktop-first and research-first.
+- Use one canonical metric definition per metric; avoid duplicate calculations
+  across components.
+- Label multi_objective_optimizer output as Pareto Selection, not optimization.
+
+Prompt 4: Read CLAUDE.md and implement the TradingLab design system only.
+
+Do not build complete product pages yet. Build the reusable application shell,
+tokens, typography, primitives, and development preview route/story page.
+
+Required deliverables:
+
+1. App shell:
+   - Fixed 232px left navigation
+   - Fixed 44px top system status bar
+   - Desktop-first 12-column content grid
+   - Responsive behavior that remains usable at smaller widths without becoming
+     a generic mobile card stack
+
+2. Navigation:
+   - Research Command
+   - Strategy Lab
+   - Portfolio Builder
+   - Challenge Readiness
+   - Discovery Inbox
+   - Data & Integrity
+   - Execution
+   - Execution must show a small static OFFLINE marker, not a “live” indicator
+
+3. Design tokens:
+   - Implement the color, spacing, radius, type, border, and semantic status
+     palette from CLAUDE.md.
+   - Use tabular numerals for numeric values.
+
+4. Reusable primitives:
+   - AppPanel
+   - PanelHeader
+   - StatusChip
+   - TruthLabel
+   - MetricValue
+   - MetricDefinitionTooltip
+   - EmptyState
+   - ErrorState
+   - LoadingState
+   - UnavailableState
+   - DataFreshnessLabel
+   - DenseDataTable
+   - FilterBar
+   - SectionTitle
+   - WarningBanner
+   - InlineEvidenceBadge
+   - ChartFrame
+   - SeverityIndicator
+
+5. Status semantics:
+   - PASS / FAIL / WARNING / INFO / UNKNOWN / PROXY / INCOMPLETE / OFFLINE
+   - Do not rely only on color.
+   - Ensure each status has accessible text and iconography.
+
+6. Development preview:
+   - Make a design-system preview page that demonstrates all primitives with
+     realistic research-system labels, not generic lorem ipsum.
+
+Visual restrictions:
+- No gradients, glass effects, giant page titles, crypto styling, round “stat
+  bubbles,” decorative art, or duplicated generic cards.
+- Panels must use subtle borders and no more than 6px radius.
+- Every chart frame must reserve space for title, unit, time basis, status, and
+  empty/error states.
+
+After implementation:
+- Run available checks.
+- List files changed.
+- Explain how to preview the design-system route.
+- Do not build data querying or complete dashboard pages yet.
+
+
+Prompt 5: Read CLAUDE.md. Build the persistent TradingLab System Status Bar using the
+design-system primitives.
+
+This component must have a typed data contract and support three states:
+1. Development fixture
+2. Actual repository/database-backed state where fields are available
+3. Unknown/unavailable state where source data is absent
+
+Display the following, left to right:
+
+- Operating mode: RESEARCH, BACKTEST, PAPER, DEMO, or LIVE
+- Market/data mode: HISTORICAL, DELAYED, REAL-TIME, or UNKNOWN
+- Data source, e.g. HistData, if confirmed
+- Latest successful pipeline run timestamp, if actual timestamp exists
+- Dataset fingerprint, abbreviated but clickable/copyable where present
+- Holdout status: SEALED, UNSEALED, UNKNOWN
+- Current cost profile and short values when available
+- Broker status: OFFLINE, NOT CONFIGURED, CONNECTED
+- Integrity warning count
+
+Required behavior:
+- Never make up “last updated” time or heartbeat time.
+- If a scheduler is not confirmed, do not say “refreshes every X minutes.”
+- If result provenance is absent, show “Provenance: UNKNOWN.”
+- Broker state must default to OFFLINE / NOT CONFIGURED based on confirmed
+  current capability, not a green connected state.
+- Status bar must not visually dominate the screen.
+
+Use a clearly marked development fixture only if repository data is not available.
+If fixture data is shown, include a small “DEV FIXTURE” label in the preview only.
+
+Add tests for status mapping and UNKNOWN/PROXY behavior.
+
+
+Prompt 6: Read CLAUDE.md. Build the desktop-first /research-command page only.
+
+Primary user questions:
+1. What happened in the most recent research pipeline run?
+2. Where are strategies in the discovery-to-promotion funnel?
+3. What evidence gaps, data-integrity risks, or system blockers require action?
+4. What should I review next?
+
+Use actual repository/database data where confirmed. If a field is not wired yet,
+use a clearly separated development fixture adapter and label its data state.
+Do not build other routes in this task.
+
+Page composition:
+
+A. Page header
+- Title: Research Command
+- Subtitle: “Research pipeline, strategy evidence, and integrity status”
+- Compact action controls only if actual existing commands can be safely invoked.
+- If no safe backend action exists, show no fake “Run Pipeline” button.
+
+B. Dominant Strategy Funnel
+Stages:
+- Discovered
+- Code Valid
+- Backtested
+- Cost Adjusted
+- Validated
+- Portfolio Candidate
+- Paper
+- Live
+
+For each stage, show:
+- Count
+- Blocked count where available
+- Rejected/retired count where available
+- Short stage definition
+- Click/filter interaction into Strategy Lab or a drawer
+
+Critical:
+- Do not invent funnel counts.
+- If a count cannot be mapped from existing DB state, display UNKNOWN or
+  NOT YET WIRED.
+- LIVE must show zero/offline unless actual connected-live records exist.
+
+C. Latest Pipeline Run panel
+Show:
+- Run identifier
+- Actual completion/start timestamp if present
+- Duration
+- Input count
+- Survivor count
+- Latest/top candidate
+- Primary blocker or failure reason
+- Data fingerprint
+- Holdout state
+- Cost-profile basis
+- Return provenance status
+
+Include:
+- successful run state
+- failed run state
+- no-runs-yet empty state
+- partial metadata state
+
+D. Research Queue
+Build an actionable queue driven by rules over actual metadata where possible.
+Include these initial rule categories:
+- Critical: result has unverified/synthetic-risk returns
+- Critical: compliance uses a proxy rather than authoritative checker
+- High: holdout unsealed/unknown for an otherwise promoted candidate
+- High: data fingerprint missing
+- High: run failed
+- Medium: strategy quality requires human review
+- Medium: consistency threshold is unset/unknown
+- Medium: stale or incomplete validation
+- Low: missing optional research artifact
+
+Each queue item must contain:
+- severity
+- title
+- reason
+- affected strategy/run
+- source/status label
+- suggested next action
+- navigation destination, where relevant
+
+E. Research Health strip
+Build five compact, information-rich modules:
+1. Data Coverage
+2. Discovery Quality
+3. Validation Coverage
+4. Cost Realism
+5. Integrity Ledger
+
+Do not use generic single-number cards. Each module needs:
+- a meaningful secondary measure
+- a compact trend/distribution or breakdown when data supports it
+- source/status labeling
+- an unavailable state when not supported
+
+F. Truth Ribbon
+Put a compact truth ribbon directly below the status bar or directly below the
+page title. It must communicate:
+- Data: historical/source
+- Result type: backtest/research
+- Returns provenance
+- Holdout state
+- Cost basis
+- Broker state
+
+Use the institutional design rules. Do not show a fake market chart, fake P&L,
+or fake execution activity.
+
+Provide:
+- changed files
+- data fields queried
+- fixture fields used, if any
+- known missing data mappings
+- test/preview instructions
+
+
+Prompt 7:  Read CLAUDE.md. Build /strategy-lab as the primary data-dense strategy research
+workspace.
+
+Primary question:
+“Which strategies deserve further research, validation, portfolio selection,
+paper trading, or rejection—and what is the evidence?”
+
+Implement:
+
+A. Dense strategy table
+Use a compact, sortable, filterable, keyboard-friendly table. Do not render
+strategies as a grid of large cards.
+
+Required columns:
+- Strategy name
+- Symbol / asset
+- Timeframe
+- Version
+- Lifecycle stage
+- Evidence stack
+- Net Sharpe
+- Net return or CAGR
+- Maximum drawdown
+- Trade count
+- PBO
+- Deflated Sharpe Ratio
+- Robustness
+- Parameter stability
+- Diversification / correlation signal
+- FTMO fit
+- Returns provenance
+- Holdout state
+- Last run timestamp
+
+Column rules:
+- Display sample size with performance metrics where possible.
+- Display named UNKNOWN / UNAVAILABLE states rather than blank cells.
+- Do not calculate or invent PBO, DSR, stability, diversification, or FTMO fit
+  if not returned by an authoritative source.
+- Do not say “optimized” where data represents Pareto selection.
+- All metrics must have hover definitions and calculation/context labels.
+
+B. Filters and saved views
+Include:
+- lifecycle stage
+- symbol
+- timeframe
+- evidence completeness
+- holdout state
+- returns provenance
+- manual-gate result
+- validation result
+- FTMO status
+- discovery source
+- date/run range
+
+Default saved views:
+- Needs Review
+- Validation Ready
+- Evidence Incomplete
+- Portfolio Candidates
+- Rejected
+- Manual Ideas
+- Data/Integrity Warnings
+
+C. Evidence stack
+Create a compact evidence stack per strategy:
+- DATA
+- COST
+- HOLDOUT
+- REAL RETURNS
+- MANUAL GATES
+- OVERFITTING
+- ROBUSTNESS
+- PARAMETER STABILITY
+- PORTFOLIO FIT
+- CHALLENGE FIT
+
+Each item shows:
+PASS / FAIL / WARNING / UNKNOWN / INCOMPLETE with accessible labels and tooltips.
+
+D. Row interaction
+Clicking a strategy row navigates to /strategies/:strategyId.
+Support copyable strategy ID and a contextual “view provenance” action.
+
+E. States
+Implement:
+- no strategy records
+- loading
+- database unavailable
+- partial records
+- metrics unavailable
+- development fixture mode
+
+F. Data quality
+Surface:
+- data fingerprint where available
+- historical data source
+- test window
+- timezone-verification state where available
+- synthetic-return risk
+- current cost profile
+
+Do not write strategy mutations, change lifecycle stage, delete data, or place
+orders in this task. This page is read-only.
+
+
+Prompt 8:   Read CLAUDE.md. Build /strategies/:strategyId as a rigorous strategy-evidence
+workspace.
+
+Primary decision:
+“Should this strategy be rejected, investigated, validated further, promoted to
+portfolio selection, or prepared for paper trading?”
+
+Do not create a generic profile page. Build a factual evidence dossier.
+
+Header requirements:
+- Strategy name, symbol, timeframe, version
+- Lifecycle stage
+- Strategy origin: manual, discovered, mutation, or UNKNOWN
+- Parent/lineage link where available
+- Run ID
+- Data fingerprint
+- Data window
+- Holdout state
+- Returns provenance
+- Cost profile
+- Truth status labels
+- “Last evaluated” timestamp only if actual
+
+Main tabs:
+
+1. Performance
+- Net equity curve with gross/net comparison only if both exist
+- Aligned drawdown chart
+- Headline metrics: net return, Sharpe, max drawdown, trade count, win rate,
+  profit factor, expectancy where actual
+- Period and sample-size context
+- Trade blotter / trade list where backtest_trades data exists
+- Explicit no-trades / unavailable / insufficient-sample states
+
+2. Validation
+- Manual gate verdict:
+  Sharpe threshold, minimum-trade threshold, maximum-drawdown threshold
+- Holdout split and sealed status
+- Walk-forward/significance results where available
+- PBO, DSR, CSCV
+- Permutation and robustness results
+- Lookahead/prohibited pattern scan results
+- Parameter stability / sensitivity heatmaps only from actual sweep results
+- A plain-language “Current promotion verdict” based solely on available evidence
+- No fabricated composite score
+
+3. Risk
+- Drawdown profile
+- VaR/CVaR, tail ratio, skew, kurtosis when real return series exists
+- MAE/MFE / hidden loss analysis when intrabar data exists
+- Stop/target analysis marked IN-SAMPLE until independently validated
+- Capacity/liquidity only if source data supports it; otherwise an honest
+  unavailable state
+
+4. Challenge Fit
+- FTMO compliance verdict only through FTMOComplianceChecker or clearly marked
+  PROXY / NOT WIRED
+- Daily loss, total drawdown, target, minimum days, Prague-day boundary context
+- Challenge simulation: P(pass), P95 worst day, breach-reason distribution
+- Stress injection comparison
+- Consistency-rule state must be UNKNOWN / CONFIGURATION REQUIRED until an actual
+  threshold is set
+- Never show an unconditional green “FTMO compliant” status from a display proxy
+
+5. Provenance
+- Dataset fingerprint
+- data source
+- symbol/timeframe
+- date range and bar count
+- timezone verification
+- code/config hash
+- parent/child lineage
+- run configuration
+- cost profile
+- result source tables/IDs
+- real-vs-synthetic returns status
+- integrity warnings
+
+Additional requirements:
+- Use evidence-based language: PASS, FAIL, INCOMPLETE, UNKNOWN—not hype.
+- Each chart includes title, unit, date range, source/status label, tooltip,
+  loading, empty, error, and unavailable state.
+- Ensure no metric is duplicated with conflicting formulas.
+- Keep all interactions read-only.
+- Add deep-linkable tabs.
+
+
+
+Prompt 9:Read CLAUDE.md. Build /data-integrity.
+
+Primary question:
+“Can I trust the datasets, result provenance, validation boundaries, and
+configuration that produced these conclusions?”
+
+This page should look like an engineering/audit console, not an admin settings
+page and not a generic analytics dashboard.
+
+Sections:
+
+A. Data Coverage
+- Historical data files/symbols
+- Date coverage
+- bar counts
+- missing periods/gaps
+- asset type
+- file parse/ingestion status where available
+- confidence note:
+  forex majors may be high confidence; crypto/indices must not be treated as
+  equivalent if data is thin/absent
+- per-symbol drill-down
+
+B. Timezone Verification
+- HistData timezone diagnostic status
+- expected conversion/verification state
+- explain why timezone matters for Prague-day FTMO calculations
+- show UNKNOWN if verification was not persisted per result
+
+C. Dataset Fingerprints
+- dataset hash
+- run mappings
+- row count
+- date range
+- mismatch detection
+- missing fingerprint warnings
+
+D. Holdout Integrity
+- configured holdout fraction
+- sealed/unsealed/unknown status
+- which runs used sealed data
+- records that lack enough metadata
+- never reveal sealed test data through the UI unless existing code explicitly
+  authorizes it
+
+E. Return Provenance
+- real returns confirmed
+- synthetic-return risk
+- unavailable
+- result-level list of affected records
+- clearly explain the requirement for require_returns()
+
+F. Configuration Integrity
+- current manual cost override
+- source and last modified state if available
+- config-freeze manifests and mismatch status when they exist
+- known requirement that display proxy compliance is not authoritative
+
+G. System Dependencies
+- SearXNG
+- Ollama
+- local data path
+- SQLite databases
+- relevant model availability
+- use health state only if actual checks exist
+- otherwise show “not checked” rather than fake green status
+
+The page must:
+- make trust gaps visible and actionable
+- support filters by severity, strategy, run, data source, and integrity type
+- clearly distinguish measured data from inferred/proxy data
+- remain read-only
+
+
+Prompt 10:    Read CLAUDE.md. Build /portfolio-builder.
+
+Primary decision:
+“Which validated strategies improve the portfolio after correlation, risk,
+cost, drawdown, and FTMO-style constraints—not merely which strategy has the
+highest standalone return?”
+
+This page is research/portfolio construction only. It must not look like a
+broker account portfolio page.
+
+Include:
+
+A. Candidate universe
+- Pull only strategies that have sufficient available evidence.
+- Explain exclusions:
+  rejected, insufficient validation, missing returns, no overlapping period,
+  missing cost basis, unavailable data.
+- Use a dense candidate table with evidence state.
+
+B. Portfolio construction workspace
+- Candidate selection area
+- Selected strategy list
+- Combined performance metrics:
+  combined Sharpe, drawdown, return, correlation, sample-period overlap
+- Strategy-level contribution when actual data supports it
+- Correlation matrix with accessible labels and values
+- Diversification filter verdicts
+- Tail-risk summary: VaR, CVaR, tail ratio, skew, kurtosis where real data exists
+
+C. Pareto Selection
+- Label this exactly as “Pareto Selection,” not “parameter optimization.”
+- Plot only objective dimensions actually available, such as return, drawdown,
+  correlation, or challenge pass probability.
+- Clearly describe whether a value is a hard constraint vs. an objective.
+- Show empty/unavailable state if no valid pool exists.
+
+D. Challenge-aware selection
+- Present challenge pass probability and P95 worst-day only where actual
+  simulation output exists.
+- Include stressed vs. baseline comparison.
+- Do not imply statistical certainty from Monte Carlo output.
+- Consistency-rule constraints must remain unset/unknown until configured.
+
+E. Result provenance
+- Combined results must name component strategy runs, common date overlap,
+  data fingerprints, cost profile, and calculation status.
+
+Required states:
+- no validated candidates
+- overlapping period unavailable
+- insufficient return series
+- partial portfolio
+- demo fixture
+- results not yet computed
+
+Do not add order sizing, broker allocation, auto-rebalancing, or execution
+controls.
+
+
+
+Prompt 11:  Read CLAUDE.md. Build /challenge-readiness.
+
+Primary decision:
+“Is this strategy or portfolio appropriate for an FTMO-style challenge under
+the rules actually modeled by the system, and where are the risk limits?”
+
+This is a research/compliance-readiness view. It is not a live account monitor
+until a real broker account is connected.
+
+Use authoritative logic where available:
+- FTMOComplianceChecker
+- firm_rules
+- ftmo_daily_anchor
+- challenge_simulator / pass_rate_simulator
+- stress_injections
+- consistency_rule
+
+Sections:
+
+A. Rule Model Status
+- Show modeled rules and unsupported/unmodeled rules.
+- Show whether the model is fully modeled using the actual is_fully_modelled
+  property or equivalent.
+- Clearly label PROXY / INCOMPLETE / AUTHORITATIVE.
+- Do not use the older display-proxy calculations as a compliance source.
+
+B. Rule Limits
+Display actual configured values with context:
+- daily loss limit
+- total drawdown limit
+- profit target
+- verification target
+- minimum trading days
+- Prague-day reset/timezone handling
+- fee or cost basis where it is part of the simulation
+
+C. Candidate Compliance Table
+- strategy/portfolio
+- compliance result
+- breach reasons
+- drawdown headroom
+- target progress
+- days traded
+- data/returns confidence
+- simulation availability
+- rule-model completeness
+
+D. Challenge Simulation
+- P(pass)
+- P95 worst day
+- drawdown distribution
+- breach-reason distribution
+- baseline versus stress-injected comparison
+- input assumptions and path count
+- no conclusion without declaring the input basis
+
+E. Consistency Rule
+- If the threshold is not set, prominently show:
+  “Configuration required: consistency threshold is not defined.”
+- Do not show numeric headroom until configured.
+
+F. Decision summary
+Use explicit outcomes:
+- Not ready
+- Evidence incomplete
+- Challenge simulation available
+- Candidate meets modeled constraints
+- Requires manual review
+
+Never label something “safe” or “guaranteed.” Do not build live daily-P&L
+widgets unless actual account-state integration is present.
+
+
+Prompt 12:  Read CLAUDE.md. Build /discovery-inbox.
+
+Primary decision:
+“What ideas are worth human review and testing next, which are redundant, and
+which are blocked by missing data?”
+
+The design should be a disciplined research queue—not a social feed and not a
+vanity dashboard for document counts.
+
+Include:
+
+A. Discovery summary
+- quality distribution
+- code-valid count
+- deduplicated candidate count
+- manual vs. extracted source
+- source reliability caveat
+- do not make raw scraped document count the main KPI
+
+B. Strategy Idea Inbox
+Dense table with:
+- title
+- source type: manual / web extraction / pasted source / mutation
+- quality score
+- code-valid state
+- dedup cluster
+- source URL or source reference
+- extraction confidence
+- data requirements
+- current stage
+- review status
+- creation timestamp
+- human notes if existing
+
+C. Dedup review
+- group near-duplicates by cluster
+- show similarity score
+- designate candidate to retain
+- preserve source provenance
+- no automatic destructive merge action in this task
+
+D. Untestable ideas
+- group by missing required data
+- why the idea is blocked
+- confidence
+- category
+- suggested next research dependency
+- clearly distinguish “not testable” from “rejected”
+
+E. Manual idea intake
+Only create this if there is already a safe existing backend/function for
+strategy_inbox.py.
+- A form should validate required fields.
+- Do not write to the DB unless the existing schema and behavior are verified.
+- If a write is implemented, show the exact target database/table and create an
+  auditable confirmation state.
+- If not safe to wire now, render it as a disabled “Backend integration pending”
+  state rather than a fake submit form.
+
+No fake AI scoring, no generic “idea confidence” without source definition, and
+no decision-making claims beyond the recorded evidence.
+
+
+Prompt 13:       Read CLAUDE.md. Build /execution as a future-facing but operationally honest
+Execution & Session Control page.
+
+Current reality:
+- MT5 transport exists as a file-IPC contract.
+- The MT5 EA bridge is not present.
+- No live broker is connected.
+- Real-time widgets must not imply live operation.
+
+Default page state:
+“Execution Offline — Broker bridge is not configured.”
+
+Build:
+
+A. Connection and readiness panel
+- Broker connection: OFFLINE / NOT CONFIGURED
+- MT5 transport contract: available/unavailable based on source inspection
+- EA bridge: MISSING / configured only if verified
+- Feed: not connected
+- Last heartbeat: unavailable unless actual heartbeat file exists
+- Positions reconciliation: unavailable
+- No green “connected” appearance by default
+
+B. Preflight checklist
+Map actual preflight checks where code supports them:
+- firm rules
+- broker connection
+- feed alive
+- clock sync
+- positions reconciled
+- rule budgets
+- disk space
+- DB backup
+- governor
+- config freeze
+
+Each check must support PASS / WARN / FAIL / SKIP / NOT RUN.
+Do not turn SKIP into PASS.
+
+C. Guard architecture
+Display informational/read-only status of:
+- live governor
+- kill switch
+- entry guard
+- tick guard
+- regime throttle
+- time stop
+- weekend policy
+- watchdog
+- config freeze
+- parity harness
+- slippage recorder
+
+D. Safe actions
+Do not implement session start, order placement, flattening, kill switch,
+configuration override, or any irreversible/write action in this task.
+If those controls are shown for future planning, they must be disabled and have
+a clear reason: “Requires verified broker bridge and explicit implementation.”
+
+E. Paper/demo future mode
+If shadow trader has an existing safe integration, display it distinctly as:
+PAPER / SIMULATED LIVE.
+Never call simulated fills real fills.
+
+Use no blinking lights, live ticker animations, fake P&L, or emergency button
+theatrics.
+
+Prompt 14:       Read CLAUDE.md. Replace development fixtures with actual read-only data adapters
+incrementally.
+
+Work one route at a time, beginning with:
+1. Research Command
+2. Strategy Lab
+3. Strategy Detail
+4. Data & Integrity
+5. Portfolio Builder
+6. Challenge Readiness
+
+For each route:
+
+1. Identify the exact source database(s), table(s), query function(s), and
+   field(s) used.
+2. Create a typed read-only repository adapter.
+3. Map missing fields explicitly to UNKNOWN / UNAVAILABLE / NOT WIRED.
+4. Do not calculate a new financial metric in the UI if the backend already has,
+   or should have, a canonical definition.
+5. Do not make a calculated field look authoritative if its underlying record is
+   incomplete, proxy-derived, synthetic-risk, or not tied to a data fingerprint.
+6. Add migration-safe handling for absent databases, tables, columns, and empty
+   result sets.
+7. Retain a development fixture adapter for local visual regression, but make it
+   impossible for fixtures to masquerade as production data.
+8. Add tests using a temporary SQLite database with:
+   - complete record
+   - missing metadata
+   - synthetic-risk result
+   - proxy compliance result
+   - no results
+   - failed pipeline run
+   - unavailable optional metric
+
+At the end of each route, report:
+- source fields successfully wired
+- fields still unmapped
+- assumptions avoided
+- user-visible UNKNOWN or PROXY labels added
+- test coverage added
+
+
+
+Prompt 15: Read CLAUDE.md and review the current TradingLab dashboard as a principal
+product designer, quantitative researcher, and frontend accessibility engineer.
+
+Do not add new product features first. Audit what exists and make targeted
+refinements.
+
+Review for:
+
+1. Generic AI/SaaS patterns
+- oversized cards
+- excessive rounded corners
+- meaningless gradients
+- generic greetings
+- random empty decorative charts
+- generic “AI confidence”
+- crypto-exchange style
+- too much visual noise
+
+2. Research credibility
+- every metric has source, period, units, and data state
+- no fake live behavior
+- no proxy presented as authoritative
+- no real/synthetic returns ambiguity hidden
+- holdout and cost basis are visible where needed
+- sample size appears with performance claims
+- FTMO compliance respects modeled/unmodeled rule boundaries
+
+3. Information hierarchy
+- the main decision is visible in five seconds
+- Research Command prioritizes pipeline status and blockers
+- Strategy Lab is table-first and scannable
+- Strategy Detail makes promote/reject evidence clear
+- actions are appropriately limited and safe
+
+4. Data visualization
+- charts have titles, units, ranges, source/status, and tooltips
+- red/green are not the only signal
+- no misleading scales or omitted baselines
+- unavailable data has an intentional state, not blank white space
+
+5. Accessibility and usability
+- contrast
+- keyboard navigation
+- focus states
+- table usability
+- dense content readability
+- responsive desktop behavior
+- semantic labels for status
+
+6. Code quality
+- duplicate metric formatting removed
+- all repeated state patterns use primitives
+- no fixture data leaks into production paths
+- no untyped data crossings
+- tests cover critical truth-state mappings
+
+Produce:
+A. A ranked issue list with severity and exact locations.
+B. A concrete refactor plan.
+C. Implement only high-impact, low-risk corrections first.
+D. List every visual/product decision changed and why.
+
+
+
+Prompt 16: I am attaching screenshots of the current TradingLab dashboard.
+
+Review them against CLAUDE.md and give a ruthless visual/product critique.
+
+Evaluate:
+- Does it look like a proprietary quantitative research workstation or generic
+  AI-fintech?
+- Is the hierarchy clear within five seconds?
+- Are status colors restrained and semantic?
+- Are panels too card-like, rounded, repetitive, or spacious?
+- Does typography feel dense, credible, and readable?
+- Are charts and tables decision-useful rather than decorative?
+- Are truth labels visible without being visually noisy?
+- Does anything falsely imply live trading, verified compliance, or real-time data?
+- What 10 exact UI changes would improve it most?
+
+Then provide a single implementation prompt for the highest-impact next visual
+refinement. Do not suggest a redesign unless it materially improves research
+credibility.

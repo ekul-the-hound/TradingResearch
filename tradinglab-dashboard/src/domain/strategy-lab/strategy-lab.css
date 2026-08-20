@@ -1,0 +1,52 @@
+.tl-evstack {
+  display: inline-flex;
+  gap: 2px;
+  flex-wrap: nowrap;
+}
+.tl-evstack .tl-chip {
+  height: 15px;
+  padding: 0 3px;
+  font-size: 9px;
+  letter-spacing: 0;
+}
+.tl-evstack .tl-chip__glyph {
+  display: none;
+}
+
+.tl-cell-missing {
+  color: var(--c-text-muted);
+}
+.tl-cell-proxy {
+  color: var(--c-text-muted);
+  font-size: 10px;
+}
+
+.tl-provtag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--c-border);
+}
+.tl-provtag--pass {
+  color: var(--c-pass);
+  border-color: rgba(58, 203, 143, 0.35);
+}
+.tl-provtag--fail {
+  color: var(--c-fail);
+  border-color: rgba(242, 109, 109, 0.4);
+  background: var(--c-fail-bg);
+}
+.tl-provtag--warning {
+  color: var(--c-warn);
+  border-color: rgba(246, 184, 75, 0.35);
+}
+.tl-provtag--unknown {
+  color: var(--c-text-muted);
+}
+
+.tl-lab-note {
+  font-size: var(--fs-11);
+  color: var(--c-text-muted);
+  margin-top: var(--s-3);
+}

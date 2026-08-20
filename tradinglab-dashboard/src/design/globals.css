@@ -1,0 +1,111 @@
+@import "./tokens.css";
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-13);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular numerals everywhere numbers appear (CLAUDE.md §5) */
+.num,
+.tnum,
+td,
+th,
+input {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: var(--c-info);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+/* Visible, non-color-only focus (accessibility, CLAUDE.md §8) */
+:focus-visible {
+  outline: 2px solid var(--c-info);
+  outline-offset: 1px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--c-border);
+  border-radius: var(--r-sm);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Skip link — visible only on focus */
+.tl-skiplink {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--c-info);
+  color: var(--c-bg);
+  padding: 6px 12px;
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  font-size: var(--fs-12);
+}
+.tl-skiplink:focus {
+  left: 8px;
+  top: 8px;
+}
+
+/* Respect reduced-motion for all animation/transition */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Screen-reader-only utility */
+.tl-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

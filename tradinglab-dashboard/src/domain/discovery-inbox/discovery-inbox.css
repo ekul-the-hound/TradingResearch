@@ -1,0 +1,115 @@
+.tl-disc-name {
+  font-weight: 600;
+  font-size: var(--fs-12);
+}
+.tl-disc-summary {
+  font-size: var(--fs-11);
+  color: var(--c-text-muted);
+  max-width: 340px;
+  white-space: normal;
+}
+.tl-disc-flags {
+  font-size: var(--fs-11);
+  color: var(--c-text-2);
+}
+.tl-disc-model {
+  font-size: 10px;
+  color: var(--c-text-muted);
+}
+.tl-disc-dupof {
+  font-size: 10px;
+  color: var(--c-warn);
+}
+.tl-dup {
+  opacity: 0.7;
+}
+
+/* quality bars */
+.tl-qbars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 48px;
+}
+.tl-qbar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 3px;
+}
+.tl-qbar {
+  width: 100%;
+  background: var(--c-research);
+  border-radius: 1px;
+  min-height: 3px;
+}
+.tl-qbar-label {
+  font-size: 9px;
+  color: var(--c-text-muted);
+}
+
+/* ideas */
+.tl-ideas {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--s-3);
+  padding: var(--s-4);
+}
+@media (max-width: 900px) {
+  .tl-ideas {
+    grid-template-columns: 1fr;
+  }
+}
+.tl-idea {
+  border: var(--border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  padding: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tl-idea__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+.tl-idea__title {
+  font-size: var(--fs-13);
+  font-weight: 600;
+}
+.tl-idea__cat {
+  font-size: 10px;
+  color: var(--c-research);
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+.tl-idea__desc {
+  font-size: var(--fs-12);
+  color: var(--c-text-2);
+  margin: 0;
+}
+.tl-idea__why,
+.tl-idea__need {
+  font-size: var(--fs-11);
+  color: var(--c-text-2);
+}
+.tl-idea__label {
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 9px;
+  margin-right: 4px;
+}
+.tl-idea__foot {
+  display: flex;
+  gap: var(--s-3);
+  font-size: 10px;
+  color: var(--c-text-muted);
+  margin-top: 2px;
+}

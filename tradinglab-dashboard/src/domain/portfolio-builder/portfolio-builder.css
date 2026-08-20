@@ -1,0 +1,54 @@
+.tl-cand--ineligible {
+  opacity: 0.55;
+}
+.tl-cand__reason {
+  font-size: var(--fs-11);
+  color: var(--c-text-muted);
+  max-width: 280px;
+  white-space: normal;
+}
+.tl-linklike {
+  background: none;
+  border: none;
+  color: var(--c-info);
+  padding: 0;
+  font-size: var(--fs-12);
+}
+.tl-linklike:hover {
+  text-decoration: underline;
+}
+
+/* correlation matrix */
+.tl-corr-wrap {
+  overflow-x: auto;
+}
+.tl-corr {
+  border-collapse: collapse;
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+}
+.tl-corr th {
+  padding: 4px 6px;
+  color: var(--c-text-2);
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+.tl-corr tbody th {
+  text-align: right;
+  position: sticky;
+  left: 0;
+  background: var(--c-surface);
+}
+.tl-corr td {
+  padding: 5px 8px;
+  text-align: center;
+  border: 1px solid var(--c-bg);
+  color: var(--c-text);
+  min-width: 46px;
+}
+.tl-corr-legend {
+  font-size: var(--fs-11);
+  color: var(--c-text-muted);
+  margin: var(--s-2) 0 0;
+}

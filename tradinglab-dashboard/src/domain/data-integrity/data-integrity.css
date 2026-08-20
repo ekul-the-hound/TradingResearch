@@ -1,0 +1,112 @@
+.tl-di-missing {
+  color: var(--c-warn);
+  font-size: var(--fs-11);
+}
+.tl-di-note {
+  font-size: var(--fs-11);
+  color: var(--c-text-muted);
+  margin: var(--s-2) 0 0;
+}
+
+/* ledger */
+.tl-ledger {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: var(--s-3);
+}
+.tl-ledger__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tl-ledger__label {
+  font-size: var(--fs-11);
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.tl-ledger__value {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* coverage bar */
+.tl-cov__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-12);
+  color: var(--c-text-2);
+  margin-bottom: 6px;
+}
+.tl-cov__track {
+  height: 8px;
+  background: var(--c-raised);
+  border: var(--border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.tl-cov__fill {
+  height: 100%;
+}
+.tl-cov__fill--pass {
+  background: var(--c-pass);
+}
+
+/* dependency strip */
+.tl-deps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-3);
+}
+@media (max-width: 1000px) {
+  .tl-deps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.tl-dep {
+  border: var(--border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  padding: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tl-dep__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tl-dep__name {
+  font-size: var(--fs-13);
+  font-weight: 600;
+}
+.tl-dep__detail {
+  font-size: var(--fs-11);
+  color: var(--c-text-2);
+}
+.tl-dep__checked {
+  font-size: 10px;
+  color: var(--c-text-muted);
+}
+
+/* config table */
+.tl-cfg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-12);
+}
+.tl-cfg-table th {
+  text-align: left;
+  width: 260px;
+  padding: 6px var(--s-2);
+  color: var(--c-text-2);
+  font-weight: 500;
+  border-bottom: 1px solid rgba(38, 54, 70, 0.5);
+}
+.tl-cfg-table td {
+  padding: 6px var(--s-2);
+  color: var(--c-text);
+  border-bottom: 1px solid rgba(38, 54, 70, 0.5);
+}

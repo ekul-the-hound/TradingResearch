@@ -1,0 +1,197 @@
+.tl-shell {
+  display: grid;
+  grid-template-columns: var(--nav-w) 1fr;
+  grid-template-rows: var(--statusbar-h) 1fr;
+  grid-template-areas:
+    'brand status'
+    'nav content';
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Brand block sits above nav, aligned with status bar height */
+.tl-brand {
+  grid-area: brand;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0 var(--s-4);
+  border-bottom: var(--border);
+  border-right: var(--border);
+  background: var(--c-surface);
+}
+.tl-brand__mark {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-sm);
+  background: var(--c-info-bg);
+  border: 1px solid rgba(40, 184, 200, 0.5);
+  color: var(--c-info);
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.tl-brand__name {
+  font-size: var(--fs-14);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.tl-brand__name span {
+  color: var(--c-info);
+}
+
+/* status bar area (placeholder until Prompt 5) */
+.tl-statusarea {
+  grid-area: status;
+  border-bottom: var(--border);
+  background: var(--c-surface);
+  display: flex;
+  align-items: center;
+}
+
+.tl-nav {
+  grid-area: nav;
+  border-right: var(--border);
+  background: var(--c-surface);
+  padding: var(--s-3) var(--s-2);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tl-nav__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 7px var(--s-3);
+  border-radius: var(--r-sm);
+  color: var(--c-text-2);
+  font-size: var(--fs-13);
+  font-weight: 500;
+  border-left: 2px solid transparent;
+}
+.tl-nav__item:hover {
+  background: var(--c-raised);
+  color: var(--c-text);
+  text-decoration: none;
+}
+.tl-nav__item.is-active {
+  background: var(--c-raised);
+  color: var(--c-text);
+  border-left-color: var(--c-info);
+}
+.tl-nav__glyph {
+  width: 16px;
+  text-align: center;
+  color: var(--c-text-muted);
+  font-size: 13px;
+}
+.tl-nav__item.is-active .tl-nav__glyph {
+  color: var(--c-info);
+}
+.tl-nav__offline {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--c-text-muted);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  padding: 1px 4px;
+}
+.tl-nav__sep {
+  margin: var(--s-3) var(--s-3) var(--s-2);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+
+.tl-content {
+  grid-area: content;
+  overflow-y: auto;
+  padding: var(--s-5);
+}
+.tl-content:focus {
+  outline: none;
+}
+.tl-content__inner {
+  max-width: 1680px;
+  margin: 0 auto;
+}
+
+/* 12-column grid utility */
+.tl-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--s-4);
+}
+.tl-page-title {
+  font-size: var(--fs-18);
+  font-weight: 700;
+  margin: 0 0 2px;
+}
+.tl-page-sub {
+  font-size: var(--fs-12);
+  color: var(--c-text-muted);
+  margin: 0 0 var(--s-4);
+}
+
+/* Responsive: collapse grid but stay dense, not a mobile card stack */
+@media (max-width: 1100px) {
+  .tl-grid > * {
+    grid-column: span 12 !important;
+  }
+}
+@media (max-width: 820px) {
+  .tl-shell {
+    grid-template-columns: 56px 1fr;
+  }
+  .tl-nav__label,
+  .tl-brand__name,
+  .tl-nav__offline {
+    display: none;
+  }
+}
+
+/* ---- SystemStatusBar ---- */
+.tl-statusbar {
+  gap: var(--s-4);
+  padding: 0 var(--s-4);
+  overflow-x: auto;
+}
+.tl-statusbar__segs {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  min-width: 0;
+}
+.tl-statusbar__copy {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.tl-statusbar__copy:hover .tl-truth__val {
+  text-decoration: underline;
+}
+.tl-statusbar__fixture {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--c-research);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  background: var(--c-research-bg);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+}
+.tl-statusbar__note {
+  font-size: var(--fs-11);
+  color: var(--c-text-muted);
+}
+.tl-statusbar__note--err {
+  color: var(--c-fail);
+}

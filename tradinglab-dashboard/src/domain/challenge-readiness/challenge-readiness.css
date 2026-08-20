@@ -1,0 +1,6 @@
+.tl-table tbody tr[aria-selected='true'] {
+  background: var(--c-info-bg);
+}
+.tl-table tbody tr[aria-selected='true'] td {
+  border-color: rgba(40, 184, 200, 0.3);
+}
