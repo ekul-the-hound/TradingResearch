@@ -135,11 +135,30 @@ python run_pipeline.py --from-step 1        # everything
 python run_pipeline.py --from-step 4 --to-step 6
 ```
 
-Dashboard:
+Dashboard (React + TypeScript, read-only):
 
 ```powershell
-python react_dashboard2.py
+cd tradinglab-dashboard
+npm install          # first time only
+npm run dev          # http://localhost:5173 -- DEV FIXTURE data
 ```
+
+To view real data instead of fixtures, run the read-only SQLite bridge from the
+repo root in a second terminal, then point the frontend at it:
+
+```powershell
+conda activate quant2
+python tradinglab-dashboard\bridge\sqlite_bridge.py --root . --port 8799
+
+# in the dashboard terminal:
+$env:VITE_BRIDGE_URL = 'http://127.0.0.1:8799'; npm run dev
+```
+
+The bridge opens every database with `mode=ro&immutable=1`. It never writes,
+never places orders, and reports a missing database, table, or column as an
+explicit UNAVAILABLE state rather than a fabricated zero. See
+`tradinglab-dashboard/README.md` for the full frontend documentation and
+`tradinglab-dashboard/CLAUDE.md` for the design and honesty rules it follows.
 
 ---
 
@@ -239,16 +258,51 @@ that conversion right. `verify_histdata_timezone.py` checks it.
 
 ---
 
+## Prop-firm target and live rollout
+
+**Target firm: FTMO (US).** US accounts run MT5 only, routed via OANDA, under
+netting / FIFO / single-position-per-symbol rules.
+
+| Phase | Target | Min trading days | Daily loss | Max drawdown |
+|-------|--------|------------------|-----------|--------------|
+| Free Trial | 5% | 2 | 5% | 10% |
+| Challenge | 10% | 4 | 5% | 10% |
+| Verification | 5% | 4 | 5% | 10% |
+
+Rollout order — **the Free Trial is a dress rehearsal, not a formality.**
+Passing it does not grant funding; it exists to prove the loop before money is
+spent. FTMO allows unlimited Free Trials, each running 14 days.
+
+1. Install MT5 on the Mac mini; log into an FTMO US Free Trial account.
+2. Build the MQL5 Expert Advisor that implements the `mt5_transport.py`
+   file-IPC contract.
+3. Arm `live_governor.py` and `kill_switch.py` against the account.
+4. Run the trial for 2–4 weeks. **Go/no-go bar: live results within ±10% of
+   backtest.** Divergence beyond ~20% means investigate before paying for a
+   Challenge — broker speed, spreads, or the netting/FIFO constraints.
+5. Only then buy the paid Challenge.
+
+Note that a breached FTMO account has no reset option and must be repurchased
+at full price, which is the entire reason for step 4.
+
+---
+
 ## Known gaps
 
 Live trading is blocked on:
 
-- **MT5 terminal** not installed; the adapter is unverified past `initialize`.
-  Its 54 tests run against an injected fake.
-- **Target prop firm** unconfirmed — blocks consistency-cap calibration and
-  per-firm configuration.
-- **Dashboard registration** — `dashboard_compare_page.py` needs four lines in
-  `react_dashboard2.py` (`NAV`, `TITLES`, `PAGES`, plus the factory call).
+- **MT5 EA bridge not built.** `mt5_transport.py` defines the file-IPC
+  contract, but the MetaTrader Expert Advisor that reads and writes those files
+  does not exist yet. The adapter is unverified past `initialize`; its 54 tests
+  run against an injected fake.
+- **MT5 terminal** not yet installed on the Mac mini / FTMO US account.
+- **FTMO US netting / FIFO / single-position-per-symbol** behaviour is not
+  reconciled against backtester assumptions. The Free Trial is the intended
+  place to catch any divergence.
+- **Free Trial rule variant not configured.** The FTMO Free Trial is one phase
+  with a 5% target and 2 minimum trading days; the paid Challenge is 10% and 4.
+  Loss limits (5% daily / 10% total) are identical. `FirmRules.profit_targets`
+  currently has `challenge` and `verification` only.
 
 Data and configuration:
 
@@ -275,5 +329,6 @@ Known behaviour worth remembering:
 ## Stack
 
 Python 3.12 / conda (`quant2`) · Backtrader · pandas / numpy · pymoo (NSGA-II)
-· SQLite · ReactPy + Plotly · SearXNG (Docker) · Ollama · FAISS · hypothesis ·
+· SQLite · React + TypeScript + Vite (dashboard) · SearXNG (Docker) · Ollama ·
+FAISS · hypothesis ·
 MetaTrader5
