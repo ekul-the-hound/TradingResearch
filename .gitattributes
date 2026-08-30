@@ -1,0 +1,10 @@
+* text=auto eol=crlf
+*.ts text eol=crlf
+*.tsx text eol=crlf
+*.css text eol=crlf
+*.py text eol=crlf
+*.png binary
+*.jpg binary
+*.db binary
+*.xlsx binary
+*.docx binary
