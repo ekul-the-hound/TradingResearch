@@ -1040,6 +1040,11 @@ import importlib.util
 # ==============================================================================
 
 def main():
+    # LOCAL-ONLY GUARD: refuse to start on any cloud discovery mode or :cloud
+    # model tag. Runs before any model work or config resolution below.
+    from guards import assert_local_only
+    assert_local_only()
+
     parser = argparse.ArgumentParser(description="TradingLab Pipeline Orchestrator")
     parser.add_argument("--from-step", type=int, default=2,
                         help="Start from step N (default: 2, skips Discovery)")

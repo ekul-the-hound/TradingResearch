@@ -1,0 +1,14 @@
+--- /mnt/project/discovery_config.py	1979-12-31 00:00:00.000000000 +0000
++++ tr/discovery_config.py	2026-09-10 18:16:19.765314803 +0000
+@@ -36,7 +36,10 @@
+ # "cloud"  -> Uses Ollama Cloud (big models on Ollama's GPUs, needs ollama signin)
+ # "local"  -> Uses local Ollama (smaller models on your GPU, free, offline)
+ 
+-MODE = os.getenv("DISCOVERY_MODE", "cloud")
++# LOCAL-ONLY BUILD: default is local27 so the safe path is the default and
++# cloud is opt-in, not opt-out. Setting DISCOVERY_MODE=cloud|hybrid will be
++# refused at startup by guards.assert_local_only().
++MODE = os.getenv("DISCOVERY_MODE", "local27")
+ 
+ 
+ # ==============================================================================

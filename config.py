@@ -13,8 +13,21 @@ from pathlib import Path
 # ==============================================================================
 # CLAUDE API CONFIGURATION
 # ==============================================================================
+# --- LOCAL-ONLY BUILD -----------------------------------------------------
+# This build is hard-disabled from making any Anthropic / Claude cloud call.
+# ENABLE_ANTHROPIC gates every Anthropic call site in the codebase
+# (adversarial_reviewer.py, mutate_strategy.py, compare_variants.py). When
+# False, those sites fail loudly instead of falling through to a paid call.
+# To re-enable the cloud path: set ENABLE_ANTHROPIC = True AND restore
+# load_api_key() below (and reinstall `anthropic`, re-add your key file).
+ENABLE_ANTHROPIC = False
+
+
 def load_api_key():
-    """Load API key from file, fallback to environment variable"""
+    """
+    Load API key from file, fallback to environment variable.
+    Retained for reversibility but NOT used while ENABLE_ANTHROPIC is False.
+    """
     key_file = Path(__file__).parent / 'BacktestingAgent_API_KEY.txt'
     if key_file.exists():
         with open(key_file, 'r', encoding='utf-8') as f:
@@ -23,7 +36,11 @@ def load_api_key():
                 return key
     return os.getenv('ANTHROPIC_API_KEY', '')
 
-CLAUDE_API_KEY = load_api_key()
+
+# Forced empty in the local-only build regardless of key file / env var, so
+# no code path can silently construct an Anthropic client with a real key.
+# (Was: CLAUDE_API_KEY = load_api_key())
+CLAUDE_API_KEY = ''
 CLAUDE_MODEL = 'claude-sonnet-4-20250514'
 CLAUDE_MAX_TOKENS = 4096
 

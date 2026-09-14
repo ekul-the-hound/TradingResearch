@@ -20,7 +20,7 @@ yfinance>=0.2.18
 rarfile>=4.0
 
 # --- Claude API (strategy mutation) ---
-anthropic>=0.18.0
+# anthropic>=0.18.0  # removed: local-only build (re-add to re-enable cloud path)
 
 # --- Dashboard (ReactPy) ---
 reactpy[fastapi]>=1.0.0

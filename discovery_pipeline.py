@@ -604,6 +604,11 @@ class DiscoveryPipeline:
 # ==============================================================================
 
 def main():
+    # LOCAL-ONLY GUARD: refuse to start on any cloud discovery mode or :cloud
+    # model tag, before any search/model work begins.
+    from guards import assert_local_only
+    assert_local_only()
+
     parser = argparse.ArgumentParser(
         description="TradingLab Strategy Discovery Pipeline (Step 1)",
         formatter_class=argparse.RawDescriptionHelpFormatter,

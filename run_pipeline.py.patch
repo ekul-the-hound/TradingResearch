@@ -1,0 +1,14 @@
+--- /mnt/project/run_pipeline.py	1979-12-31 00:00:00.000000000 +0000
++++ tr/run_pipeline.py	2026-09-10 18:16:24.283013400 +0000
+@@ -1040,6 +1040,11 @@
+ # ==============================================================================
+ 
+ def main():
++    # LOCAL-ONLY GUARD: refuse to start on any cloud discovery mode or :cloud
++    # model tag. Runs before any model work or config resolution below.
++    from guards import assert_local_only
++    assert_local_only()
++
+     parser = argparse.ArgumentParser(description="TradingLab Pipeline Orchestrator")
+     parser.add_argument("--from-step", type=int, default=2,
+                         help="Start from step N (default: 2, skips Discovery)")

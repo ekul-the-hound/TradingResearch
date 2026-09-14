@@ -1,0 +1,28 @@
+--- /mnt/project/mutate_strategy.py	1979-12-31 00:00:00.000000000 +0000
++++ tr/mutate_strategy.py	2026-09-10 18:16:06.606778310 +0000
+@@ -23,7 +23,10 @@
+ import json
+ from pathlib import Path
+ from datetime import datetime
+-from anthropic import Anthropic
++try:
++    from anthropic import Anthropic  # optional; disabled in local-only build
++except Exception:
++    Anthropic = None
+ 
+ import config
+ from mutation_config import get_all_ideas
+@@ -300,6 +303,13 @@
+ def call_mutation_agent(base_code, performance, ideas):
+     """Call Claude to generate variants"""
+     
++    import config
++    if not getattr(config, "ENABLE_ANTHROPIC", False) or Anthropic is None:
++        raise RuntimeError(
++            "Anthropic disabled in this build. "
++            "Set ENABLE_ANTHROPIC=True to re-enable."
++        )
++
+     print(f"\n[AI] Calling Claude to generate {NUM_VARIANTS} variants...")
+     print(f"   This may take 30-60 seconds...\n")
+     

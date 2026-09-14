@@ -1,0 +1,11 @@
+--- /mnt/project/requirements.txt	1979-12-31 00:00:00.000000000 +0000
++++ tr/requirements.txt	2026-09-10 18:16:31.194483515 +0000
+@@ -20,7 +20,7 @@
+ rarfile>=4.0
+ 
+ # --- Claude API (strategy mutation) ---
+-anthropic>=0.18.0
++# anthropic>=0.18.0  # removed: local-only build (re-add to re-enable cloud path)
+ 
+ # --- Dashboard (ReactPy) ---
+ reactpy[fastapi]>=1.0.0

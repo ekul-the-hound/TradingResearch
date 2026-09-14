@@ -266,12 +266,25 @@ def analyze_with_claude(variant_stats, ranked):
     print("Estimated cost: ~$0.15-0.25")
     print("-"*70)
     
+    if not getattr(config, "ENABLE_ANTHROPIC", False):
+        raise RuntimeError(
+            "Anthropic disabled in this build. "
+            "Set ENABLE_ANTHROPIC=True to re-enable."
+        )
+
     confirm = input("\nProceed with Claude analysis? (Y/N): ").strip().upper()
     if confirm != 'Y':
         print("Skipped.")
         return
-    
-    from anthropic import Anthropic
+
+    try:
+        from anthropic import Anthropic
+    except Exception:
+        raise RuntimeError(
+            "Anthropic disabled in this build. "
+            "Set ENABLE_ANTHROPIC=True to re-enable. "
+            "(the `anthropic` package is also not installed)"
+        )
     
     # Build summary for Claude
     summary = "## VARIANT COMPARISON RESULTS:\n\n"

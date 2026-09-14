@@ -34,7 +34,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from anthropic import Anthropic
+try:
+    from anthropic import Anthropic  # optional; disabled in local-only build
+except Exception:
+    Anthropic = None
 import config
 
 
@@ -75,9 +78,20 @@ class AdversarialReviewer:
     """
     
     def __init__(self):
+        if not getattr(config, "ENABLE_ANTHROPIC", False):
+            raise RuntimeError(
+                "Anthropic disabled in this build. "
+                "Set ENABLE_ANTHROPIC=True to re-enable."
+            )
+        if Anthropic is None:
+            raise RuntimeError(
+                "Anthropic disabled in this build. "
+                "Set ENABLE_ANTHROPIC=True to re-enable. "
+                "(the `anthropic` package is also not installed)"
+            )
         if not config.CLAUDE_API_KEY:
             raise ValueError("Claude API key not configured")
-        
+
         self.client = Anthropic(api_key=config.CLAUDE_API_KEY)
         self.model = config.CLAUDE_MODEL
         self.reviews = []

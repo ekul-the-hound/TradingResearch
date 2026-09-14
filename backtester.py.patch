@@ -1,0 +1,37 @@
+--- /mnt/project/backtester.py	1979-12-31 00:00:00.000000000 +0000
++++ tr/backtester.py	2026-09-10 18:15:50.643149051 +0000
+@@ -5,7 +5,10 @@
+ import yfinance as yf
+ import pandas as pd
+ import time
+-from anthropic import Anthropic
++try:
++    from anthropic import Anthropic  # optional; local-only build does not use it
++except Exception:
++    Anthropic = None
+ import json
+ import config
+ from database import ResultsDatabase
+@@ -19,13 +22,15 @@
+         self.results = []
+         self.db = ResultsDatabase()
+         
+-        # Initialize Claude API
+-        if config.CLAUDE_API_KEY:
+-            self.claude = Anthropic(api_key=config.CLAUDE_API_KEY)
+-            print("[OK] Claude AI initialized")
+-        else:
+-            self.claude = None
+-            print("[WARN]  Claude AI not initialized (no API key found)")
++        # LOCAL-ONLY BUILD: Claude results-commentary is hard-disabled. The
++        # downstream code path (get_claude_analysis) is kept intact but dead
++        # because self.claude is always None here. Re-enable by restoring the
++        # original block below and setting config.ENABLE_ANTHROPIC = True.
++        #   if config.CLAUDE_API_KEY:
++        #       self.claude = Anthropic(api_key=config.CLAUDE_API_KEY)
++        #   else:
++        #       self.claude = None
++        self.claude = None
+     
+     def download_data_with_retry(self, symbol, start_date, end_date, retries=3):
+         """Download data with retry logic"""

@@ -23,7 +23,10 @@ import re
 import json
 from pathlib import Path
 from datetime import datetime
-from anthropic import Anthropic
+try:
+    from anthropic import Anthropic  # optional; disabled in local-only build
+except Exception:
+    Anthropic = None
 
 import config
 from mutation_config import get_all_ideas
@@ -300,6 +303,13 @@ The base strategy is currently unprofitable on average. Variants should aim to:
 def call_mutation_agent(base_code, performance, ideas):
     """Call Claude to generate variants"""
     
+    import config
+    if not getattr(config, "ENABLE_ANTHROPIC", False) or Anthropic is None:
+        raise RuntimeError(
+            "Anthropic disabled in this build. "
+            "Set ENABLE_ANTHROPIC=True to re-enable."
+        )
+
     print(f"\n[AI] Calling Claude to generate {NUM_VARIANTS} variants...")
     print(f"   This may take 30-60 seconds...\n")
     

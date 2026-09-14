@@ -36,7 +36,10 @@ for d in [DATA_DIR, STRATEGIES_DIR, LOGS_DIR]:
 # "cloud"  -> Uses Ollama Cloud (big models on Ollama's GPUs, needs ollama signin)
 # "local"  -> Uses local Ollama (smaller models on your GPU, free, offline)
 
-MODE = os.getenv("DISCOVERY_MODE", "cloud")
+# LOCAL-ONLY BUILD: default is local27 so the safe path is the default and
+# cloud is opt-in, not opt-out. Setting DISCOVERY_MODE=cloud|hybrid will be
+# refused at startup by guards.assert_local_only().
+MODE = os.getenv("DISCOVERY_MODE", "local27")
 
 
 # ==============================================================================
@@ -66,9 +69,9 @@ MODES = {
         "request_timeout": 300,       # cloud codegen can be slow on free tier
     },
     "local27": {
-        "summarizer_model": "qwen3.6:27b",
-        "code_model": "qwen3.6:27b",
-        "reviewer_model": "qwen3.6:27b",
+        "summarizer_model": "qwen3.8:27b",
+        "code_model": "qwen3.8:27b",
+        "reviewer_model": "qwen3.8:27b",
         "max_content_chars": 30000,   # 256K context; capped for speed
         "request_timeout": 600,       # 27B local inference is slow
     },
